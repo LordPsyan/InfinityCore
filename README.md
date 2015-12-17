@@ -12,7 +12,7 @@ Patch 4.3.4 - INF-DB 434.01.01
 - Professionally developed;
 - All class and races combinations are fixed.
 
-This is the new source of InfinityCore Team that we are updating slowly. Sincerely, LordPsyan.
+This is the new source of InfinityCore that we are updating slowly.
 
 ##Required Files 
 
