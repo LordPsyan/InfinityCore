@@ -1,12 +1,9 @@
-## ![logo](http://i.imgur.com/Uj5R6Ra.png)
-
-
-# DeathCore 4.3.4 - New Source - Scripts 
+# InfinityCore 4.3.4 - New Source - Scripts 
 
 
 ##Project General Information 
 
-Patch 4.3.4 - NDP-DB 434.01.01 
+Patch 4.3.4 - INF-DB 434.01.01 
 
 - Level 85;
 - Daily corrections;
@@ -15,17 +12,17 @@ Patch 4.3.4 - NDP-DB 434.01.01
 - Professionally developed;
 - All class and races combinations are fixed.
 
-This is the new source of DeathCore Team that we are updating slowly. Sincerely, Team Death Noffearr ProjecT™.
+This is the new source of InfinityCore Team that we are updating slowly. Sincerely, LordPsyan.
 
 ##Required Files 
 
-[DeathCore_4.3.4_Dbc](https://mega.co.nz/#!ng0FxBJJ!Q62CZedaznny9bJBGZdp8bGr1Wcjf3xuDQguJRyOtdg)
+[InfinityCore_4.3.4_Dbc](https://mega.co.nz/#!ng0FxBJJ!Q62CZedaznny9bJBGZdp8bGr1Wcjf3xuDQguJRyOtdg)
 
-[DeathCore_4.3.4_Maps](https://mega.co.nz/#!P9MXRLTY!a_0pv1hY81b-rvgiOKpaV0mWCOpy1_94UedbGAd6S4k)
+[InfinityCore_4.3.4_Maps](https://mega.co.nz/#!P9MXRLTY!a_0pv1hY81b-rvgiOKpaV0mWCOpy1_94UedbGAd6S4k)
 
-[DeathCore_4.3.4_Mmaps](https://mega.co.nz/#!z1sChJRb!tps2PsfM7jVJ8Qfwd94BtLWF219DQWTrTz0jzG95kGc)
+[InfinityCore_4.3.4_Mmaps](https://mega.co.nz/#!z1sChJRb!tps2PsfM7jVJ8Qfwd94BtLWF219DQWTrTz0jzG95kGc)
 
-[DeathCore_4.3.4_Vmaps](https://mega.co.nz/#!CsllXIza!tzDbOJOFJ7S7HlpVbBftMYqzI-mYaY-2QwKKyqq7f8w)
+[InfinityCore_4.3.4_Vmaps](https://mega.co.nz/#!CsllXIza!tzDbOJOFJ7S7HlpVbBftMYqzI-mYaY-2QwKKyqq7f8w)
 
 =====================
 
