@@ -1,4 +1,4 @@
-/* Copyright (C) 2013-2015 DeathCore <http://www.noffearrdeathproject.net/>
+/* Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
  *
  * Thanks to the original authors: ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
  *

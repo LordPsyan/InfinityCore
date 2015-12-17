@@ -1,4 +1,4 @@
-# Copyright (C) 2013-2015 DeathCore <http://www.noffearrdeathproject.net/>
+# Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without

@@ -1,4 +1,4 @@
-# Copyright (C) 2013-2015 DeathCore <http://www.noffearrdeathproject.net/>
+# Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without
@@ -59,7 +59,7 @@ if(NOT rev_info)
   # No valid ways available to find/set the revision/hash, so let's force some defaults
   message(STATUS "WARNING - Missing repository tags - you may need to pull tags with git fetch -t")
   message(STATUS "WARNING - Continuing anyway - note that the versionstring will be set to 10/08/2015 08:50:00 (Arquivado)")
-  set(rev_date "10/08/2015 08:50:00 +4.3.4")
+  set(rev_date "12/17/2015 08:50:00 +4.3.4")
   set(rev_hash "Arquivado")
 else()
   # Extract information required to build a proper versionstring

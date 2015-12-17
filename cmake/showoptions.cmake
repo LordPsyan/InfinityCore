@@ -1,9 +1,9 @@
 # output generic information about the core and buildtype chosen
 message("")
-message("* DeathCore rev. hash  : ${rev_hash}")
-message("* DeathCore rev. date  : ${rev_date}")
+message("* InfinityCore rev. hash  : ${rev_hash}")
+message("* InfinityCore rev. date  : ${rev_date}")
 if( UNIX )
-  message("* DeathCore buildtype  : ${CMAKE_BUILD_TYPE}")
+  message("* InfinityCore buildtype  : ${CMAKE_BUILD_TYPE}")
 endif()
 message("")
 

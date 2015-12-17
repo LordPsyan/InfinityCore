@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 
-# Copyright (C) 2013-2015 DeathCore <http://www.noffearrdeathproject.net/>
+# Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
 # Author: leak
 # Date: 2010-12-06
 # Note: Based on conf file format of rev 10507

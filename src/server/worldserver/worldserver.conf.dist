@@ -1,5 +1,5 @@
 #############################################
-# DeathCore World Server configuration file #
+# InfinityCore World Server configuration file #
 #############################################
 [worldserver]
 
@@ -28,7 +28,7 @@
 #    CUSTOM SERVER OPTIONS
 #    LOGGING SYSTEM SETTINGS
 #    CURRENCIES SETTINGS
-#    CUSTOM CONTENT DEATHCORE SETTINGS
+#    CUSTOM CONTENT INFINITYCORE SETTINGS
 #
 ###################################################################################################
 
@@ -80,19 +80,19 @@ LogsDir = "Logs/Server"
 #    WorldDatabaseInfo
 #    CharacterDatabaseInfo
 #        Description: Database connection settings for the world server.
-#        Example:     "hostname;port;deathcore;deathcore;database"
-#                     ".;somenumber;deathcore;deathcore;database" - (Use named pipes on Windows
+#        Example:     "hostname;port;infinitycore;infinitycore;database"
+#                     ".;somenumber;infinitycore;infinitycore;database" - (Use named pipes on Windows
 #                                                                 "enable-named-pipe" to [mysqld]
 #                                                                 section my.ini)
-#                     ".;/path/to/unix_socket;deathcore;deathcore;database" - (use Unix sockets on
+#                     ".;/path/to/unix_socket;infinitycore;infinitycore;database" - (use Unix sockets on
 #                                                                           Unix/Linux)
-#        Default:     "127.0.0.1;3306;deathcore;deathcore;auth"       - (LoginDatabaseInfo)
-#                     "127.0.0.1;3306;deathcore;deathcore;world"      - (WorldDatabaseInfo)
-#                     "127.0.0.1;3306;deathcore;deathcore;characters" - (CharacterDatabaseInfo)
+#        Default:     "127.0.0.1;3306;infinitycore;infinitycore;auth"       - (LoginDatabaseInfo)
+#                     "127.0.0.1;3306;infinitycore;infinitycore;world"      - (WorldDatabaseInfo)
+#                     "127.0.0.1;3306;infinitycore;infinitycore;characters" - (CharacterDatabaseInfo)
 
-LoginDatabaseInfo     = "127.0.0.1;3306;deathcore;deathcore;auth"
-WorldDatabaseInfo     = "127.0.0.1;3306;deathcore;deathcore;world"
-CharacterDatabaseInfo = "127.0.0.1;3306;deathcore;deathcore;characters"
+LoginDatabaseInfo     = "127.0.0.1;3306;infinitycore;infinitycore;auth"
+WorldDatabaseInfo     = "127.0.0.1;3306;infinitycore;infinitycore;world"
+CharacterDatabaseInfo = "127.0.0.1;3306;infinitycore;infinitycore;characters"
 
 #
 #    LoginDatabase.WorkerThreads
@@ -1063,10 +1063,10 @@ BeepAtStart = 1
 #    Motd
 #        Description: Message of the Day, displayed at login.
 #                     Use '@' for a newline and be sure to escape special characters.
-#        Example:     "Welcome to John\'s Server@This server runs on DeathCore."
-#        Default:     "Welcome to a DeathCore server."
+#        Example:     "Welcome to John\'s Server@This server runs on InfinityCore."
+#        Default:     "Welcome to a InfinityCore server."
 
-Motd = "Welcome to a DeathCore Open-Sourced Game Emulation."
+Motd = "Welcome to a InfinityCore Open-Sourced Game Emulation."
 
 #
 #    Server.LoginInfo
@@ -3079,7 +3079,7 @@ Currency.ConquestPointsArenaReward = 180
 
 #
 ###################################################################################################
-#                           CUSTOM CONTENT DEATHCORE SETTINGS                                     #
+#                           CUSTOM CONTENT INFINITYCORE SETTINGS                                     #
 #                                                                                                 #
 ###################################################################################################
 # ALLOW ZONE AND AREA VALUES CORRECTION AT STARTUP FOR GAMEOBJECT AND CREATURE TABLES

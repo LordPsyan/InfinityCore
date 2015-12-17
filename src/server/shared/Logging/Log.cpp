@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 DeathCore <http://www.noffearrdeathproject.net/>
+ * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
  * Copyright (C) 2005-2008 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it

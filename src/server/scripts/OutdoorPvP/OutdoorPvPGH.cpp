@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2013-2015 DeathCore <http://www.noffearrdeathproject.net/>
+* Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
 * Copyright (C) 2010-2011 Project Trinity <http://www.projecttrinity.org/>
 *
 * This program is free software; you can redistribute it and/or modify it

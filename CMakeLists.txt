@@ -1,7 +1,7 @@
-# Copyright (C) 2013-2015 DeathCore <http://www.noffearrdeathproject.net/>
+# Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
 
 # Set projectname (must be done AFTER setting configurationtypes)
-project(DeathCore)
+project(InfinityCore)
 
 # CMake policies (can not be handled elsewhere)
 cmake_minimum_required(VERSION 2.8)

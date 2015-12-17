@@ -1,5 +1,5 @@
 ############################################
-# DeathCore Auth Server configuration file #
+# InfinityCore Auth Server configuration file #
 ############################################
 [authserver]
 
@@ -126,15 +126,15 @@ WrongPass.BanType = 0
 #
 #    LoginDatabaseInfo
 #        Description: Database connection settings for the realm server.
-#        Example:     "hostname;port;deathcore;deathcore;database"
-#                     ".;somenumber;deathcore;deathcore;database" - (Use named pipes on Windows
+#        Example:     "hostname;port;infinitycore;infinitycore;database"
+#                     ".;somenumber;infinitycore;infinitycore;database" - (Use named pipes on Windows
 #                                                                 "enable-named-pipe" to [mysqld]
 #                                                                 section my.ini)
-#                     ".;/path/to/unix_socket;deathcore;deathcore;database" - (use Unix sockets on
+#                     ".;/path/to/unix_socket;infinitycore;infinitycore;database" - (use Unix sockets on
 #                                                                           Unix/Linux)
-#        Default:     "127.0.0.1;3306;deathcore;deathcore;auth"
+#        Default:     "127.0.0.1;3306;infinitycore;infinitycore;auth"
 
-LoginDatabaseInfo = "127.0.0.1;3306;deathcore;deathcore;auth"
+LoginDatabaseInfo = "127.0.0.1;3306;infinitycore;infinitycore;auth"
 
 #
 #    LoginDatabase.WorkerThreads
