@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -23,8 +23,8 @@ SDCategory: Scholomance
 EndScriptData */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "scholomance.h"
+#include "ScriptedCreature.h"
 
 enum Spells
 {
@@ -50,29 +50,37 @@ class boss_instructor_malicia : public CreatureScript
 
         struct boss_instructormaliciaAI : public BossAI
         {
-            boss_instructormaliciaAI(Creature* creature) : BossAI(creature, DATA_INSTRUCTORMALICIA) {}
-
-            uint32 FlashCounter;
-            uint32 TouchCounter;
-
-            void Reset()
+            boss_instructormaliciaAI(Creature* creature) : BossAI(creature, DATA_INSTRUCTORMALICIA)
             {
-                _Reset();
+                Initialize();
+            }
+
+            void Initialize()
+            {
                 FlashCounter = 0;
                 TouchCounter = 0;
             }
 
-            void EnterCombat(Unit* /*who*/)
+            uint32 FlashCounter;
+            uint32 TouchCounter;
+
+            void Reset() override
             {
-                _EnterCombat();
-                events.ScheduleEvent(EVENT_CALLOFGRAVES, 4000);
-                events.ScheduleEvent(EVENT_CORRUPTION, 8000);
-                events.ScheduleEvent(EVENT_RENEW, 32000);
-                events.ScheduleEvent(EVENT_FLASHHEAL, 38000);
-                events.ScheduleEvent(EVENT_HEALINGTOUCH, 45000);
+                _Reset();
+                Initialize();
             }
 
-            void UpdateAI(uint32 const diff)
+            void JustEngagedWith(Unit* who) override
+            {
+                BossAI::JustEngagedWith(who);
+                events.ScheduleEvent(EVENT_CALLOFGRAVES, 4s);
+                events.ScheduleEvent(EVENT_CORRUPTION, 8s);
+                events.ScheduleEvent(EVENT_RENEW, 32s);
+                events.ScheduleEvent(EVENT_FLASHHEAL, 38s);
+                events.ScheduleEvent(EVENT_HEALINGTOUCH, 45s);
+            }
+
+            void UpdateAI(uint32 diff) override
             {
                 if (!UpdateVictim())
                     return;
@@ -88,56 +96,59 @@ class boss_instructor_malicia : public CreatureScript
                     {
                         case EVENT_CALLOFGRAVES:
                             DoCastVictim(SPELL_CALLOFGRAVES, true);
-                            events.ScheduleEvent(EVENT_CALLOFGRAVES, 65000);
+                            events.ScheduleEvent(EVENT_CALLOFGRAVES, 65s);
                             break;
                         case EVENT_CORRUPTION:
-                            DoCast(SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true), SPELL_CORRUPTION, true);
-                            events.ScheduleEvent(EVENT_CORRUPTION, 24000);
+                            DoCast(SelectTarget(SelectTargetMethod::Random, 0, 100, true), SPELL_CORRUPTION, true);
+                            events.ScheduleEvent(EVENT_CORRUPTION, 24s);
                             break;
                         case EVENT_RENEW:
                             DoCast(me, SPELL_RENEW);
-                            events.ScheduleEvent(EVENT_RENEW, 10000);
+                            events.ScheduleEvent(EVENT_RENEW, 10s);
                             break;
                         case EVENT_FLASHHEAL:
-                            //5 Flashheals will be casted
+                            //5 Flashheals will be cast
                             DoCast(me, SPELL_FLASHHEAL);
                             if (FlashCounter < 2)
                             {
-                                events.ScheduleEvent(EVENT_FLASHHEAL, 5000);
+                                events.ScheduleEvent(EVENT_FLASHHEAL, 5s);
                                 ++FlashCounter;
                             }
                             else
                             {
                                 FlashCounter=0;
-                                events.ScheduleEvent(EVENT_FLASHHEAL, 30000);
+                                events.ScheduleEvent(EVENT_FLASHHEAL, 30s);
                             }
                             break;
                         case EVENT_HEALINGTOUCH:
-                            //3 Healing Touch will be casted
+                            //3 Healing Touch will be cast
                             DoCast(me, SPELL_HEALINGTOUCH);
                             if (TouchCounter < 2)
                             {
-                                events.ScheduleEvent(EVENT_HEALINGTOUCH, 5500);
+                                events.ScheduleEvent(EVENT_HEALINGTOUCH, 5500ms);
                                 ++TouchCounter;
                             }
                             else
                             {
                                 TouchCounter=0;
-                                events.ScheduleEvent(EVENT_HEALINGTOUCH, 30000);
+                                events.ScheduleEvent(EVENT_HEALINGTOUCH, 30s);
                             }
                             break;
                         default:
                             break;
                     }
+
+                    if (me->HasUnitState(UNIT_STATE_CASTING))
+                        return;
                 }
 
                 DoMeleeAttackIfReady();
             }
         };
 
-        CreatureAI* GetAI(Creature* creature) const
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            return new boss_instructormaliciaAI (creature);
+            return GetScholomanceAI<boss_instructormaliciaAI>(creature);
         }
 
 };

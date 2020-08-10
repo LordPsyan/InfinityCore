@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,91 +18,82 @@
 #define _CRT_SECURE_NO_DEPRECATE
 
 #include "dbcfile.h"
+#include "mpq_libmpq04.h"
 
-DBCFile::DBCFile(HANDLE file) :
-    _file(file), _data(NULL), _stringTable(NULL)
+DBCFile::DBCFile(const std::string& filename):
+    filename(filename), recordSize(0), recordCount(0), fieldCount(0), stringSize(0), data(nullptr), stringTable(nullptr)
 {
+
 }
 
 bool DBCFile::open()
 {
+    MPQFile f(filename.c_str());
     char header[4];
-    unsigned int na, nb, es, ss;
+    unsigned int na,nb,es,ss;
 
-    DWORD readBytes = 0;
-    SFileReadFile(_file, header, 4, &readBytes, NULL);
-    if (readBytes != 4)                                         // Number of records
+    if(f.read(header,4)!=4)                                 // Number of records
         return false;
 
-    if (header[0] != 'W' || header[1] != 'D' || header[2] != 'B' || header[3] != 'C')
+    if(header[0]!='W' || header[1]!='D' || header[2]!='B' || header[3]!='C')
         return false;
 
-    SFileReadFile(_file, &na, 4, &readBytes, NULL);
-    if (readBytes != 4)                                         // Number of records
+    if(f.read(&na,4)!=4)                                    // Number of records
+        return false;
+    if(f.read(&nb,4)!=4)                                    // Number of fields
+        return false;
+    if(f.read(&es,4)!=4)                                    // Size of a record
+        return false;
+    if(f.read(&ss,4)!=4)                                    // String size
         return false;
 
-    SFileReadFile(_file, &nb, 4, &readBytes, NULL);
-    if (readBytes != 4)                                         // Number of fields
+    recordSize = es;
+    recordCount = na;
+    fieldCount = nb;
+    stringSize = ss;
+    if(fieldCount*4 != recordSize)
         return false;
 
-    SFileReadFile(_file, &es, 4, &readBytes, NULL);
-    if (readBytes != 4)                                         // Size of a record
+    data = new unsigned char[recordSize*recordCount+stringSize];
+    stringTable = data + recordSize*recordCount;
+
+    size_t data_size = recordSize*recordCount+stringSize;
+    if(f.read(data,data_size)!=data_size)
         return false;
-
-    SFileReadFile(_file, &ss, 4, &readBytes, NULL);
-    if (readBytes != 4)                                         // String size
-        return false;
-
-    _recordSize = es;
-    _recordCount = na;
-    _fieldCount = nb;
-    _stringSize = ss;
-    if (_fieldCount * 4 != _recordSize)
-        return false;
-
-    _data = new unsigned char[_recordSize * _recordCount + _stringSize];
-    _stringTable = _data + _recordSize*_recordCount;
-
-    size_t data_size = _recordSize * _recordCount + _stringSize;
-    SFileReadFile(_file, _data, data_size, &readBytes, NULL);
-    if (readBytes != data_size)
-        return false;
-
+    f.close();
     return true;
 }
-
 DBCFile::~DBCFile()
 {
-    delete [] _data;
+    delete [] data;
 }
 
 DBCFile::Record DBCFile::getRecord(size_t id)
 {
-    assert(_data);
-    return Record(*this, _data + id*_recordSize);
+    assert(data);
+    return Record(*this, data + id*recordSize);
 }
 
 size_t DBCFile::getMaxId()
 {
-    assert(_data);
+    assert(data);
 
     size_t maxId = 0;
     for(size_t i = 0; i < getRecordCount(); ++i)
-        if (maxId < getRecord(i).getUInt(0))
+    {
+        if(maxId < getRecord(i).getUInt(0))
             maxId = getRecord(i).getUInt(0);
-
+    }
     return maxId;
 }
 
 DBCFile::Iterator DBCFile::begin()
 {
-    assert(_data);
-    return Iterator(*this, _data);
+    assert(data);
+    return Iterator(*this, data);
 }
-
 DBCFile::Iterator DBCFile::end()
 {
-    assert(_data);
-    return Iterator(*this, _stringTable);
+    assert(data);
+    return Iterator(*this, stringTable);
 }
-

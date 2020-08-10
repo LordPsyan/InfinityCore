@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,7 +18,10 @@
 #define _CRT_SECURE_NO_DEPRECATE
 
 #include "loadlib.h"
+#include "mpq_libmpq04.h"
 #include <cstdio>
+
+class MPQFile;
 
 u_map_fcc MverMagic = { {'R','E','V','M'} };
 
@@ -35,30 +37,28 @@ FileLoader::~FileLoader()
     free();
 }
 
-bool FileLoader::loadFile(HANDLE mpq, char* filename, bool log)
+bool FileLoader::loadFile(std::string const& fileName, bool log)
 {
     free();
-    HANDLE file;
-    if (!SFileOpenFileEx(mpq, filename, SFILE_OPEN_PATCHED_FILE, &file))
+    MPQFile mf(fileName.c_str());
+    if(mf.isEof())
     {
         if (log)
-            printf("No such file %s\n", filename);
+            printf("No such file %s\n", fileName.c_str());
         return false;
     }
 
-    data_size = SFileGetFileSize(file, NULL);
-    data = new uint8[data_size];
-    SFileReadFile(file, data, data_size, NULL/*bytesRead*/, NULL);
+    data_size = mf.getSize();
+
+    data = new uint8 [data_size];
+    mf.read(data, data_size);
+    mf.close();
     if (prepareLoadedData())
-    {
-        SFileCloseFile(file);
         return true;
-    }
 
-    printf("Error loading %s\n", filename);
-    SFileCloseFile(file);
+    printf("Error loading %s", fileName.c_str());
+    mf.close();
     free();
-
     return false;
 }
 
@@ -75,7 +75,7 @@ bool FileLoader::prepareLoadedData()
 
 void FileLoader::free()
 {
-    if (data) delete[] data;
+    delete[] data;
     data = 0;
     data_size = 0;
     version = 0;

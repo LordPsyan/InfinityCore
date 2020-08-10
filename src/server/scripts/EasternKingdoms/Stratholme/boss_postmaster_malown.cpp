@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -55,29 +54,30 @@ enum Events
 
 class boss_postmaster_malown : public CreatureScript
 {
-    public: boss_postmaster_malown() : CreatureScript("boss_postmaster_malown") { }
+    public:
+        boss_postmaster_malown() : CreatureScript("boss_postmaster_malown") { }
 
         struct boss_postmaster_malownAI : public BossAI
         {
-            boss_postmaster_malownAI(Creature* creature) : BossAI(creature, TYPE_MALOWN) {}
+            boss_postmaster_malownAI(Creature* creature) : BossAI(creature, TYPE_MALOWN) { }
 
-            void Reset() {}
+            void Reset() override { }
 
-            void EnterCombat(Unit* /*who*/)
+            void JustEngagedWith(Unit* /*who*/) override
             {
-                events.ScheduleEvent(EVENT_WAILINGDEAD, 19000);     // lasts 6 sec
-                events.ScheduleEvent(EVENT_BACKHAND, 8000);         // 2 sec stun
-                events.ScheduleEvent(EVENT_CURSEOFWEAKNESS, 20000); // lasts 2 mins
-                events.ScheduleEvent(EVENT_CURSEOFTONGUES, 22000);
-                events.ScheduleEvent(EVENT_CALLOFTHEGRAVE, 25000);
+                events.ScheduleEvent(EVENT_WAILINGDEAD, 19s);     // lasts 6 sec
+                events.ScheduleEvent(EVENT_BACKHAND, 8s);         // 2 sec stun
+                events.ScheduleEvent(EVENT_CURSEOFWEAKNESS, 20s); // lasts 2 mins
+                events.ScheduleEvent(EVENT_CURSEOFTONGUES, 22s);
+                events.ScheduleEvent(EVENT_CALLOFTHEGRAVE, 25s);
             }
 
-            void KilledUnit(Unit* /*victim*/)
+            void KilledUnit(Unit* /*victim*/) override
             {
                 Talk(SAY_KILL);
             }
 
-            void UpdateAI(uint32 const diff)
+            void UpdateAI(uint32 diff) override
             {
                 if (!UpdateVictim())
                     return;
@@ -92,41 +92,45 @@ class boss_postmaster_malown : public CreatureScript
                     switch (eventId)
                     {
                         case EVENT_WAILINGDEAD:
-                            if (rand()%100 < 65) //65% chance to cast
+                            if (rand32() % 100 < 65) //65% chance to cast
                                 DoCastVictim(SPELL_WAILINGDEAD, true);
-                            events.ScheduleEvent(EVENT_WAILINGDEAD, 19000);
+                            events.ScheduleEvent(EVENT_WAILINGDEAD, 19s);
                             break;
                         case EVENT_BACKHAND:
-                            if (rand()%100 < 45) //45% chance to cast
+                            if (rand32() % 100 < 45) //45% chance to cast
                                 DoCastVictim(SPELL_BACKHAND, true);
-                            events.ScheduleEvent(EVENT_WAILINGDEAD, 8000);
+                            events.ScheduleEvent(EVENT_WAILINGDEAD, 8s);
                             break;
                         case EVENT_CURSEOFWEAKNESS:
-                            if (rand()%100 < 3) //3% chance to cast
+                            if (rand32() % 100 < 3) //3% chance to cast
                                 DoCastVictim(SPELL_CURSEOFWEAKNESS, true);
-                            events.ScheduleEvent(EVENT_WAILINGDEAD, 20000);
+                            events.ScheduleEvent(EVENT_WAILINGDEAD, 20s);
                             break;
                         case EVENT_CURSEOFTONGUES:
-                            if (rand()%100 < 3) //3% chance to cast
+                            if (rand32() % 100 < 3) //3% chance to cast
                                 DoCastVictim(SPELL_CURSEOFTONGUES, true);
-                            events.ScheduleEvent(EVENT_WAILINGDEAD, 22000);
+                            events.ScheduleEvent(EVENT_WAILINGDEAD, 22s);
                             break;
                         case EVENT_CALLOFTHEGRAVE:
-                            if (rand()%100 < 5) //5% chance to cast
+                            if (rand32() % 100 < 5) //5% chance to cast
                                 DoCastVictim(SPELL_CALLOFTHEGRAVE, true);
-                            events.ScheduleEvent(EVENT_WAILINGDEAD, 25000);
+                            events.ScheduleEvent(EVENT_WAILINGDEAD, 25s);
                             break;
                         default:
                             break;
                     }
+
+                    if (me->HasUnitState(UNIT_STATE_CASTING))
+                        return;
                 }
+
                 DoMeleeAttackIfReady();
             }
         };
 
-        CreatureAI* GetAI(Creature* creature) const
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            return new boss_postmaster_malownAI(creature);
+            return GetStratholmeAI<boss_postmaster_malownAI>(creature);
         }
 };
 

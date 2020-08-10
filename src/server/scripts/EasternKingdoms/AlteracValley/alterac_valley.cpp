@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -77,34 +77,42 @@ SpellPair const _auraPairs[MAX_SPELL_PAIRS] =
     { NPC_ICEBLOOD_WARMASTER,       SPELL_ICEBLOOD_WARMASTER }
 };
 
-class mob_av_marshal_or_warmaster : public CreatureScript
+class npc_av_marshal_or_warmaster : public CreatureScript
 {
     public:
-        mob_av_marshal_or_warmaster() : CreatureScript("mob_av_marshal_or_warmaster") { }
+        npc_av_marshal_or_warmaster() : CreatureScript("npc_av_marshal_or_warmaster") { }
 
-        struct mob_av_marshal_or_warmasterAI : public ScriptedAI
+        struct npc_av_marshal_or_warmasterAI : public ScriptedAI
         {
-            mob_av_marshal_or_warmasterAI(Creature* creature) : ScriptedAI(creature) { }
-
-            void Reset()
+            npc_av_marshal_or_warmasterAI(Creature* creature) : ScriptedAI(creature)
             {
-                events.Reset();
-                events.ScheduleEvent(EVENT_CHARGE_TARGET, urand(2 * IN_MILLISECONDS, 12 * IN_MILLISECONDS));
-                events.ScheduleEvent(EVENT_CLEAVE, urand(1 * IN_MILLISECONDS, 11 * IN_MILLISECONDS));
-                events.ScheduleEvent(EVENT_DEMORALIZING_SHOUT, 2000);
-                events.ScheduleEvent(EVENT_WHIRLWIND, urand(5 * IN_MILLISECONDS, 20 * IN_MILLISECONDS));
-                events.ScheduleEvent(EVENT_ENRAGE, urand(5 * IN_MILLISECONDS, 20 * IN_MILLISECONDS));
-                events.ScheduleEvent(EVENT_CHECK_RESET, 5000);
+                Initialize();
+            }
 
+            void Initialize()
+            {
                 _hasAura = false;
             }
 
-            void JustRespawned()
+            void Reset() override
+            {
+                Initialize();
+
+                events.Reset();
+                events.ScheduleEvent(EVENT_CHARGE_TARGET, 2s, 12s);
+                events.ScheduleEvent(EVENT_CLEAVE, 1s, 11s);
+                events.ScheduleEvent(EVENT_DEMORALIZING_SHOUT, 2s);
+                events.ScheduleEvent(EVENT_WHIRLWIND, 5s, 20s);
+                events.ScheduleEvent(EVENT_ENRAGE, 5s, 20s);
+                events.ScheduleEvent(EVENT_CHECK_RESET, 5s);
+            }
+
+            void JustAppeared() override
             {
                 Reset();
             }
 
-            void UpdateAI(uint32 const diff)
+            void UpdateAI(uint32 diff) override
             {
                 // I have a feeling this isn't blizzlike, but owell, I'm only passing by and cleaning up.
                 if (!_hasAura)
@@ -130,23 +138,23 @@ class mob_av_marshal_or_warmaster : public CreatureScript
                     {
                         case EVENT_CHARGE_TARGET:
                             DoCastVictim(SPELL_CHARGE);
-                            events.ScheduleEvent(EVENT_CHARGE, urand(10 * IN_MILLISECONDS, 25 * IN_MILLISECONDS));
+                            events.ScheduleEvent(EVENT_CHARGE, 10s, 25s);
                             break;
                         case EVENT_CLEAVE:
                             DoCastVictim(SPELL_CLEAVE);
-                            events.ScheduleEvent(EVENT_CLEAVE, urand(10 * IN_MILLISECONDS, 16 * IN_MILLISECONDS));
+                            events.ScheduleEvent(EVENT_CLEAVE, 10s, 16s);
                             break;
                         case EVENT_DEMORALIZING_SHOUT:
                             DoCast(me, SPELL_DEMORALIZING_SHOUT);
-                            events.ScheduleEvent(EVENT_DEMORALIZING_SHOUT, urand(10 * IN_MILLISECONDS, 15 * IN_MILLISECONDS));
+                            events.ScheduleEvent(EVENT_DEMORALIZING_SHOUT, 10s, 15s);
                             break;
                         case EVENT_WHIRLWIND:
                             DoCast(me, SPELL_WHIRLWIND);
-                            events.ScheduleEvent(EVENT_WHIRLWIND, urand(10 * IN_MILLISECONDS, 25 * IN_MILLISECONDS));
+                            events.ScheduleEvent(EVENT_WHIRLWIND, 10s, 25s);
                             break;
                         case EVENT_ENRAGE:
                             DoCast(me, SPELL_ENRAGE);
-                            events.ScheduleEvent(EVENT_ENRAGE, urand(10 * IN_MILLISECONDS, 30 * IN_MILLISECONDS));
+                            events.ScheduleEvent(EVENT_ENRAGE, 10s, 30s);
                             break;
                         case EVENT_CHECK_RESET:
                         {
@@ -156,10 +164,12 @@ class mob_av_marshal_or_warmaster : public CreatureScript
                                 EnterEvadeMode();
                                 return;
                             }
-                            events.ScheduleEvent(EVENT_CHECK_RESET, 5000);
+                            events.ScheduleEvent(EVENT_CHECK_RESET, 5s);
                             break;
                         }
                     }
+                    if (me->HasUnitState(UNIT_STATE_CASTING))
+                        return;
                 }
 
                 DoMeleeAttackIfReady();
@@ -170,13 +180,13 @@ class mob_av_marshal_or_warmaster : public CreatureScript
             bool _hasAura;
         };
 
-        CreatureAI* GetAI(Creature* creature) const
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            return new mob_av_marshal_or_warmasterAI(creature);
+            return new npc_av_marshal_or_warmasterAI(creature);
         }
 };
 
 void AddSC_alterac_valley()
 {
-    new mob_av_marshal_or_warmaster();
+    new npc_av_marshal_or_warmaster();
 }

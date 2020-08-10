@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,7 +23,7 @@ SDCategory: Auchindoun, Shadow Labyrinth
 EndScriptData */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
+#include "InstanceScript.h"
 #include "ScriptedEscortAI.h"
 #include "shadow_labyrinth.h"
 
@@ -57,43 +56,39 @@ class boss_ambassador_hellmaw : public CreatureScript
     public:
         boss_ambassador_hellmaw() : CreatureScript("boss_ambassador_hellmaw") { }
 
-        struct boss_ambassador_hellmawAI : public npc_escortAI
+        struct boss_ambassador_hellmawAI : public EscortAI
         {
-            boss_ambassador_hellmawAI(Creature* creature) : npc_escortAI(creature)
+            boss_ambassador_hellmawAI(Creature* creature) : EscortAI(creature)
             {
                 _instance = creature->GetInstanceScript();
                 _intro = false;
             }
 
-            void Reset() 
+            void Reset() override
             {
-                if (!me->isAlive())
+                if (!me->IsAlive())
                     return;
 
                 _events.Reset();
                 _instance->SetBossState(DATA_AMBASSADOR_HELLMAW, NOT_STARTED);
 
-                _events.ScheduleEvent(EVENT_CORROSIVE_ACID, urand(5000, 10000));
-                _events.ScheduleEvent(EVENT_FEAR, urand(25000, 30000));
+                _events.ScheduleEvent(EVENT_CORROSIVE_ACID, 5s, 10s);
+                _events.ScheduleEvent(EVENT_FEAR, 25s, 30s);
                 if (IsHeroic())
-                    _events.ScheduleEvent(EVENT_BERSERK, 180000);
+                    _events.ScheduleEvent(EVENT_BERSERK, 3min);
 
                 DoAction(ACTION_AMBASSADOR_HELLMAW_BANISH);
             }
 
-            void MoveInLineOfSight(Unit* who) 
+            void MoveInLineOfSight(Unit* who) override
             {
                 if (me->HasAura(SPELL_BANISH))
                     return;
 
-                npc_escortAI::MoveInLineOfSight(who);
+                EscortAI::MoveInLineOfSight(who);
             }
 
-            void WaypointReached(uint32 /*waypointId*/) 
-            {
-            }
-
-            void DoAction(int32 const actionId)
+            void DoAction(int32 actionId) override
             {
                 if (actionId == ACTION_AMBASSADOR_HELLMAW_INTRO)
                     DoIntro();
@@ -115,35 +110,35 @@ class boss_ambassador_hellmaw : public CreatureScript
                     me->RemoveAurasDueToSpell(SPELL_BANISH);
 
                 Talk(SAY_INTRO);
-                Start(true, false, 0, NULL, false, true);
+                Start(true, false, ObjectGuid::Empty, nullptr, false, true);
             }
 
-            void EnterCombat(Unit* /*who*/) 
+            void JustEngagedWith(Unit* /*who*/) override
             {
                 _instance->SetBossState(DATA_AMBASSADOR_HELLMAW, IN_PROGRESS);
                 Talk(SAY_AGGRO);
             }
 
-            void KilledUnit(Unit* who) 
+            void KilledUnit(Unit* who) override
             {
                 if (who->GetTypeId() == TYPEID_PLAYER)
                     Talk(SAY_SLAY);
             }
 
-            void JustDied(Unit* /*killer*/) 
+            void JustDied(Unit* /*killer*/) override
             {
                 _instance->SetBossState(DATA_AMBASSADOR_HELLMAW, DONE);
                 Talk(SAY_DEATH);
             }
 
-            void UpdateEscortAI(uint32 const diff) 
+            void UpdateEscortAI(uint32 diff) override
             {
                 if (!UpdateVictim())
                     return;
 
                 if (me->HasAura(SPELL_BANISH))
                 {
-                    EnterEvadeMode();
+                    EnterEvadeMode(EVADE_REASON_OTHER);
                     return;
                 }
 
@@ -158,11 +153,11 @@ class boss_ambassador_hellmaw : public CreatureScript
                     {
                         case EVENT_CORROSIVE_ACID:
                             DoCastVictim(SPELL_CORROSIVE_ACID);
-                            _events.ScheduleEvent(EVENT_CORROSIVE_ACID, urand(15000, 25000));
+                            _events.ScheduleEvent(EVENT_CORROSIVE_ACID, 15s, 25s);
                             break;
                         case EVENT_FEAR:
                             DoCastAOE(SPELL_FEAR);
-                            _events.ScheduleEvent(EVENT_FEAR, urand(20000, 35000));
+                            _events.ScheduleEvent(EVENT_FEAR, 20s, 35s);
                             break;
                         case EVENT_BERSERK:
                             DoCast(me, SPELL_ENRAGE, true);
@@ -181,7 +176,7 @@ class boss_ambassador_hellmaw : public CreatureScript
             bool _intro;
         };
 
-        CreatureAI* GetAI(Creature* creature) const 
+        CreatureAI* GetAI(Creature* creature) const override
         {
             return GetShadowLabyrinthAI<boss_ambassador_hellmawAI>(creature);
         }

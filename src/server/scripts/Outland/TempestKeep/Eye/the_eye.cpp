@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,45 +23,53 @@ SDCategory: Tempest Keep, The Eye
 EndScriptData */
 
 /* ContentData
-mob_crystalcore_devastator
+npc_crystalcore_devastator
 EndContentData */
 
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "the_eye.h"
 
-enum eSpells
+enum Spells
 {
     SPELL_COUNTERCHARGE    = 35035,
     SPELL_KNOCKAWAY        = 22893,
 };
 
-class mob_crystalcore_devastator : public CreatureScript
+class npc_crystalcore_devastator : public CreatureScript
 {
     public:
 
-        mob_crystalcore_devastator()
-            : CreatureScript("mob_crystalcore_devastator")
+        npc_crystalcore_devastator()
+            : CreatureScript("npc_crystalcore_devastator")
         {
         }
-        struct mob_crystalcore_devastatorAI : public ScriptedAI
+        struct npc_crystalcore_devastatorAI : public ScriptedAI
         {
-            mob_crystalcore_devastatorAI(Creature* creature) : ScriptedAI(creature) {}
+            npc_crystalcore_devastatorAI(Creature* creature) : ScriptedAI(creature)
+            {
+                Initialize();
+            }
 
-            uint32 Knockaway_Timer;
-            uint32 Countercharge_Timer;
-
-            void Reset()
+            void Initialize()
             {
                 Countercharge_Timer = 9000;
                 Knockaway_Timer = 25000;
             }
 
-            void EnterCombat(Unit* /*who*/)
+            uint32 Knockaway_Timer;
+            uint32 Countercharge_Timer;
+
+            void Reset() override
+            {
+                Initialize();
+            }
+
+            void JustEngagedWith(Unit* /*who*/) override
             {
             }
 
-            void UpdateAI(const uint32 diff)
+            void UpdateAI(uint32 diff) override
             {
                 if (!UpdateVictim())
                     return;
@@ -71,16 +78,11 @@ class mob_crystalcore_devastator : public CreatureScript
                 //Knockaway_Timer
                 if (Knockaway_Timer <= diff)
                 {
-                    DoCastVictim(SPELL_KNOCKAWAY, true);
-
-                    // current aggro target is knocked away pick new target
-                    Unit* target = SelectTarget(SELECT_TARGET_TOPAGGRO, 0);
-
-                    if (!target || target == me->GetVictim())
-                        target = SelectTarget(SELECT_TARGET_TOPAGGRO, 1);
-
-                    if (target)
-                        me->TauntApply(target);
+                    if (Unit* victim = me->GetVictim())
+                    {
+                        DoCastVictim(SPELL_KNOCKAWAY, true);
+                        me->GetThreatManager().ResetThreat(victim);
+                    }
 
                     Knockaway_Timer = 23000;
                 }
@@ -100,13 +102,12 @@ class mob_crystalcore_devastator : public CreatureScript
             }
         };
 
-        CreatureAI* GetAI(Creature* creature) const
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            return new mob_crystalcore_devastatorAI(creature);
+            return GetTheEyeAI<npc_crystalcore_devastatorAI>(creature);
         }
 };
 void AddSC_the_eye()
 {
-    new mob_crystalcore_devastator();
+    new npc_crystalcore_devastator();
 }
-

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,89 +16,443 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "SpellScript.h"
+#include "CreatureAIImpl.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
+#include "ScriptedCreature.h"
+#include "SpellInfo.h"
+#include "SpellScript.h"
+#include "TemporarySummon.h"
+#include "Vehicle.h"
 
-/*######
-## Quest 25134: Lazy Peons
-## npc_lazy_peon
-######*/
-
-enum LazyPeonYells
+enum Texts
 {
-    SAY_SPELL_HIT                                 = 0
+    // Tiger Matriarch Credit
+    SAY_MATRIARCH_AGGRO     = 0,
+
+    // Troll Volunteer
+    SAY_VOLUNTEER_START     = 0,
+    SAY_VOLUNTEER_END       = 1,
 };
 
-enum LazyPeon
+enum Spells
 {
-    QUEST_LAZY_PEONS    = 25134,
-    GO_LUMBERPILE       = 175784,
-    SPELL_BUFF_SLEEP    = 17743,
-    SPELL_AWAKEN_PEON   = 19938
+    // Tiger Matriarch Credit
+    SPELL_SUMMON_MATRIARCH              = 75187,
+    SPELL_NO_SUMMON_AURA                = 75213,
+    SPELL_DETECT_INVIS                  = 75180,
+    SPELL_SUMMON_ZENTABRA_TRIGGER       = 75212,
+
+    // Tiger Matriarch
+    SPELL_POUNCE                        = 61184,
+    SPELL_FURIOUS_BITE                  = 75164,
+    SPELL_SUMMON_ZENTABRA               = 75181,
+    SPELL_SPIRIT_OF_THE_TIGER_RIDER     = 75166,
+    SPELL_EJECT_PASSENGERS              = 50630,
+
+    // Troll Volunteer
+    SPELL_VOLUNTEER_AURA                = 75076,
+    SPELL_PETACT_AURA                   = 74071,
+    SPELL_QUEST_CREDIT                  = 75106,
+    SPELL_MOUNTING_CHECK                = 75420,
+    SPELL_TURNIN                        = 73953,
+    SPELL_AOE_TURNIN                    = 75107,
+
+    // Vol'jin War Drums
+    SPELL_MOTIVATE_1                    = 75088,
+    SPELL_MOTIVATE_2                    = 75086,
 };
 
-class npc_lazy_peon : public CreatureScript
+enum Creatures
 {
-public:
-    npc_lazy_peon() : CreatureScript("npc_lazy_peon") { }
+    // Tiger Matriarch Credit
+    NPC_TIGER_VEHICLE                   = 40305,
 
-    CreatureAI* GetAI(Creature* creature) const
-    {
-        return new npc_lazy_peonAI(creature);
-    }
+    // Troll Volunteer
+    NPC_URUZIN                          = 40253,
+    NPC_VOLUNTEER_1                     = 40264,
+    NPC_VOLUNTEER_2                     = 40260,
 
-    struct npc_lazy_peonAI : public ScriptedAI
-    {
-        npc_lazy_peonAI(Creature* creature) : ScriptedAI(creature) {}
+    // Vol'jin War Drums
+    NPC_CITIZEN_1                       = 40256,
+    NPC_CITIZEN_2                       = 40257,
+};
 
-        uint64 PlayerGUID;
+enum Events
+{
+    // Tiger Matriarch Credit
+    EVENT_CHECK_SUMMON_AURA             = 1,
 
-        uint32 RebuffTimer;
-        bool work;
+    // Tiger Matriarch
+    EVENT_POUNCE                        = 2,
+    EVENT_NOSUMMON                      = 3,
+};
 
-        void Reset()
+enum Points
+{
+    POINT_URUZIN                        = 4026400,
+};
+
+class npc_tiger_matriarch_credit : public CreatureScript
+{
+    public:
+        npc_tiger_matriarch_credit() : CreatureScript("npc_tiger_matriarch_credit") { }
+
+        struct npc_tiger_matriarch_creditAI : public ScriptedAI
         {
-            PlayerGUID = 0;
-            RebuffTimer = 0;
-            work = false;
-        }
+           npc_tiger_matriarch_creditAI(Creature* creature) : ScriptedAI(creature)
+           {
+               SetCombatMovement(false);
+               events.ScheduleEvent(EVENT_CHECK_SUMMON_AURA, 2s);
+           }
 
-        void MovementInform(uint32 /*type*/, uint32 id)
-        {
-            if (id == 1)
-                work = true;
-        }
-
-        void SpellHit(Unit* caster, const SpellInfo* spell)
-        {
-            if (spell->Id == SPELL_AWAKEN_PEON && caster->GetTypeId() == TYPEID_PLAYER
-                && CAST_PLR(caster)->GetQuestStatus(QUEST_LAZY_PEONS) == QUEST_STATUS_INCOMPLETE)
+            void UpdateAI(uint32 diff) override
             {
-                caster->ToPlayer()->KilledMonsterCredit(me->GetEntry(), me->GetGUID());
-                Talk(SAY_SPELL_HIT, caster->GetGUID());
-                me->RemoveAllAuras();
-                if (GameObject* Lumberpile = me->FindNearestGameObject(GO_LUMBERPILE, 20))
-                    me->GetMotionMaster()->MovePoint(1, Lumberpile->GetPositionX()-1, Lumberpile->GetPositionY(), Lumberpile->GetPositionZ());
-            }
-        }
+                events.Update(diff);
 
-        void UpdateAI(const uint32 Diff)
-        {
-            if (work == true)
-                me->HandleEmoteCommand(EMOTE_ONESHOT_WORK_CHOPWOOD);
-            if (RebuffTimer <= Diff)
-            {
-                DoCast(me, SPELL_BUFF_SLEEP);
-                RebuffTimer = urand(60000, 90000); //Rebuff again between 1min and 1min30
+                if (events.ExecuteEvent() == EVENT_CHECK_SUMMON_AURA)
+                {
+                    std::list<Creature*> tigers;
+                    GetCreatureListWithEntryInGrid(tigers, me, NPC_TIGER_VEHICLE, 15.0f);
+                    if (!tigers.empty())
+                    {
+                        for (std::list<Creature*>::iterator itr = tigers.begin(); itr != tigers.end(); ++itr)
+                        {
+                            if (!(*itr)->IsSummon())
+                                continue;
+
+                            if (Unit* summoner = (*itr)->ToTempSummon()->GetSummonerUnit())
+                                if (!summoner->HasAura(SPELL_NO_SUMMON_AURA) && !summoner->HasAura(SPELL_SUMMON_ZENTABRA_TRIGGER)
+                                    && !summoner->IsInCombat())
+                                {
+                                    me->AddAura(SPELL_NO_SUMMON_AURA, summoner);
+                                    me->AddAura(SPELL_DETECT_INVIS, summoner);
+                                    summoner->CastSpell(summoner, SPELL_SUMMON_MATRIARCH, true);
+                                    Talk(SAY_MATRIARCH_AGGRO, summoner);
+                                }
+                        }
+                    }
+
+                    events.ScheduleEvent(EVENT_CHECK_SUMMON_AURA, 5s);
+                }
             }
-            else
-                RebuffTimer -= Diff;
-            if (!UpdateVictim())
-                return;
-            DoMeleeAttackIfReady();
+
+        private:
+            EventMap events;
+        };
+
+        CreatureAI* GetAI(Creature* creature) const override
+        {
+            return new npc_tiger_matriarch_creditAI(creature);
         }
-    };
+};
+
+class npc_tiger_matriarch : public CreatureScript
+{
+    public:
+        npc_tiger_matriarch() : CreatureScript("npc_tiger_matriarch") { }
+
+        struct npc_tiger_matriarchAI : public ScriptedAI
+        {
+            npc_tiger_matriarchAI(Creature* creature) : ScriptedAI(creature)
+            {
+            }
+
+            void JustEngagedWith(Unit* /*target*/) override
+            {
+                _events.Reset();
+                _events.ScheduleEvent(EVENT_POUNCE, 100ms);
+                _events.ScheduleEvent(EVENT_NOSUMMON, 50s);
+            }
+
+            void IsSummonedBy(WorldObject* summonerWO) override
+            {
+                Player* summoner = summonerWO->ToPlayer();
+                if (!summoner || !summoner->GetVehicle())
+                    return;
+
+                _tigerGuid = summoner->GetVehicle()->GetBase()->GetGUID();
+                if (Unit* tiger = ObjectAccessor::GetUnit(*me, _tigerGuid))
+                {
+                    AddThreat(tiger, 500000.0f);
+                    DoCast(me, SPELL_FURIOUS_BITE);
+                }
+            }
+
+            void KilledUnit(Unit* victim) override
+            {
+                if (victim->GetTypeId() != TYPEID_UNIT || !victim->IsSummon())
+                    return;
+
+                if (Unit* vehSummoner = victim->ToTempSummon()->GetSummonerUnit())
+                {
+                    vehSummoner->RemoveAurasDueToSpell(SPELL_NO_SUMMON_AURA);
+                    vehSummoner->RemoveAurasDueToSpell(SPELL_DETECT_INVIS);
+                    vehSummoner->RemoveAurasDueToSpell(SPELL_SPIRIT_OF_THE_TIGER_RIDER);
+                    vehSummoner->RemoveAurasDueToSpell(SPELL_SUMMON_ZENTABRA_TRIGGER);
+                }
+                me->DespawnOrUnsummon();
+            }
+
+            void DamageTaken(Unit* attacker, uint32& damage) override
+            {
+                if (!attacker || !attacker->IsSummon())
+                    return;
+
+                if (HealthBelowPct(20))
+                {
+                    damage = 0;
+                    me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+                    if (Unit* vehSummoner = attacker->ToTempSummon()->GetSummonerUnit())
+                    {
+                        vehSummoner->AddAura(SPELL_SUMMON_ZENTABRA_TRIGGER, vehSummoner);
+                        vehSummoner->CastSpell(vehSummoner, SPELL_SUMMON_ZENTABRA, true);
+                        attacker->CastSpell(attacker, SPELL_EJECT_PASSENGERS, true);
+                        vehSummoner->RemoveAurasDueToSpell(SPELL_NO_SUMMON_AURA);
+                        vehSummoner->RemoveAurasDueToSpell(SPELL_DETECT_INVIS);
+                        vehSummoner->RemoveAurasDueToSpell(SPELL_SPIRIT_OF_THE_TIGER_RIDER);
+                        vehSummoner->RemoveAurasDueToSpell(SPELL_SUMMON_ZENTABRA_TRIGGER);
+                    }
+
+                    me->DespawnOrUnsummon();
+                }
+            }
+
+            void UpdateAI(uint32 diff) override
+            {
+                if (!UpdateVictim())
+                    return;
+
+                if (!_tigerGuid)
+                    return;
+
+                _events.Update(diff);
+
+                while (uint32 eventId = _events.ExecuteEvent())
+                {
+                    switch (eventId)
+                    {
+                        case EVENT_POUNCE:
+                            DoCastVictim(SPELL_POUNCE);
+                            _events.ScheduleEvent(EVENT_POUNCE, 30s);
+                            break;
+                        case EVENT_NOSUMMON: // Reapply SPELL_NO_SUMMON_AURA
+                            if (Unit* tiger = ObjectAccessor::GetUnit(*me, _tigerGuid))
+                            {
+                                if (tiger->IsSummon())
+                                    if (Unit* vehSummoner = tiger->ToTempSummon()->GetSummonerUnit())
+                                        me->AddAura(SPELL_NO_SUMMON_AURA, vehSummoner);
+                            }
+                            _events.ScheduleEvent(EVENT_NOSUMMON, 50s);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+
+                DoMeleeAttackIfReady();
+            }
+
+        private:
+            EventMap _events;
+            ObjectGuid _tigerGuid;
+        };
+
+        CreatureAI* GetAI(Creature* creature) const override
+        {
+            return new npc_tiger_matriarchAI(creature);
+        }
+};
+
+// These models was found in sniff.
+/// @todo generalize these models with race from dbc
+uint32 const trollmodel[] =
+{11665, 11734, 11750, 12037, 12038, 12042, 12049, 12849, 13529, 14759, 15570, 15701,
+15702, 1882, 1897, 1976, 2025, 27286, 2734, 2735, 4084, 4085, 4087, 4089, 4231, 4357,
+4358, 4360, 4361, 4362, 4363, 4370, 4532, 4537, 4540, 4610, 6839, 7037, 9767, 9768};
+
+class npc_troll_volunteer : public CreatureScript
+{
+    public:
+        npc_troll_volunteer() : CreatureScript("npc_troll_volunteer") { }
+
+        struct npc_troll_volunteerAI : public ScriptedAI
+        {
+            npc_troll_volunteerAI(Creature* creature) : ScriptedAI(creature)
+            {
+                Initialize();
+                _mountModel = 0;
+            }
+
+            void Initialize()
+            {
+                _complete = false;
+            }
+
+            void InitializeAI() override
+            {
+                if (me->isDead() || !me->GetOwner())
+                    return;
+
+                Reset();
+
+                switch (urand(0, 3))
+                {
+                    case 0:
+                        _mountModel = 6471;
+                        break;
+                    case 1:
+                        _mountModel = 6473;
+                        break;
+                    case 2:
+                        _mountModel = 6469;
+                        break;
+                    default:
+                        _mountModel = 6472;
+                        break;
+                }
+                me->SetDisplayId(trollmodel[urand(0, 39)]);
+                if (Player* player = me->GetOwner()->ToPlayer())
+                    me->GetMotionMaster()->MoveFollow(player, 5.0f, float(rand_norm() + 1.0f) * float(M_PI) / 3.0f * 4.0f);
+            }
+
+            void Reset() override
+            {
+                Initialize();
+                me->AddAura(SPELL_VOLUNTEER_AURA, me);
+                me->AddAura(SPELL_MOUNTING_CHECK, me);
+                DoCast(me, SPELL_PETACT_AURA);
+                me->SetReactState(REACT_PASSIVE);
+                Talk(SAY_VOLUNTEER_START);
+            }
+
+            // This is needed for mount check aura to know what mountmodel the npc got stored
+            uint32 GetMountId()
+            {
+                return _mountModel;
+            }
+
+            void MovementInform(uint32 type, uint32 id) override
+            {
+                if (type != POINT_MOTION_TYPE)
+                    return;
+                if (id == POINT_URUZIN)
+                    me->DespawnOrUnsummon();
+            }
+
+            void SpellHit(WorldObject* caster, SpellInfo const* spellInfo) override
+            {
+                if (spellInfo->Id == SPELL_AOE_TURNIN && caster->GetEntry() == NPC_URUZIN && !_complete)
+                {
+                    _complete = true;    // Preventing from giving credit twice
+                    DoCast(me, SPELL_TURNIN);
+                    DoCast(me, SPELL_QUEST_CREDIT);
+                    me->RemoveAurasDueToSpell(SPELL_MOUNTING_CHECK);
+                    me->Dismount();
+                    Talk(SAY_VOLUNTEER_END);
+                    me->GetMotionMaster()->MovePoint(POINT_URUZIN, caster->GetPositionX(), caster->GetPositionY(), caster->GetPositionZ());
+                }
+            }
+
+        private:
+            uint32 _mountModel;
+            bool _complete;
+        };
+
+        CreatureAI* GetAI(Creature* creature) const override
+        {
+            return new npc_troll_volunteerAI(creature);
+        }
+};
+
+typedef npc_troll_volunteer::npc_troll_volunteerAI VolunteerAI;
+
+class spell_mount_check : public SpellScriptLoader
+{
+    public:
+        spell_mount_check() : SpellScriptLoader("spell_mount_check") { }
+
+        class spell_mount_check_AuraScript : public AuraScript
+        {
+            PrepareAuraScript(spell_mount_check_AuraScript);
+
+            bool Validate(SpellInfo const* /*spellInfo*/) override
+            {
+                return ValidateSpellInfo({ SPELL_MOUNTING_CHECK });
+            }
+
+            void HandleEffectPeriodic(AuraEffect const* /*aurEff*/)
+            {
+                Unit* target = GetTarget();
+                Unit* owner = target->GetOwner();
+
+                if (!owner)
+                    return;
+
+                if (owner->IsMounted() && !target->IsMounted())
+                {
+                    if (VolunteerAI* volunteerAI = CAST_AI(VolunteerAI, target->GetAI()))
+                        target->Mount(volunteerAI->GetMountId());
+                }
+                else if (!owner->IsMounted() && target->IsMounted())
+                    target->Dismount();
+
+                target->SetSpeedRate(MOVE_RUN, owner->GetSpeedRate(MOVE_RUN));
+                target->SetSpeedRate(MOVE_WALK, owner->GetSpeedRate(MOVE_WALK));
+            }
+
+            void Register() override
+            {
+                OnEffectPeriodic += AuraEffectPeriodicFn(spell_mount_check_AuraScript::HandleEffectPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
+            }
+        };
+
+        AuraScript* GetAuraScript() const override
+        {
+            return new spell_mount_check_AuraScript();
+        }
+};
+
+class spell_voljin_war_drums : public SpellScriptLoader
+{
+    public:
+        spell_voljin_war_drums() : SpellScriptLoader("spell_voljin_war_drums") { }
+
+        class spell_voljin_war_drums_SpellScript : public SpellScript
+        {
+            PrepareSpellScript(spell_voljin_war_drums_SpellScript);
+
+            bool Validate(SpellInfo const* /*spellInfo*/) override
+            {
+                return ValidateSpellInfo({ SPELL_MOTIVATE_1, SPELL_MOTIVATE_2 });
+            }
+
+            void HandleDummy(SpellEffIndex /*effIndex*/)
+            {
+                Unit* caster = GetCaster();
+                if (Unit* target = GetHitUnit())
+                {
+                    uint32 motivate = 0;
+                    if (target->GetEntry() == NPC_CITIZEN_1)
+                        motivate = SPELL_MOTIVATE_1;
+                    else if (target->GetEntry() == NPC_CITIZEN_2)
+                        motivate = SPELL_MOTIVATE_2;
+                    if (motivate)
+                        caster->CastSpell(target, motivate, false);
+                }
+            }
+
+            void Register() override
+            {
+                OnEffectHitTarget += SpellEffectFn(spell_voljin_war_drums_SpellScript::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+            }
+        };
+
+        SpellScript* GetSpellScript() const override
+        {
+            return new spell_voljin_war_drums_SpellScript();
+        }
 };
 
 enum VoodooSpells
@@ -116,20 +470,15 @@ enum VoodooSpells
 class spell_voodoo : public SpellScriptLoader
 {
     public:
-        spell_voodoo() : SpellScriptLoader("spell_voodoo") {}
+        spell_voodoo() : SpellScriptLoader("spell_voodoo") { }
 
         class spell_voodoo_SpellScript : public SpellScript
         {
             PrepareSpellScript(spell_voodoo_SpellScript);
 
-            bool Validate(SpellInfo const* /*spell*/)
+            bool Validate(SpellInfo const* /*spellInfo*/) override
             {
-                if (!sSpellMgr->GetSpellInfo(SPELL_BREW) || !sSpellMgr->GetSpellInfo(SPELL_GHOSTLY) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_HEX1) || !sSpellMgr->GetSpellInfo(SPELL_HEX2) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_HEX3) || !sSpellMgr->GetSpellInfo(SPELL_GROW) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_LAUNCH))
-                    return false;
-                return true;
+                return ValidateSpellInfo({ SPELL_BREW, SPELL_GHOSTLY, SPELL_HEX1, SPELL_HEX2, SPELL_HEX3, SPELL_GROW, SPELL_LAUNCH });
             }
 
             void HandleDummy(SpellEffIndex /*effIndex*/)
@@ -139,440 +488,24 @@ class spell_voodoo : public SpellScriptLoader
                     GetCaster()->CastSpell(target, spellid, false);
             }
 
-            void Register()
+            void Register() override
             {
                 OnEffectHitTarget += SpellEffectFn(spell_voodoo_SpellScript::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
             }
         };
 
-        SpellScript* GetSpellScript() const
+        SpellScript* GetSpellScript() const override
         {
             return new spell_voodoo_SpellScript();
         }
 };
 
-
-/*####
-# npc_darkspear_jailor
-####*/
-
-enum SayDarkspear
-{
-    SAY_DARKSPERAR_1   = 0, 
-    SAY_SPITESCALE_1   = 1, 
-
-};
-
-#define GOSSIP_ITEM_1 "I'm ready to face my challange."
-
-class npc_darkspear_jailor : public CreatureScript
-{
-public:
-    npc_darkspear_jailor() : CreatureScript("npc_darkspear_jailor") { }
-
-    bool OnGossipHello(Player* Player, Creature* Creature)
-    {
-        if (Player)
-        {
-            Player->PrepareGossipMenu(Creature);
-            if (Player->GetQuestStatus(24786) == QUEST_STATUS_INCOMPLETE || Player->GetQuestStatus(24754) == QUEST_STATUS_INCOMPLETE ||
-                Player->GetQuestStatus(24762) == QUEST_STATUS_INCOMPLETE || Player->GetQuestStatus(24774) == QUEST_STATUS_INCOMPLETE ||
-                Player->GetQuestStatus(26276) == QUEST_STATUS_INCOMPLETE || Player->GetQuestStatus(24642) == QUEST_STATUS_INCOMPLETE ||
-                Player->GetQuestStatus(24768) == QUEST_STATUS_INCOMPLETE || Player->GetQuestStatus(24780) == QUEST_STATUS_INCOMPLETE)
-                    Player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF);
-            
-            Player->SEND_GOSSIP_MENU(DEFAULT_GOSSIP_MESSAGE, Creature->GetGUID());
-        }
-        return true;
-    }
-
-    bool OnGossipSelect(Player* Player, Creature* Creature, uint32 /*uiSender*/, uint32 uiAction)
-    {
-        Player->PlayerTalkClass->ClearMenus();
-                
-        switch(uiAction)
-        {
-            case GOSSIP_ACTION_INFO_DEF:
-                if (Creature->GetGUIDLow() == 306002)
-                    Creature->GetMotionMaster()->MovePath(0, false);
-                else if (Creature->GetGUIDLow() == 127668)
-                    Creature->GetMotionMaster()->MovePath(1, false);
-                   
-                npc_darkspear_jailorAI* AI = CAST_AI(npc_darkspear_jailorAI,Creature->AI());
-                if (AI)
-                    AI->StartMovingToCage();
-                
-                Player->KilledMonsterCredit(39062, Creature->GetGUID());
-
-                Player->CLOSE_GOSSIP_MENU();
-                break;
-        }
-        Player->CLOSE_GOSSIP_MENU();
-        return true;
-    }
-
-    CreatureAI* GetAI(Creature* Creature) const
-    {
-        return new npc_darkspear_jailorAI (Creature);
-    }
-
-    struct npc_darkspear_jailorAI : public ScriptedAI
-    {
-        npc_darkspear_jailorAI(Creature* Creature) : ScriptedAI(Creature)
-        { }
-
-        uint8 uiPhase;
-        uint32 uiTimer;
-        
-        void Reset()
-        {
-            uiPhase = 0;
-            uiTimer = 2000;
-        }
-        
-        void StartMovingToCage()
-        {
-            uiPhase = 1;
-            uiTimer = 8000;
-            Talk(SAY_DARKSPERAR_1);
-        }
-
-        void UpdateAI(const uint32 uiDiff)
-        {
-            if (uiTimer <= uiDiff)
-            {
-                switch(uiPhase)
-                {
-                    case 0:
-                        break;
-                    case 1:
-                        uiPhase = 2;
-                        uiTimer = 8000;
-                    case 2:
-                        if (GameObject* Cage = me->FindNearestGameObject(201968, 5.0f))
-                                Cage->SetGoState(GO_STATE_ACTIVE);
-
-                        if (Creature* Spitescale = me->FindNearestCreature(38142, 30.0f, true))
-                        {
-                            Talk(SAY_SPITESCALE_1);
-                            if (me->GetGUIDLow() == 306002)
-                                Spitescale->GetMotionMaster()->MovePoint(0, -1144.48f, -5414.22f, 10.59f);
-                            else if (me->GetGUIDLow() == 127668)
-                                Spitescale->GetMotionMaster()->MovePoint(0, -1149.88f, -5527.07f, 8.10f);
-
-                            Spitescale->setFaction(16);
-                            Spitescale->SetReactState(REACT_AGGRESSIVE);
-                            Spitescale->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
-                            Spitescale->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PC);
-                        }
-                        uiPhase = 3;
-                        uiTimer = 2000;
-                        break;
-                    case 3:
-                        if (GameObject* Cage = me->FindNearestGameObject(201968, 5.0f))
-                            Cage->SetGoState(GO_STATE_READY);
-
-                        me->DealDamage(me, 10000);
-                        me->RemoveCorpse();
-                        uiPhase = 0;
-                        uiTimer = 1000;
-                        break;
-                }
-            } else
-                uiTimer -= uiDiff;
-        }
-    };
-
-};
-
-/*######
-## npc_jailor
-######*/
-
-enum ejailor
-{
-    GO_CAGE                = 201968,
-    NPC_NAGA               = 38142,
-};
-
-float fNodeJailorPosition[2][3][3] =
-{
-    {
-        {-1132.875366f, -5425.658203f, 13.308554f},
-        {-1134.783813f, -5416.551270f, 13.269002f},
-        {-1132.472046f, -5424.702637f, 13.225397f},
-    },
-    {
-        {-1159.829956f, -5519.570313f, 12.126601f},
-        {-1153.379028f, -5518.994629f, 11.996062f},
-        {-1159.829956f, -5519.570313f, 12.126601f},
-    },
-};
-
-float fNodeNagaPosition[2][3] =
-{
-    {-1146.220581f, -5417.623047f, 10.597669f},
-    {-1150.114380f, -5527.809082f,  8.105021f},
-};
-
-#define GOSSIP_HELLO_PIT "I'm ready to face my challenge."
-
-class npc_jailor : public CreatureScript
-{
-public:
-    npc_jailor() : CreatureScript("npc_jailor") { }
-
-    bool OnGossipHello(Player* pPlayer, Creature* pCreature)
-    {
-        if (CAST_AI(npc_jailor::npc_jailorAI, pCreature->AI())->uiStart == false)
-        {
-            if (pPlayer->GetQuestStatus(24774) == QUEST_STATUS_INCOMPLETE ||
-                pPlayer->GetQuestStatus(26276) == QUEST_STATUS_INCOMPLETE ||
-                pPlayer->GetQuestStatus(24754) == QUEST_STATUS_INCOMPLETE ||
-                pPlayer->GetQuestStatus(24762) == QUEST_STATUS_INCOMPLETE ||
-                pPlayer->GetQuestStatus(24786) == QUEST_STATUS_INCOMPLETE ||
-                pPlayer->GetQuestStatus(24642) == QUEST_STATUS_INCOMPLETE ||
-                pPlayer->GetQuestStatus(24768) == QUEST_STATUS_INCOMPLETE ||
-                pPlayer->GetQuestStatus(24780) == QUEST_STATUS_INCOMPLETE)
-            {
-                pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_HELLO_PIT, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
-            }
-        }
-
-        pPlayer->SEND_GOSSIP_MENU(pPlayer->GetGossipTextId(pCreature), pCreature->GetGUID());
-
-        return true;
-    }
-
-    bool OnGossipSelect(Player* pPlayer, Creature* pCreature, uint32 uiSender, uint32 uiAction)
-    {
-        pPlayer->PlayerTalkClass->ClearMenus();
-        if (uiAction == GOSSIP_ACTION_INFO_DEF+1)
-        {
-            uint8 Phase = 1;
-            if (pCreature->GetDistance(-1143.18f, -5429.95f, 13.97f) < 20)
-                Phase = 0;
-
-            CAST_AI(npc_jailor::npc_jailorAI, pCreature->AI())->Phase = Phase;
-            pCreature->MonsterSay("Get in the pit and show us your stuff, $N", LANG_UNIVERSAL, pPlayer->GetGUID());
-
-            pPlayer->KilledMonsterCredit(pCreature->GetEntry(), 0);
-            pPlayer->CLOSE_GOSSIP_MENU();
-        }
-        return true;
-    }
-
-    CreatureAI* GetAI(Creature* pCreature) const
-    {
-        return new npc_jailorAI(pCreature);
-    }
-
-    /*npc_jailor*/
-
-    struct npc_jailorAI : public ScriptedAI
-    {
-        npc_jailorAI(Creature* pCreature) : ScriptedAI(pCreature) {}
-
-        uint8 Phase;
-        uint8 uiNode;
-        uint32 uiTimer;
-        bool uiStart;
-
-        void Reset()
-        {
-            GameObject* pCage = me->FindNearestGameObject(GO_CAGE, 20.0f);
-            pCage->Respawn();
-            pCage->SetGoState(GO_STATE_READY);
-            Phase = 5;
-            uiNode = 0;
-            uiTimer = 2000;
-            uiStart = false;
-        }
-
-        void UpdateAI(const uint32 uiDiff)
-        {
-            if (me->isInCombat())
-                return;
-
-            if (Phase != 5)
-            {
-                uiStart = true;
-                if (uiTimer <= uiDiff)
-                {
-                    GoToTheNextNode();
-                    uiTimer = 2500;
-                    switch (uiNode)
-                    {
-                        case 1:
-                            uiTimer = 5000;
-                            uiNode++;
-                            break;
-                        case 3:
-                            uiTimer = 120000;
-                            uiNode++;
-                            break;
-                        case 4:
-                            if (Creature* pNaga = me->FindNearestCreature(NPC_NAGA, 30.0f))
-                            {
-                                pNaga->SetReactState(REACT_PASSIVE);
-                                pNaga->setFaction(634);
-                                pNaga->GetMotionMaster()->MoveTargetedHome();
-                            }
-                            uiTimer = 4000;
-                            uiNode++;
-                            break;
-                        case 5:
-                            if (GameObject*pCage = me->FindNearestGameObject(GO_CAGE, 30.0f))
-                            {
-                                pCage->Respawn();
-                                pCage->SetGoState(GO_STATE_READY);
-                            }
-                            uiNode = 0;
-                            Phase = 5;
-                            uiStart = false;
-                            uiTimer = 2000;
-                        default:
-                            uiNode++;
-                            break;
-                    }
-                }
-                else
-                    uiTimer -= uiDiff;
-            }
-        }
-
-        void GoToTheNextNode()
-        {
-            if (uiNode >= 3)
-                me->GetMotionMaster()->MoveTargetedHome();
-            else
-                me->GetMotionMaster()->MoveCharge(fNodeJailorPosition[Phase][uiNode][0], fNodeJailorPosition[Phase][uiNode][1], fNodeJailorPosition[Phase][uiNode][2], 5);
-        }
-
-        void MovementInform(uint32 uiType, uint32 uiPointId)
-        {
-            if (uiType != POINT_MOTION_TYPE)
-                return;
-
-            if (uiNode == 2)
-            {
-                if (GameObject*pCage = me->FindNearestGameObject(GO_CAGE, 15.0f))
-                {
-                    pCage->SetGoType(GAMEOBJECT_TYPE_BUTTON);
-                    pCage->UseDoorOrButton();
-                }
-                if (Creature* pNaga = me->FindNearestCreature(NPC_NAGA,15.0f))
-                {
-                    pNaga->SetReactState(REACT_AGGRESSIVE);
-                    pNaga->setFaction(14);
-                    pNaga->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PC | UNIT_FLAG_NOT_ATTACKABLE_1 | UNIT_FLAG_NON_ATTACKABLE);
-                    pNaga->MonsterSay("They sssend you to your death, youngling.", LANG_UNIVERSAL, NULL);
-                    pNaga->GetMotionMaster()->MoveCharge(fNodeNagaPosition[Phase][0], fNodeNagaPosition[Phase][1], fNodeNagaPosition[Phase][2], 5);
-                }
-            }
-        }
-    };
-};
-
-
-/*######
-## npc_swiftclaw
-######*/
-
-enum eSwiftclaw
-{
-    SPELL_RIDE_VEHICLE_1 = 52391,
-    SPELL_RIDE_VEHICLE_2 = 70925,
-};
-
-class npc_swiftclaw : public CreatureScript
-{
-public:
-    npc_swiftclaw() : CreatureScript("npc_swiftclaw") { }
-
-    CreatureAI* GetAI(Creature* pCreature) const
-    {
-        return new npc_swiftclawAI(pCreature);
-    }
-
-    struct npc_swiftclawAI : public ScriptedAI
-    {
-        npc_swiftclawAI(Creature* pCreature) : ScriptedAI(pCreature) {}
-
-        void Reset()
-        {
-			 if (Unit *owner = me->ToCreature()->GetCharmerOrOwner())
-                    if (owner->GetTypeId() == TYPEID_PLAYER)
-                    {
-                       owner->CastSpell(me, SPELL_RIDE_VEHICLE_1, true);
-                       me->ToTempSummon()->GetSummoner()->GetGUID();
-                       me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_SPELLCLICK);
-                       me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE); 
-                    }
-            else
-                me->DespawnOrUnsummon();
-        }
-
-        void OnCharmed(bool /*apply*/) { }
-
-        void PassengerBoarded(Unit * who, int8 /*seatId*/, bool apply)
-        {
-            if (Player * pWho = who->ToPlayer())
-            {
-                me->SetFlag(UNIT_FIELD_FLAGS_2, UNIT_FLAG2_FORCE_MOVEMENT);
-                pWho->KilledMonsterCredit(37989, 0);
-            }
-        }
-
-        void MoveInLineOfSight(Unit * who)
-        {
-            if (me->FindNearestCreature(38987, 5, true))
-            {
-                if (Player * pWho = who->ToPlayer())
-                {
-                    pWho->KilledMonsterCredit(38002, 0);
-                }
-                me->DespawnOrUnsummon();
-            }
-        }
-    };
-};
-
-class npc_swiftclaw2 : public CreatureScript
-{
-public:
-     npc_swiftclaw2() : CreatureScript("npc_swiftclaw2") { }
-
-    CreatureAI* GetAI(Creature* pCreature) const
-    {
-        return new  npc_swiftclaw2AI(pCreature);
-    }
-
-    struct npc_swiftclaw2AI : public ScriptedAI
-    {
-        npc_swiftclaw2AI(Creature* pCreature) : ScriptedAI(pCreature) { }
-
-        void SpellHit(Unit* hitter, const SpellInfo* spell)
-        {
-            if (!hitter || !spell)
-                return;
-
-            if (spell->Id != 70927)
-                return;
-                Talk(0); 
-            hitter->SummonCreature(38002,hitter->GetPositionX(),hitter->GetPositionY(),hitter->GetPositionZ(),0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 100000);
-            me->DespawnOrUnsummon();
-
-        }
-
-    };
-};
-
 void AddSC_durotar()
 {
-    new npc_lazy_peon();
+    new npc_tiger_matriarch_credit();
+    new npc_tiger_matriarch();
+    new npc_troll_volunteer();
+    new spell_mount_check();
+    new spell_voljin_war_drums();
     new spell_voodoo();
-    new npc_jailor();
-    new npc_swiftclaw();
-    new npc_swiftclaw2();	
 }

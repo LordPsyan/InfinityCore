@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,15 +23,15 @@
 class Group;
 class Player;
 
-class GroupReference : public Reference<Group, Player>
+class TC_GAME_API GroupReference : public Reference<Group, Player>
 {
     protected:
         uint8 iSubGroup;
-        void targetObjectBuildLink();
-        void targetObjectDestroyLink();
-        void sourceObjectDestroyLink();
+        void targetObjectBuildLink() override;
+        void targetObjectDestroyLink() override;
+        void sourceObjectDestroyLink() override;
     public:
-        GroupReference() : Reference<Group, Player>(), iSubGroup(0) {}
+        GroupReference() : Reference<Group, Player>(), iSubGroup(0) { }
         ~GroupReference() { unlink(); }
         GroupReference* next() { return (GroupReference*)Reference<Group, Player>::next(); }
         GroupReference const* next() const { return (GroupReference const*)Reference<Group, Player>::next(); }
@@ -40,4 +39,3 @@ class GroupReference : public Reference<Group, Player>
         void setSubGroup(uint8 pSubGroup) { iSubGroup = pSubGroup; }
 };
 #endif
-

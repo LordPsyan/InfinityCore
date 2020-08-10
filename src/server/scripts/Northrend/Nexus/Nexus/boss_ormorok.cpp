@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,8 +16,9 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
+#include "GameObject.h"
 #include "nexus.h"
+#include "ScriptedCreature.h"
 #include "SpellScript.h"
 
 enum Spells
@@ -36,6 +36,7 @@ enum Yells
     SAY_REFLECT                                 = 3,
     SAY_CRYSTAL_SPIKES                          = 4,
     SAY_KILL                                    = 5,
+    SAY_FRENZY                                  = 6
 };
 
 enum Events
@@ -49,7 +50,7 @@ enum Events
 class OrmorokTanglerPredicate
 {
    public:
-      OrmorokTanglerPredicate(Unit* unit) : me(unit) {}
+      OrmorokTanglerPredicate(Unit* unit) : me(unit) { }
 
     bool operator() (WorldObject* object) const
     {
@@ -67,49 +68,58 @@ public:
 
     struct boss_ormorokAI : public BossAI
     {
-        boss_ormorokAI(Creature* creature) : BossAI(creature, DATA_ORMOROK_EVENT) {}
-
-        void EnterCombat(Unit* /*who*/)
+        boss_ormorokAI(Creature* creature) : BossAI(creature, DATA_ORMOROK)
         {
-            _EnterCombat();
-
-            events.ScheduleEvent(EVENT_CRYSTAL_SPIKES, 12000);
-            events.ScheduleEvent(EVENT_TRAMPLE, 10000);
-            events.ScheduleEvent(EVENT_SPELL_REFLECTION, 30000);
-            if (IsHeroic())
-                events.ScheduleEvent(EVENT_CRYSTALLINE_TANGLER, 17000);
-
-            Talk(SAY_AGGRO);
-
-            if (instance)
-                instance->SetData(DATA_ORMOROK_EVENT, IN_PROGRESS);
+            Initialize();
         }
 
-        void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/)
+        void Initialize()
+        {
+            frenzy = false;
+        }
+
+        void Reset() override
+        {
+            BossAI::Reset();
+            Initialize();
+        }
+
+        void JustEngagedWith(Unit* who) override
+        {
+            BossAI::JustEngagedWith(who);
+
+            events.ScheduleEvent(EVENT_CRYSTAL_SPIKES, 12s);
+            events.ScheduleEvent(EVENT_TRAMPLE, 10s);
+            events.ScheduleEvent(EVENT_SPELL_REFLECTION, 30s);
+            if (IsHeroic())
+                events.ScheduleEvent(EVENT_CRYSTALLINE_TANGLER, 15s);
+
+            Talk(SAY_AGGRO);
+        }
+
+        void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
         {
             if (!frenzy && HealthBelowPct(25))
             {
+                Talk(SAY_FRENZY);
                 DoCast(me, SPELL_FRENZY);
                 frenzy = true;
             }
         }
 
-        void JustDied(Unit* /*killer*/)
+        void JustDied(Unit* /*killer*/) override
         {
             _JustDied();
-
             Talk(SAY_DEATH);
-
-            if (instance)
-                instance->SetData(DATA_ORMOROK_EVENT, DONE);
         }
 
-        void KilledUnit(Unit* /*victim*/)
+        void KilledUnit(Unit* who) override
         {
-            Talk(SAY_KILL);
+            if (who->GetTypeId() == TYPEID_PLAYER)
+                Talk(SAY_KILL);
         }
 
-        void UpdateAI(const uint32 diff)
+        void UpdateAI(uint32 diff) override
         {
             if (!UpdateVictim())
                 return;
@@ -123,28 +133,31 @@ public:
             {
                 switch (eventId)
                 {
-                case EVENT_TRAMPLE:
-                    DoCast(me, SPELL_TRAMPLE);
-                    events.ScheduleEvent(EVENT_TRAMPLE, 10000);
-                    break;
-                case EVENT_SPELL_REFLECTION:
-                    Talk(SAY_REFLECT);
-                    DoCast(me, SPELL_SPELL_REFLECTION);
-                    events.ScheduleEvent(EVENT_SPELL_REFLECTION, 30000);
-                    break;
-                case EVENT_CRYSTAL_SPIKES:
-                    Talk(SAY_CRYSTAL_SPIKES);
-                    DoCast(SPELL_CRYSTAL_SPIKES);
-                    events.ScheduleEvent(EVENT_CRYSTAL_SPIKES, 12000);
-                    break;
-                case EVENT_CRYSTALLINE_TANGLER:
-                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, OrmorokTanglerPredicate(me)))
-                        DoCast(target, SPELL_SUMMON_CRYSTALLINE_TANGLER);
-                    events.ScheduleEvent(EVENT_CRYSTALLINE_TANGLER, 17000);
-                    break;
-                default:
-                    break;
+                    case EVENT_TRAMPLE:
+                        DoCast(me, SPELL_TRAMPLE);
+                        events.ScheduleEvent(EVENT_TRAMPLE, 10s);
+                        break;
+                    case EVENT_SPELL_REFLECTION:
+                        Talk(SAY_REFLECT);
+                        DoCast(me, SPELL_SPELL_REFLECTION);
+                        events.ScheduleEvent(EVENT_SPELL_REFLECTION, 30s);
+                        break;
+                    case EVENT_CRYSTAL_SPIKES:
+                        Talk(SAY_CRYSTAL_SPIKES);
+                        DoCast(SPELL_CRYSTAL_SPIKES);
+                        events.ScheduleEvent(EVENT_CRYSTAL_SPIKES, 12s);
+                        break;
+                    case EVENT_CRYSTALLINE_TANGLER:
+                        if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, OrmorokTanglerPredicate(me)))
+                            DoCast(target, SPELL_SUMMON_CRYSTALLINE_TANGLER);
+                        events.ScheduleEvent(EVENT_CRYSTALLINE_TANGLER, 15s);
+                        break;
+                    default:
+                        break;
                 }
+
+                if (me->HasUnitState(UNIT_STATE_CASTING))
+                    return;
             }
 
             DoMeleeAttackIfReady();
@@ -155,9 +168,9 @@ public:
 
     };
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new boss_ormorokAI (creature);
+        return GetNexusAI<boss_ormorokAI>(creature);
     }
 };
 
@@ -170,6 +183,7 @@ enum CrystalSpikes
     MAX_COUNT                        = 5,
 
     SPELL_CRYSTAL_SPIKE_DAMAGE       = 47944,
+    SPELL_CRYSTAL_SPIKE_AURA         = 47941,
 
     GO_CRYSTAL_SPIKE_TRAP            = 188537,
 };
@@ -188,17 +202,23 @@ public:
 
     struct npc_crystal_spike_triggerAI : public ScriptedAI
     {
-        npc_crystal_spike_triggerAI(Creature* creature) : ScriptedAI(creature) {}
+        npc_crystal_spike_triggerAI(Creature* creature) : ScriptedAI(creature)
+        {
+            _count = 0;
+            _despawntimer = 0;
+        }
 
-        void IsSummonedBy(Unit* owner)
+        void IsSummonedBy(WorldObject* owner) override
         {
             switch (me->GetEntry())
             {
                 case NPC_CRYSTAL_SPIKE_INITIAL:
-                     _count = 0;
-                     me->SetFacingToObject(owner);
-                     break;
+                    _count = 0;
+                    me->SetFacingToObject(owner);
+                    me->CastSpell(me, SPELL_CRYSTAL_SPIKE_AURA, true);
+                    break;
                 case NPC_CRYSTAL_SPIKE_TRIGGER:
+                    me->CastSpell(me, SPELL_CRYSTAL_SPIKE_AURA, true);
                     if (Creature* trigger = owner->ToCreature())
                         _count = trigger->AI()->GetData(DATA_COUNT) + 1;
                     break;
@@ -214,12 +234,12 @@ public:
             _despawntimer = 2000;
         }
 
-        uint32 GetData(uint32 type) const
+        uint32 GetData(uint32 type) const override
         {
             return type == DATA_COUNT ? _count : 0;
         }
 
-        void UpdateAI(const uint32 diff)
+        void UpdateAI(uint32 diff) override
         {
             if (_despawntimer <= diff)
             {
@@ -239,9 +259,9 @@ public:
 
     };
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new npc_crystal_spike_triggerAI(creature);
+        return GetNexusAI<npc_crystal_spike_triggerAI>(creature);
     }
 };
 
@@ -266,13 +286,13 @@ class spell_crystal_spike : public SpellScriptLoader
                     }
             }
 
-            void Register()
+            void Register() override
             {
                 OnEffectPeriodic += AuraEffectPeriodicFn(spell_crystal_spike_AuraScript::HandlePeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
             }
         };
 
-        AuraScript* GetAuraScript() const
+        AuraScript* GetAuraScript() const override
         {
             return new spell_crystal_spike_AuraScript();
         }

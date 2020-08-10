@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,16 +17,13 @@
 
 #include "zlib.h"
 #include "AddonHandler.h"
-#include "DatabaseEnv.h"
 #include "Opcodes.h"
 #include "Log.h"
 
-AddonHandler::AddonHandler()
+AddonHandler* AddonHandler::instance()
 {
-}
-
-AddonHandler::~AddonHandler()
-{
+    static AddonHandler instance;
+    return &instance;
 }
 
 bool AddonHandler::BuildAddonPacket(WorldPacket* source, WorldPacket* target)
@@ -53,7 +49,7 @@ bool AddonHandler::BuildAddonPacket(WorldPacket* source, WorldPacket* target)
 
     AddOnPacked.resize(AddonRealSize);                      // resize target for zlib action
 
-    if (!uncompress(AddOnPacked.contents(), &AddonRealSize, source->contents() + CurrentPosition, source->size() - CurrentPosition)!= Z_OK)
+    if (uncompress(AddOnPacked.contents(), &AddonRealSize, source->contents() + CurrentPosition, source->size() - CurrentPosition) == Z_OK)
     {
         target->Initialize(SMSG_ADDON_INFO);
 
@@ -78,7 +74,7 @@ bool AddonHandler::BuildAddonPacket(WorldPacket* source, WorldPacket* target)
 
             AddOnPacked >> enabled >> crc >> unk2;
 
-            sLog->outDebug(LOG_FILTER_NETWORKIO, "ADDON: Name: %s, Enabled: 0x%x, CRC: 0x%x, Unknown2: 0x%x", addonName.c_str(), enabled, crc, unk2);
+            TC_LOG_DEBUG("network", "ADDON: Name: %s, Enabled: 0x%x, CRC: 0x%x, Unknown2: 0x%x", addonName.c_str(), enabled, crc, unk2);
 
             uint8 state = (enabled ? 2 : 1);
             *target << uint8(state);
@@ -132,11 +128,11 @@ bool AddonHandler::BuildAddonPacket(WorldPacket* source, WorldPacket* target)
         *target << uint32(count);
 
         if (AddOnPacked.rpos() != AddOnPacked.size())
-            sLog->outDebug(LOG_FILTER_NETWORKIO, "packet under read!");
+            TC_LOG_DEBUG("network", "packet under read!");
     }
     else
     {
-        sLog->outError(LOG_FILTER_NETWORKIO, "Addon packet uncompress error :(");
+        TC_LOG_ERROR("network", "Addon packet uncompress error :(");
         return false;
     }
     return true;

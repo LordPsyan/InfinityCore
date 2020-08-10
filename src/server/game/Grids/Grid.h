@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -52,7 +51,7 @@ class Grid
         /** destructor to clean up its resources. This includes unloading the
         grid if it has not been unload.
         */
-        ~Grid() {}
+        ~Grid() { }
 
         /** an object of interested enters the grid
          */
@@ -141,4 +140,3 @@ class Grid
         //ActiveGridObjects m_activeGridObjects;
 };
 #endif
-

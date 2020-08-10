@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -25,6 +24,7 @@ EndScriptData */
 
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
+#include "stratholme.h"
 
 //front, left
 #define ADD_1X 3553.851807f
@@ -72,31 +72,32 @@ EndScriptData */
 #define ADD_9Z 125.001015f
 #define ADD_9O 0.592007f
 
-#define SPELL_KNOCKAWAY    10101
-#define SPELL_PUMMEL    15615
-#define SPELL_SHOOT    16496
-//#define SPELL_SUMMONCRIMSONRIFLEMAN    17279
+enum Spells
+{
+    SPELL_KNOCKAWAY                 = 10101,
+    SPELL_PUMMEL                    = 15615,
+    SPELL_SHOOT                     = 16496
+    //SPELL_SUMMONCRIMSONRIFLEMAN     = 17279
+};
 
 class boss_cannon_master_willey : public CreatureScript
 {
 public:
     boss_cannon_master_willey() : CreatureScript("boss_cannon_master_willey") { }
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new boss_cannon_master_willeyAI (creature);
+        return GetStratholmeAI<boss_cannon_master_willeyAI>(creature);
     }
 
     struct boss_cannon_master_willeyAI : public ScriptedAI
     {
-        boss_cannon_master_willeyAI(Creature* creature) : ScriptedAI(creature) {}
+        boss_cannon_master_willeyAI(Creature* creature) : ScriptedAI(creature)
+        {
+            Initialize();
+        }
 
-        uint32 KnockAway_Timer;
-        uint32 Pummel_Timer;
-        uint32 Shoot_Timer;
-        uint32 SummonRifleman_Timer;
-
-        void Reset()
+        void Initialize()
         {
             Shoot_Timer = 1000;
             Pummel_Timer = 7000;
@@ -104,7 +105,17 @@ public:
             SummonRifleman_Timer = 15000;
         }
 
-        void JustDied(Unit* /*killer*/)
+        uint32 KnockAway_Timer;
+        uint32 Pummel_Timer;
+        uint32 Shoot_Timer;
+        uint32 SummonRifleman_Timer;
+
+        void Reset() override
+        {
+            Initialize();
+        }
+
+        void JustDied(Unit* /*killer*/) override
         {
             me->SummonCreature(11054, ADD_1X, ADD_1Y, ADD_1Z, ADD_1O, TEMPSUMMON_TIMED_DESPAWN, 240000);
             me->SummonCreature(11054, ADD_2X, ADD_2Y, ADD_2Z, ADD_2O, TEMPSUMMON_TIMED_DESPAWN, 240000);
@@ -115,11 +126,11 @@ public:
             me->SummonCreature(11054, ADD_9X, ADD_9Y, ADD_9Z, ADD_9O, TEMPSUMMON_TIMED_DESPAWN, 240000);
         }
 
-        void EnterCombat(Unit* /*who*/)
+        void JustEngagedWith(Unit* /*who*/) override
         {
         }
 
-        void UpdateAI(const uint32 diff)
+        void UpdateAI(uint32 diff) override
         {
             //Return since we have no target
             if (!UpdateVictim())
@@ -129,7 +140,7 @@ public:
             if (Pummel_Timer <= diff)
             {
                 //Cast
-                if (rand()%100 < 90) //90% chance to cast
+                if (rand32() % 100 < 90) //90% chance to cast
                 {
                     DoCastVictim(SPELL_PUMMEL);
                 }
@@ -141,7 +152,7 @@ public:
             if (KnockAway_Timer <= diff)
             {
                 //Cast
-                if (rand()%100 < 80) //80% chance to cast
+                if (rand32() % 100 < 80) //80% chance to cast
                 {
                     DoCastVictim(SPELL_KNOCKAWAY);
                 }
@@ -162,7 +173,7 @@ public:
             if (SummonRifleman_Timer <= diff)
             {
                 //Cast
-                switch (rand()%9)
+                switch (rand32() % 9)
                 {
                 case 0:
                     me->SummonCreature(11054, ADD_1X, ADD_1Y, ADD_1Z, ADD_1O, TEMPSUMMON_TIMED_DESPAWN, 240000);

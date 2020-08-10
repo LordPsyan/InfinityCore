@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,83 +15,69 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "WorldSession.h"
 #include "Common.h"
-#include "DatabaseEnv.h"
+#include "DBCStores.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
-#include "Opcodes.h"
-#include "Player.h"
 #include "Pet.h"
-#include "UpdateMask.h"
+#include "Player.h"
 #include "WorldPacket.h"
-#include "WorldSession.h"
 
 void WorldSession::HandleLearnTalentOpcode(WorldPacket& recvData)
 {
-    uint32 talentId, requestedRank;
-    recvData >> talentId >> requestedRank;
+    uint32 talent_id, requested_rank;
+    recvData >> talent_id >> requested_rank;
 
-    if (_player->LearnTalent(talentId, requestedRank))
-        _player->SendTalentsInfoData(false);
+    _player->LearnTalent(talent_id, requested_rank);
+    _player->SendTalentsInfoData(false);
 }
 
 void WorldSession::HandleLearnPreviewTalents(WorldPacket& recvPacket)
 {
-    sLog->outDebug(LOG_FILTER_NETWORKIO, "CMSG_LEARN_PREVIEW_TALENTS");
+    TC_LOG_DEBUG("network", "CMSG_LEARN_PREVIEW_TALENTS");
 
-    int32 tabPage;
     uint32 talentsCount;
-    recvPacket >> tabPage;    // talent tree
-
-    // prevent cheating (selecting new tree with points already in another)
-    if (tabPage >= 0)   // -1 if player already has specialization
-    {
-        if (TalentTabEntry const* talentTabEntry = sTalentTabStore.LookupEntry(_player->GetPrimaryTalentTree(_player->GetActiveSpec())))
-        {
-            if (talentTabEntry->tabpage != uint32(tabPage))
-            {
-                recvPacket.rfinish();
-                return;
-            }
-        }
-    }
-
     recvPacket >> talentsCount;
 
     uint32 talentId, talentRank;
 
-    for (uint32 i = 0; i < talentsCount; ++i)
+    // Client has max 44 talents for tree for 3 trees, rounded up : 150
+    uint32 const MaxTalentsCount = 150;
+
+    for (uint32 i = 0; i < talentsCount && i < MaxTalentsCount; ++i)
     {
         recvPacket >> talentId >> talentRank;
 
-        if (!_player->LearnTalent(talentId, talentRank))
-        {
-            recvPacket.rfinish();
-            break;
-        }
+        _player->LearnTalent(talentId, talentRank);
     }
 
     _player->SendTalentsInfoData(false);
+
+    recvPacket.rfinish();
 }
 
 void WorldSession::HandleTalentWipeConfirmOpcode(WorldPacket& recvData)
 {
-    sLog->outDebug(LOG_FILTER_NETWORKIO, "MSG_TALENT_WIPE_CONFIRM");
-    uint64 guid;
+    TC_LOG_DEBUG("network", "MSG_TALENT_WIPE_CONFIRM");
+    ObjectGuid guid;
     recvData >> guid;
 
     Creature* unit = GetPlayer()->GetNPCIfCanInteractWith(guid, UNIT_NPC_FLAG_TRAINER);
     if (!unit)
     {
-        sLog->outDebug(LOG_FILTER_NETWORKIO, "WORLD: HandleTalentWipeConfirmOpcode - Unit (GUID: %u) not found or you can't interact with him.", uint32(GUID_LOPART(guid)));
+        TC_LOG_DEBUG("network", "WORLD: HandleTalentWipeConfirmOpcode - %s not found or you can't interact with him.", guid.ToString().c_str());
         return;
     }
+
+    if (!unit->CanResetTalents(_player, false))
+        return;
 
     // remove fake death
     if (GetPlayer()->HasUnitState(UNIT_STATE_DIED))
         GetPlayer()->RemoveAurasByType(SPELL_AURA_FEIGN_DEATH);
 
-    if (!_player->ResetTalents())
+    if (!(_player->ResetTalents()))
     {
         WorldPacket data(MSG_TALENT_WIPE_CONFIRM, 8+4);    //you have not any talent
         data << uint64(0);
@@ -110,22 +95,9 @@ void WorldSession::HandleUnlearnSkillOpcode(WorldPacket& recvData)
     uint32 skillId;
     recvData >> skillId;
 
-    if (!IsPrimaryProfessionSkill(skillId))
+    SkillRaceClassInfoEntry const* rcEntry = GetSkillRaceClassInfo(skillId, GetPlayer()->GetRace(), GetPlayer()->GetClass());
+    if (!rcEntry || !(rcEntry->Flags & SKILL_FLAG_UNLEARNABLE))
         return;
 
     GetPlayer()->SetSkill(skillId, 0, 0, 0);
 }
-
-
-void WorldSession::HandleCompletedArtifactsOpcode(WorldPacket &recv_data)
-{
-    WorldPacket data(SMSG_COMPLETED_ARTIFACTS, 4 + 12 * 1);
-    data << uint32(1);  // Number of artifact completed
-    // FOR
-    data << uint32(349); // ID
-    data << uint32(uint32(time(NULL))); // Time
-    data << uint32(10); // Count
-    // END FOR
-    SendPacket(&data);
-}
-

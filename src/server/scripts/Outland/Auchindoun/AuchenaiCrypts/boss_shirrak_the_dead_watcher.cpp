@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,25 +23,31 @@ Category: Auchindoun, Auchenai Crypts
 EndScriptData */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
+#include "auchenai_crypts.h"
+#include "Map.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
+#include "ScriptedCreature.h"
 
-#define SPELL_INHIBITMAGIC          32264
-#define SPELL_ATTRACTMAGIC          32265
-#define N_SPELL_CARNIVOROUSBITE     36383
-#define H_SPELL_CARNIVOROUSBITE     39382
-#define SPELL_CARNIVOROUSBITE       DUNGEON_MODE(N_SPELL_CARNIVOROUSBITE, H_SPELL_CARNIVOROUSBITE)
+enum Spells
+{
+    SPELL_INHIBITMAGIC          = 32264,
+    SPELL_ATTRACTMAGIC          = 32265,
+    SPELL_CARNIVOROUSBITE       = 36383,
 
-#define ENTRY_FOCUS_FIRE            18374
+    SPELL_FIERY_BLAST           = 32302,
 
-#define N_SPELL_FIERY_BLAST         32302
-#define H_SPELL_FIERY_BLAST         38382
-#define SPELL_FIERY_BLAST           DUNGEON_MODE(N_SPELL_FIERY_BLAST, H_SPELL_FIERY_BLAST)
-#define SPELL_FOCUS_FIRE_VISUAL     42075 //need to find better visual
+    SPELL_FOCUS_FIRE_VISUAL     = 42075 //need to find better visual
+};
 
 enum Say
 {
-    EMOTE_FOCUSED                  = 0
+    EMOTE_FOCUSED               = 0
+};
+
+enum Creatures
+{
+    NPC_FOCUS_FIRE            = 18374
 };
 
 class boss_shirrak_the_dead_watcher : public CreatureScript
@@ -50,15 +55,25 @@ class boss_shirrak_the_dead_watcher : public CreatureScript
 public:
     boss_shirrak_the_dead_watcher() : CreatureScript("boss_shirrak_the_dead_watcher") { }
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new boss_shirrak_the_dead_watcherAI (creature);
+        return GetAuchenaiCryptsAI<boss_shirrak_the_dead_watcherAI>(creature);
     }
 
     struct boss_shirrak_the_dead_watcherAI : public ScriptedAI
     {
         boss_shirrak_the_dead_watcherAI(Creature* creature) : ScriptedAI(creature)
         {
+            Initialize();
+        }
+
+        void Initialize()
+        {
+            Inhibitmagic_Timer = 0;
+            Attractmagic_Timer = 28000;
+            Carnivorousbite_Timer = 10000;
+            FocusFire_Timer = 17000;
+            FocusedTargetGUID.Clear();
         }
 
         uint32 Inhibitmagic_Timer;
@@ -66,45 +81,40 @@ public:
         uint32 Carnivorousbite_Timer;
         uint32 FocusFire_Timer;
 
-        uint64 FocusedTargetGUID;
+        ObjectGuid FocusedTargetGUID;
 
-        void Reset()
+        void Reset() override
         {
-            Inhibitmagic_Timer = 0;
-            Attractmagic_Timer = 28000;
-            Carnivorousbite_Timer = 10000;
-            FocusFire_Timer = 17000;
-            FocusedTargetGUID = 0;
+            Initialize();
         }
 
-        void EnterCombat(Unit* /*who*/)
+        void JustEngagedWith(Unit* /*who*/) override
         { }
 
-        void JustSummoned(Creature* summoned)
+        void JustSummoned(Creature* summoned) override
         {
-            if (summoned && summoned->GetEntry() == ENTRY_FOCUS_FIRE)
+            if (summoned && summoned->GetEntry() == NPC_FOCUS_FIRE)
             {
                 summoned->CastSpell(summoned, SPELL_FOCUS_FIRE_VISUAL, false);
-                summoned->setFaction(me->getFaction());
-                summoned->SetLevel(me->getLevel());
+                summoned->SetFaction(me->GetFaction());
+                summoned->SetLevel(me->GetLevel());
                 summoned->AddUnitState(UNIT_STATE_ROOT);
 
-                if (Unit* pFocusedTarget = Unit::GetUnit(*me, FocusedTargetGUID))
+                if (Unit* pFocusedTarget = ObjectAccessor::GetUnit(*me, FocusedTargetGUID))
                     summoned->AI()->AttackStart(pFocusedTarget);
             }
         }
 
-        void UpdateAI(const uint32 diff)
+        void UpdateAI(uint32 diff) override
         {
             //Inhibitmagic_Timer
             if (Inhibitmagic_Timer <= diff)
             {
                 float dist;
-                Map* map = me->GetMap();
-                Map::PlayerList const &PlayerList = map->GetPlayers();
+                Map::PlayerList const& PlayerList = me->GetMap()->GetPlayers();
                 for (Map::PlayerList::const_iterator i = PlayerList.begin(); i != PlayerList.end(); ++i)
-                    if (Player* i_pl = i->getSource())
-                        if (i_pl->isAlive() && (dist = i_pl->IsWithinDist(me, 45)))
+                    if (Player* i_pl = i->GetSource())
+                        if (i_pl->IsAlive() && (dist = i_pl->GetDistance(me)) < 45)
                         {
                             i_pl->RemoveAurasDueToSpell(SPELL_INHIBITMAGIC);
                             me->AddAura(SPELL_INHIBITMAGIC, i_pl);
@@ -115,7 +125,7 @@ public:
                             if (dist < 15)
                                 me->AddAura(SPELL_INHIBITMAGIC, i_pl);
                         }
-                Inhibitmagic_Timer = 3000+(rand()%1000);
+                Inhibitmagic_Timer = 3000 + (rand32() % 1000);
             } else Inhibitmagic_Timer -= diff;
 
             //Return since we have no target
@@ -141,14 +151,14 @@ public:
             if (FocusFire_Timer <= diff)
             {
                 // Summon Focus Fire & Emote
-                Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1);
-                if (target && target->GetTypeId() == TYPEID_PLAYER && target->isAlive())
+                Unit* target = SelectTarget(SelectTargetMethod::Random, 1);
+                if (target && target->GetTypeId() == TYPEID_PLAYER && target->IsAlive())
                 {
                     FocusedTargetGUID = target->GetGUID();
-                    me->SummonCreature(ENTRY_FOCUS_FIRE, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(), 0, TEMPSUMMON_TIMED_DESPAWN, 5500);
-                    Talk(EMOTE_FOCUSED, FocusedTargetGUID);
+                    me->SummonCreature(NPC_FOCUS_FIRE, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(), 0, TEMPSUMMON_TIMED_DESPAWN, 5500);
+                    Talk(EMOTE_FOCUSED, target);
                 }
-                FocusFire_Timer = 15000+(rand()%5000);
+                FocusFire_Timer = 15000 + (rand32() % 5000);
             } else FocusFire_Timer -= diff;
 
             DoMeleeAttackIfReady();
@@ -157,35 +167,41 @@ public:
 
 };
 
-class mob_focus_fire : public CreatureScript
+class npc_focus_fire : public CreatureScript
 {
 public:
-    mob_focus_fire() : CreatureScript("mob_focus_fire") { }
+    npc_focus_fire() : CreatureScript("npc_focus_fire") { }
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new mob_focus_fireAI (creature);
+        return GetAuchenaiCryptsAI<npc_focus_fireAI>(creature);
     }
 
-    struct mob_focus_fireAI : public ScriptedAI
+    struct npc_focus_fireAI : public ScriptedAI
     {
-        mob_focus_fireAI(Creature* creature) : ScriptedAI(creature)
+        npc_focus_fireAI(Creature* creature) : ScriptedAI(creature)
         {
+            Initialize();
+        }
+
+        void Initialize()
+        {
+            FieryBlast_Timer = 3000 + (rand32() % 1000);
+            fiery1 = fiery2 = true;
         }
 
         uint32 FieryBlast_Timer;
         bool fiery1, fiery2;
 
-        void Reset()
+        void Reset() override
         {
-            FieryBlast_Timer = 3000+(rand()%1000);
-            fiery1 = fiery2 = true;
+            Initialize();
         }
 
-        void EnterCombat(Unit* /*who*/)
+        void JustEngagedWith(Unit* /*who*/) override
         { }
 
-        void UpdateAI(const uint32 diff)
+        void UpdateAI(uint32 diff) override
         {
             //Return since we have no target
             if (!UpdateVictim())
@@ -211,5 +227,5 @@ public:
 void AddSC_boss_shirrak_the_dead_watcher()
 {
     new boss_shirrak_the_dead_watcher();
-    new mob_focus_fire();
+    new npc_focus_fire();
 }

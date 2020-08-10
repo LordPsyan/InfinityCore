@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,13 +18,13 @@
 #ifndef _INSTANCESAVEMGR_H
 #define _INSTANCESAVEMGR_H
 
-#include "Define.h"
-#include <ace/Singleton.h>
-#include <ace/Thread_Mutex.h>
 #include <list>
 #include <map>
-#include "UnorderedMap.h"
-#include "DatabaseEnv.h"
+#include <mutex>
+#include <unordered_map>
+
+#include "Define.h"
+#include "DatabaseEnvFwd.h"
 #include "DBCEnums.h"
 #include "ObjectDefines.h"
 
@@ -41,7 +40,7 @@ class Group;
     - player-instance binds for permanent heroic/raid saves
     - group-instance binds (both solo and permanent) cache the player binds for the group leader
 */
-class InstanceSave
+class TC_GAME_API InstanceSave
 {
     friend class InstanceSaveManager;
     public:
@@ -80,11 +79,35 @@ class InstanceSave
 
         /* online players bound to the instance (perm/solo)
            does not include the members of the group unless they have permanent saves */
-        void AddPlayer(Player* player) { TRINITY_GUARD(ACE_Thread_Mutex, _lock); m_playerList.push_back(player); }
-        bool RemovePlayer(Player* player) { TRINITY_GUARD(ACE_Thread_Mutex, _lock); m_playerList.remove(player); return UnloadIfEmpty(); }
+        void AddPlayer(Player* player)
+        {
+            std::lock_guard<std::mutex> lock(_playerListLock);
+            m_playerList.push_back(player);
+        }
+
+        bool RemovePlayer(Player* player)
+        {
+            _playerListLock.lock();
+            m_playerList.remove(player);
+            bool isStillValid = UnloadIfEmpty();
+            _playerListLock.unlock();
+
+            //delete here if needed, after releasing the lock
+            if (m_toDelete)
+                delete this;
+
+            return isStillValid;
+        }
         /* all groups bound to the instance */
         void AddGroup(Group* group) { m_groupList.push_back(group); }
-        bool RemoveGroup(Group* group) { m_groupList.remove(group); return UnloadIfEmpty(); }
+        bool RemoveGroup(Group* group)
+        {
+            m_groupList.remove(group);
+            bool isStillValid = UnloadIfEmpty();
+            if (m_toDelete)
+                delete this;
+            return isStillValid;
+        }
 
         /* instances cannot be reset (except at the global reset time)
            if there are players permanently bound to it
@@ -100,9 +123,15 @@ class InstanceSave
         typedef std::list<Group*> GroupListType;
     private:
         bool UnloadIfEmpty();
+        /* used to flag the InstanceSave as to be deleted, so the caller can delete it */
+        void SetToDelete(bool toDelete)
+        {
+            m_toDelete = toDelete;
+        }
+
         /* the only reason the instSave-object links are kept is because
-           the object-instSave links need to be broken at reset time
-           TODO: maybe it's enough to just store the number of players/groups */
+           the object-instSave links need to be broken at reset time */
+           /// @todo: Check if maybe it's enough to just store the number of players/groups
         PlayerListType m_playerList;
         GroupListType m_groupList;
         time_t m_resetTime;
@@ -110,23 +139,27 @@ class InstanceSave
         uint32 m_mapid;
         Difficulty m_difficulty;
         bool m_canReset;
+        bool m_toDelete;
 
-        ACE_Thread_Mutex _lock;
+        std::mutex _playerListLock;
 };
 
-typedef UNORDERED_MAP<uint32 /*PAIR32(map, difficulty)*/, time_t /*resetTime*/> ResetTimeByMapDifficultyMap;
+typedef std::unordered_map<uint32 /*PAIR32(map, difficulty)*/, time_t /*resetTime*/> ResetTimeByMapDifficultyMap;
 
-class InstanceSaveManager
+class TC_GAME_API InstanceSaveManager
 {
-    friend class ACE_Singleton<InstanceSaveManager, ACE_Thread_Mutex>;
     friend class InstanceSave;
 
     private:
-        InstanceSaveManager() : lock_instLists(false) {};
+        InstanceSaveManager() : lock_instLists(false) { };
         ~InstanceSaveManager();
 
     public:
-        typedef UNORDERED_MAP<uint32 /*InstanceId*/, InstanceSave*> InstanceSaveHashMap;
+        typedef std::unordered_map<uint32 /*InstanceId*/, InstanceSave*> InstanceSaveHashMap;
+
+        static InstanceSaveManager* instance();
+
+        void Unload();
 
         /* resetTime is a global propery of each (raid/heroic) map
            all instances of that map reset at the same time */
@@ -137,10 +170,10 @@ class InstanceSaveManager
             uint16 mapid;
             uint16 instanceId;
 
-            InstResetEvent() : type(0), difficulty(DUNGEON_DIFFICULTY_NORMAL), mapid(0), instanceId(0) {}
+            InstResetEvent() : type(0), difficulty(DUNGEON_DIFFICULTY_NORMAL), mapid(0), instanceId(0) { }
             InstResetEvent(uint8 t, uint32 _mapid, Difficulty d, uint16 _instanceid)
-                : type(t), difficulty(d), mapid(_mapid), instanceId(_instanceid) {}
-            bool operator == (const InstResetEvent& e) const { return e.instanceId == instanceId; }
+                : type(t), difficulty(d), mapid(_mapid), instanceId(_instanceid) { }
+            bool operator==(InstResetEvent const& e) const { return e.instanceId == instanceId; }
         };
         typedef std::multimap<time_t /*resetTime*/, InstResetEvent> ResetTimeQueue;
 
@@ -152,31 +185,38 @@ class InstanceSaveManager
             ResetTimeByMapDifficultyMap::const_iterator itr  = m_resetTimeByMapDifficulty.find(MAKE_PAIR32(mapid, d));
             return itr != m_resetTimeByMapDifficulty.end() ? itr->second : 0;
         }
+        time_t GetSubsequentResetTime(uint32 mapid, Difficulty difficulty, time_t resetTime) const;
 
-        void SetResetTimeFor(uint32 mapid, Difficulty d, time_t t)
+        // Use this on startup when initializing reset times
+        void InitializeResetTimeFor(uint32 mapid, Difficulty d, time_t t)
         {
             m_resetTimeByMapDifficulty[MAKE_PAIR32(mapid, d)] = t;
         }
+
+        // Use this only when updating existing reset times
+        void SetResetTimeFor(uint32 mapid, Difficulty d, time_t t);
 
         ResetTimeByMapDifficultyMap const& GetResetTimeMap() const
         {
             return m_resetTimeByMapDifficulty;
         }
         void ScheduleReset(bool add, time_t time, InstResetEvent event);
+        void ForceGlobalReset(uint32 mapId, Difficulty difficulty);
 
         void Update();
 
         InstanceSave* AddInstanceSave(uint32 mapId, uint32 instanceId, Difficulty difficulty, time_t resetTime,
             bool canReset, bool load = false);
         void RemoveInstanceSave(uint32 InstanceId);
+        void UnloadInstanceSave(uint32 InstanceId);
         static void DeleteInstanceFromDB(uint32 instanceid);
 
         InstanceSave* GetInstanceSave(uint32 InstanceId);
 
         /* statistics */
-        uint32 GetNumInstanceSaves() { return m_instanceSaveById.size(); }
-        uint32 GetNumBoundPlayersTotal();
-        uint32 GetNumBoundGroupsTotal();
+        uint32 GetNumInstanceSaves() const { return uint32(m_instanceSaveById.size()); }
+        uint32 GetNumBoundPlayersTotal() const;
+        uint32 GetNumBoundGroupsTotal() const;
 
     protected:
         static uint16 ResetTimeDelay[];
@@ -194,5 +234,5 @@ class InstanceSaveManager
         ResetTimeQueue m_resetTimeQueue;
 };
 
-#define sInstanceSaveMgr ACE_Singleton<InstanceSaveManager, ACE_Thread_Mutex>::instance()
+#define sInstanceSaveMgr InstanceSaveManager::instance()
 #endif

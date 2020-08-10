@@ -1,245 +1,253 @@
 /*
-*
-* Copyright (C) 2012-2014 Cerber Project <https://bitbucket.org/mojitoice/>
-*
-*/
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
 
-#include "ScriptPCH.h"
+/* ScriptData
+SDName: Instance_Deadmines
+SD%Complete: 100
+SDComment:
+SDCategory: Deadmines
+EndScriptData */
+
+#include "ScriptMgr.h"
+#include "CreatureAI.h"
 #include "deadmines.h"
+#include "GameObject.h"
+#include "InstanceScript.h"
+#include "Map.h"
+#include "MotionMaster.h"
+#include "TemporarySummon.h"
 
-#define NOTE_TEXT "A note falls to the floor!"
+enum Sounds
+{
+    SOUND_CANNONFIRE                                     = 1400,
+    SOUND_DESTROYDOOR                                    = 3079
+};
 
-Position const NoteSpawn = {-74.36111f, -820.0139f, 40.67145f, 4.014257f};
+enum Misc
+{
+    DATA_CANNON_BLAST_TIMER                                = 3000,
+    DATA_PIRATES_DELAY_TIMER                               = 1000,
+    DATA_SMITE_ALARM_DELAY_TIMER                           = 5000
+};
 
 class instance_deadmines : public InstanceMapScript
 {
-public:
-    instance_deadmines() : InstanceMapScript("instance_deadmines", 36) { }
-
-    struct instance_deadmines_InstanceMapScript : public InstanceScript
-    {
-        instance_deadmines_InstanceMapScript(Map* map) : InstanceScript(map)
+    public:
+        instance_deadmines() : InstanceMapScript(DMScriptName, 36)
         {
-            SetBossNumber(MAX_BOSSES);
+        }
+
+        struct instance_deadmines_InstanceMapScript : public InstanceScript
+        {
+            instance_deadmines_InstanceMapScript(Map* map) : InstanceScript(map)
+            {
+                SetHeaders(DataHeader);
+
+                State = CANNON_NOT_USED;
+                CannonBlast_Timer = 0;
+                PiratesDelay_Timer = 0;
+                SmiteAlarmDelay_Timer = 0;
+            }
+
+            ObjectGuid FactoryDoorGUID;
+            ObjectGuid IronCladDoorGUID;
+            ObjectGuid DefiasCannonGUID;
+            ObjectGuid DoorLeverGUID;
+            ObjectGuid DefiasPirate1GUID;
+            ObjectGuid DefiasPirate2GUID;
+            ObjectGuid MrSmiteGUID;
+
+            uint32 State;
+            uint32 CannonBlast_Timer;
+            uint32 PiratesDelay_Timer;
+            uint32 SmiteAlarmDelay_Timer;
+            ObjectGuid uiSmiteChestGUID;
+
+            virtual void Update(uint32 diff) override
+            {
+                if (!IronCladDoorGUID || !DefiasCannonGUID || !DoorLeverGUID)
+                    return;
+
+                GameObject* pIronCladDoor = instance->GetGameObject(IronCladDoorGUID);
+                if (!pIronCladDoor)
+                    return;
+
+                switch (State)
+                {
+                    case CANNON_GUNPOWDER_USED:
+                        CannonBlast_Timer = DATA_CANNON_BLAST_TIMER;
+                        State = CANNON_BLAST_INITIATED;
+                        break;
+                    case CANNON_BLAST_INITIATED:
+                        PiratesDelay_Timer = DATA_PIRATES_DELAY_TIMER;
+                        SmiteAlarmDelay_Timer = DATA_SMITE_ALARM_DELAY_TIMER;
+                        if (CannonBlast_Timer <= diff)
+                        {
+                            SummonCreatures();
+                            ShootCannon();
+                            BlastOutDoor();
+                            LeverStucked();
+                            instance->LoadGrid(-22.8f, -797.24f); // Loads Mr. Smite's grid.
+                            if (Creature* smite = instance->GetCreature(MrSmiteGUID)) // goes off when door blows up
+                                smite->AI()->Talk(SAY_ALARM1);
+                            State = PIRATES_ATTACK;
+                        } else CannonBlast_Timer -= diff;
+                        break;
+                    case PIRATES_ATTACK:
+                        if (PiratesDelay_Timer <= diff)
+                        {
+                            MoveCreaturesInside();
+                            State = SMITE_ALARMED;
+                        } else PiratesDelay_Timer -= diff;
+                        break;
+                    case SMITE_ALARMED:
+                        if (SmiteAlarmDelay_Timer <= diff)
+                        {
+                            if (Creature* smite = instance->GetCreature(MrSmiteGUID))
+                                smite->AI()->Talk(SAY_ALARM2);
+                            State = EVENT_DONE;
+                        } else SmiteAlarmDelay_Timer -= diff;
+                        break;
+                }
+            }
+
+            void SummonCreatures()
+            {
+                if (GameObject* pIronCladDoor = instance->GetGameObject(IronCladDoorGUID))
+                {
+                    Creature* DefiasPirate1 = pIronCladDoor->SummonCreature(657, pIronCladDoor->GetPositionX() - 2, pIronCladDoor->GetPositionY()-7, pIronCladDoor->GetPositionZ(), 0, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 3000);
+                    Creature* DefiasPirate2 = pIronCladDoor->SummonCreature(657, pIronCladDoor->GetPositionX() + 3, pIronCladDoor->GetPositionY()-6, pIronCladDoor->GetPositionZ(), 0, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 3000);
+
+                    DefiasPirate1GUID = DefiasPirate1->GetGUID();
+                    DefiasPirate2GUID = DefiasPirate2->GetGUID();
+                }
+            }
+
+            void MoveCreaturesInside()
+            {
+                if (!DefiasPirate1GUID || !DefiasPirate2GUID)
+                    return;
+
+                Creature* pDefiasPirate1 = instance->GetCreature(DefiasPirate1GUID);
+                Creature* pDefiasPirate2 = instance->GetCreature(DefiasPirate2GUID);
+                if (!pDefiasPirate1 || !pDefiasPirate2)
+                    return;
+
+                MoveCreatureInside(pDefiasPirate1);
+                MoveCreatureInside(pDefiasPirate2);
+            }
+
+            void MoveCreatureInside(Creature* creature)
+            {
+                creature->SetWalk(false);
+                creature->GetMotionMaster()->MovePoint(0, -102.7f, -655.9f, creature->GetPositionZ());
+            }
+
+            void ShootCannon()
+            {
+                if (GameObject* pDefiasCannon = instance->GetGameObject(DefiasCannonGUID))
+                {
+                    pDefiasCannon->SetGoState(GO_STATE_ACTIVE);
+                    pDefiasCannon->PlayDirectSound(SOUND_CANNONFIRE);
+                }
+            }
+
+            void BlastOutDoor()
+            {
+                if (GameObject* pIronCladDoor = instance->GetGameObject(IronCladDoorGUID))
+                {
+                    pIronCladDoor->SetGoState(GO_STATE_DESTROYED);
+                    pIronCladDoor->PlayDirectSound(SOUND_DESTROYDOOR);
+                }
+            }
+
+            void LeverStucked()
+            {
+                if (GameObject* pDoorLever = instance->GetGameObject(DoorLeverGUID))
+                    pDoorLever->SetUInt32Value(GAMEOBJECT_FLAGS, 4);
+            }
+
+            void OnCreatureCreate(Creature* creature) override
+            {
+                switch (creature->GetEntry())
+                {
+                    case NPC_MR_SMITE:
+                        MrSmiteGUID = creature->GetGUID();
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            void OnGameObjectCreate(GameObject* go) override
+            {
+                switch (go->GetEntry())
+                {
+                    case GO_FACTORY_DOOR:   FactoryDoorGUID = go->GetGUID(); break;
+                    case GO_IRONCLAD_DOOR:  IronCladDoorGUID = go->GetGUID();  break;
+                    case GO_DEFIAS_CANNON:  DefiasCannonGUID = go->GetGUID();  break;
+                    case GO_DOOR_LEVER:     DoorLeverGUID = go->GetGUID();     break;
+                    case GO_MR_SMITE_CHEST: uiSmiteChestGUID = go->GetGUID();  break;
+                }
+            }
+
+            void SetData(uint32 type, uint32 data) override
+            {
+                switch (type)
+                {
+                    case EVENT_STATE:
+                        if (DefiasCannonGUID && IronCladDoorGUID)
+                            State = data;
+                        break;
+                    case EVENT_RHAHKZOR:
+                        if (data == DONE)
+                            if (GameObject* go = instance->GetGameObject(FactoryDoorGUID))
+                                go->SetGoState(GO_STATE_ACTIVE);
+                        break;
+                }
+            }
+
+            uint32 GetData(uint32 type) const override
+            {
+                switch (type)
+                {
+                    case EVENT_STATE:
+                        return State;
+                }
+
+                return 0;
+            }
+
+            ObjectGuid GetGuidData(uint32 data) const override
+            {
+                switch (data)
+                {
+                    case DATA_SMITE_CHEST:
+                        return uiSmiteChestGUID;
+                }
+
+                return ObjectGuid::Empty;
+            }
         };
 
-        void Initialize()
+        InstanceScript* GetInstanceScript(InstanceMap* map) const override
         {
-            FactoryDoorGUID     = 0;
-            FoundaryDoorGUID    = 0;
-            HeavyDoorGUID       = 0;
-            GlubtokGUID         = 0;
-            IroncladDoorGUID    = 0;
-            TeamInInstance      = 0;
-            uiVanessa           = 0;
-            uiVanessaNote       = 0;
-            uiVanessaBoss       = 0;
+            return new instance_deadmines_InstanceMapScript(map);
         }
-
-        void OnCreatureCreate(Creature* creature)
-        {
-            Map::PlayerList const &players = instance->GetPlayers();
-            if (!players.isEmpty())
-            {
-                if (Player* player = players.begin()->getSource())
-                    TeamInInstance = player->GetTeam();
-            }
-            switch (creature->GetEntry())
-            {
-                case 46889: // Kagtha
-                    if (TeamInInstance == ALLIANCE)
-                        creature->UpdateEntry(42308, ALLIANCE); // Lieutenant Horatio Laine
-                    break;
-                case 46902: // Miss Mayhem
-                    if (TeamInInstance == ALLIANCE)
-                        creature->UpdateEntry(491, ALLIANCE); // Quartermaster Lewis <Quartermaster>
-                    break;
-                case 46903: // Mayhem Reaper Prototype
-                    if (TeamInInstance == ALLIANCE)
-                        creature->UpdateEntry(1, ALLIANCE); // GM WAYPOINT
-                    break;
-                case 46906: // Slinky Sharpshiv
-                    if (TeamInInstance == ALLIANCE)
-                        creature->UpdateEntry(46612, ALLIANCE); // Lieutenant Horatio Laine
-                    break;
-                case 46613: // Crime Scene Alarm-O-Bot
-                    if (TeamInInstance == HORDE)
-                        creature->UpdateEntry(1, HORDE); // GM WAYPOINT
-                    break;
-                case 50595: // Stormwind Defender
-                    if (TeamInInstance == HORDE)
-                        creature->UpdateEntry(46890, HORDE); // Shattered Hand Assassin
-                    break;
-                case 46614: // Stormwind Investigator
-                    if (TeamInInstance == HORDE)
-                        creature->UpdateEntry(1, HORDE); // GM WAYPOINT
-                    break;
-                case NPC_VANESSA_VANCLEEF:
-                    uiVanessa = creature->GetGUID();
-                    break;
-                case NPC_VANESSA_BOSS:
-                    uiVanessaBoss = creature->GetGUID();
-                    break;
-                case NPC_VANESSA_NOTE:
-                    uiVanessaNote = creature->GetGUID();
-                    break;
-                case NPC_GLUBTOK:
-                    GlubtokGUID = creature->GetGUID();
-                    break;
-            }
-        }
-
-        virtual void Update(uint32 diff) { }
-
-        void OnGameObjectCreate(GameObject* go)
-        {
-            switch (go->GetEntry())
-            {
-                case GO_FACTORY_DOOR: // Door after first boss
-                    FactoryDoorGUID = go->GetGUID();
-                    break;
-                case GO_FOUNDRY_DOOR: // Door before ship
-                    FoundaryDoorGUID = go->GetGUID();
-                    break;
-                case GO_HEAVY_DOOR_HELIX:
-                    HeavyDoorGUID = go->GetGUID();
-                    break;
-                case GO_IRONCLAD_DOOR:
-                    IroncladDoorGUID = go->GetGUID();
-                    break;
-            }
-        }
-
-        void SetData(uint32 type, uint32 value)
-        {
-            switch (type)
-            {
-                case DATA_NIGHTMARE_HELIX:
-                    if (value == DONE)
-                        if (GameObject* go = instance->GetGameObject(FoundaryDoorGUID))
-                            go->SetGoState(GO_STATE_ACTIVE);
-                    break;
-                case DATA_NIGHTMARE_MECHANICAL:
-                    if (value == DONE)
-                        if (GameObject* go = instance->GetGameObject(IroncladDoorGUID))
-                            go->SetGoState(GO_STATE_ACTIVE);
-                    break;
-                case DATA_GLUBTOK:
-                    if (value == DONE)
-                        if (GameObject* go = instance->GetGameObject(FactoryDoorGUID))
-                            go->SetGoState(GO_STATE_ACTIVE);
-                    break;
-            }
-        }
-
-        bool SetBossState(uint32 id, EncounterState state)
-        {
-            if (!InstanceScript::SetBossState(id, state))
-                return false;
-
-            switch (id)
-            {
-                case DATA_GLUBTOK:
-                    if (state == DONE)
-                        if (GameObject* go = instance->GetGameObject(FactoryDoorGUID))
-                            go->SetGoState(GO_STATE_ACTIVE);
-                    break;
-                case DATA_HELIX:
-                    if (state == DONE)
-                        if (GameObject* go = instance->GetGameObject(HeavyDoorGUID))
-                            go->SetGoState(GO_STATE_ACTIVE);
-                    break;
-                case DATA_FOEREAPER:
-                    if (state == DONE)
-                        if (GameObject* go = instance->GetGameObject(FoundaryDoorGUID))
-                            go->SetGoState(GO_STATE_ACTIVE);
-                    break;
-                case DATA_RIPSNARL:
-                    //if (state == DONE)
-                    //    break;
-                    break;
-                case DATA_COOKIE:
-                    if (state == DONE)
-                    {
-                        if (instance->IsHeroic())
-                        {
-                            if (Creature* Note = instance->SummonCreature(NPC_VANESSA_NOTE, NoteSpawn))
-                            {
-                                Note->MonsterTextEmote(NOTE_TEXT, 0, true);
-
-                                if (GameObject* go = instance->GetGameObject(IroncladDoorGUID))
-                                    go->SetGoState(GO_STATE_READY);
-
-                                if (GameObject* go = instance->GetGameObject(HeavyDoorGUID))
-                                    go->SetGoState(GO_STATE_READY);
-
-                                if (GameObject* go = instance->GetGameObject(FoundaryDoorGUID))
-                                    go->SetGoState(GO_STATE_READY);
-
-                            }
-                        }
-                    }
-                    break;
-                case DATA_VANNESSA_NIGHTMARE:
-                    if (state == FAIL)
-                    {
-                        if (Creature* Note = instance->SummonCreature(NPC_VANESSA_NOTE, NoteSpawn))
-                        {
-                            if (GameObject* go = instance->GetGameObject(IroncladDoorGUID))
-                                go->SetGoState(GO_STATE_ACTIVE);
-
-                            if (GameObject* go = instance->GetGameObject(HeavyDoorGUID))
-                                go->SetGoState(GO_STATE_ACTIVE);
-
-                            if (GameObject* go = instance->GetGameObject(FoundaryDoorGUID))
-                                go->SetGoState(GO_STATE_ACTIVE);
-                        }
-                    }
-                case DATA_VANESSA:
-                    break;
-            }
-
-            return true;
-        }
-
-        uint64 GetData64(uint32 data) const
-        {
-            switch (data)
-            {
-                case NPC_VANESSA_VANCLEEF:
-                    return uiVanessa;
-                    break;
-                case NPC_VANESSA_BOSS:
-                    return uiVanessaBoss;
-                    break;
-                case NPC_VANESSA_NOTE:
-                    return uiVanessaNote;
-                    break;
-                case DATA_GLUBTOK:
-                    return GlubtokGUID;
-                    break;
-            }
-
-            return 0;
-        }
-
-    private:
-        uint64 FactoryDoorGUID;
-        uint64 FoundaryDoorGUID;
-        uint64 HeavyDoorGUID;
-        uint64 IroncladDoorGUID;
-        uint64 uiVanessa;
-        uint64 uiVanessaNote;
-        uint64 uiVanessaBoss;
-        uint64 GlubtokGUID;
-
-        uint32 TeamInInstance;
-    };
-
-    InstanceScript* GetInstanceScript(InstanceMap* map) const
-    {
-        return new instance_deadmines_InstanceMapScript(map);
-    }
 };
 
 void AddSC_instance_deadmines()

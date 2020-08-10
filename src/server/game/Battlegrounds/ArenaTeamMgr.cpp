@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,8 +21,8 @@
 #include "Log.h"
 #include "DatabaseEnv.h"
 #include "Language.h"
-#include "ObjectAccessor.h"
 #include "Player.h"
+#include "ObjectAccessor.h"
 
 ArenaTeamMgr::ArenaTeamMgr()
 {
@@ -35,6 +35,12 @@ ArenaTeamMgr::~ArenaTeamMgr()
         delete itr->second;
 }
 
+ArenaTeamMgr* ArenaTeamMgr::instance()
+{
+    static ArenaTeamMgr instance;
+    return &instance;
+}
+
 // Arena teams collection
 ArenaTeam* ArenaTeamMgr::GetArenaTeamById(uint32 arenaTeamId) const
 {
@@ -42,7 +48,7 @@ ArenaTeam* ArenaTeamMgr::GetArenaTeamById(uint32 arenaTeamId) const
     if (itr != ArenaTeamStore.end())
         return itr->second;
 
-    return NULL;
+    return nullptr;
 }
 
 ArenaTeam* ArenaTeamMgr::GetArenaTeamByName(const std::string& arenaTeamName) const
@@ -56,16 +62,16 @@ ArenaTeam* ArenaTeamMgr::GetArenaTeamByName(const std::string& arenaTeamName) co
         if (search == teamName)
             return itr->second;
     }
-    return NULL;
+    return nullptr;
 }
 
-ArenaTeam* ArenaTeamMgr::GetArenaTeamByCaptain(uint64 guid) const
+ArenaTeam* ArenaTeamMgr::GetArenaTeamByCaptain(ObjectGuid guid) const
 {
     for (ArenaTeamContainer::const_iterator itr = ArenaTeamStore.begin(); itr != ArenaTeamStore.end(); ++itr)
         if (itr->second->GetCaptain() == guid)
             return itr->second;
 
-    return NULL;
+    return nullptr;
 }
 
 void ArenaTeamMgr::AddArenaTeam(ArenaTeam* arenaTeam)
@@ -82,7 +88,7 @@ uint32 ArenaTeamMgr::GenerateArenaTeamId()
 {
     if (NextArenaTeamId >= 0xFFFFFFFE)
     {
-        sLog->outError(LOG_FILTER_BATTLEGROUND, "Arena team ids overflow!! Can't continue, shutting down server. ");
+        TC_LOG_ERROR("bg.battleground", "Arena team ids overflow!! Can't continue, shutting down server. ");
         World::StopNow(ERROR_EXIT_CODE);
     }
     return NextArenaTeamId++;
@@ -93,16 +99,16 @@ void ArenaTeamMgr::LoadArenaTeams()
     uint32 oldMSTime = getMSTime();
 
     // Clean out the trash before loading anything
-    CharacterDatabase.Execute("DELETE FROM arena_team_member WHERE arenaTeamId NOT IN (SELECT arenaTeamId FROM arena_team)");       // One-time query
+    CharacterDatabase.DirectExecute("DELETE FROM arena_team_member WHERE arenaTeamId NOT IN (SELECT arenaTeamId FROM arena_team)");       // One-time query
 
     //                                                        0        1         2         3          4              5            6            7           8
     QueryResult result = CharacterDatabase.Query("SELECT arenaTeamId, name, captainGuid, type, backgroundColor, emblemStyle, emblemColor, borderStyle, borderColor, "
     //      9        10        11         12           13       14
-        "rating, weekGames, weekWins, seasonGames, seasonWins, rank FROM arena_team ORDER BY arenaTeamId ASC");
+        "rating, weekGames, weekWins, seasonGames, seasonWins, `rank` FROM arena_team ORDER BY arenaTeamId ASC");
 
     if (!result)
     {
-        sLog->outInfo(LOG_FILTER_SERVER_LOADING, ">> Loaded 0 arena teams. DB table `arena_team` is empty!");
+        TC_LOG_INFO("server.loading", ">> Loaded 0 arena teams. DB table `arena_team` is empty!");
         return;
     }
 
@@ -121,7 +127,7 @@ void ArenaTeamMgr::LoadArenaTeams()
 
         if (!newArenaTeam->LoadArenaTeamFromDB(result) || !newArenaTeam->LoadMembersFromDB(result2))
         {
-            newArenaTeam->Disband(NULL);
+            newArenaTeam->Disband(nullptr);
             delete newArenaTeam;
             continue;
         }
@@ -132,5 +138,62 @@ void ArenaTeamMgr::LoadArenaTeams()
     }
     while (result->NextRow());
 
-    sLog->outInfo(LOG_FILTER_SERVER_LOADING, ">> Loaded %u arena teams in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
+    TC_LOG_INFO("server.loading", ">> Loaded %u arena teams in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
+}
+
+void ArenaTeamMgr::DistributeArenaPoints()
+{
+    // Used to distribute arena points based on last week's stats
+    sWorld->SendWorldText(LANG_DIST_ARENA_POINTS_START);
+
+    sWorld->SendWorldText(LANG_DIST_ARENA_POINTS_ONLINE_START);
+
+    // Temporary structure for storing maximum points to add values for all players
+    std::map<uint32, uint32> PlayerPoints;
+
+    // At first update all points for all team members
+    for (ArenaTeamContainer::iterator teamItr = GetArenaTeamMapBegin(); teamItr != GetArenaTeamMapEnd(); ++teamItr)
+        if (ArenaTeam* at = teamItr->second)
+            at->UpdateArenaPointsHelper(PlayerPoints);
+
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+
+    CharacterDatabasePreparedStatement* stmt;
+
+    // Cycle that gives points to all players
+    for (std::map<uint32, uint32>::iterator playerItr = PlayerPoints.begin(); playerItr != PlayerPoints.end(); ++playerItr)
+    {
+        // Add points to player if online
+        if (Player* player = ObjectAccessor::FindConnectedPlayer(ObjectGuid(HighGuid::Player, playerItr->first)))
+            player->ModifyArenaPoints(playerItr->second, trans);
+        else    // Update database
+        {
+            stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_ADD_CHAR_ARENA_POINTS);
+            stmt->setUInt32(0, playerItr->second);
+            stmt->setUInt32(1, playerItr->first);
+            trans->Append(stmt);
+        }
+    }
+
+    CharacterDatabase.CommitTransaction(trans);
+
+    PlayerPoints.clear();
+
+    sWorld->SendWorldText(LANG_DIST_ARENA_POINTS_ONLINE_END);
+
+    sWorld->SendWorldText(LANG_DIST_ARENA_POINTS_TEAM_START);
+    for (ArenaTeamContainer::iterator titr = GetArenaTeamMapBegin(); titr != GetArenaTeamMapEnd(); ++titr)
+    {
+        if (ArenaTeam* at = titr->second)
+        {
+            if (at->FinishWeek())
+                at->SaveToDB();
+
+            at->NotifyStatsChanged();
+        }
+    }
+
+    sWorld->SendWorldText(LANG_DIST_ARENA_POINTS_TEAM_END);
+
+    sWorld->SendWorldText(LANG_DIST_ARENA_POINTS_END);
 }

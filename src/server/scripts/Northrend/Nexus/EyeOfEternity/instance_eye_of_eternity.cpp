@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,17 +16,26 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "InstanceScript.h"
+#include "AreaBoundary.h"
+#include "Creature.h"
+#include "CreatureAI.h"
 #include "eye_of_eternity.h"
+#include "GameObject.h"
+#include "InstanceScript.h"
+#include "Map.h"
 #include "Player.h"
+
+BossBoundaryData const boundaries =
+{
+    { DATA_MALYGOS_EVENT, new CircleBoundary(Position(754.362f, 1301.609985f), 280.0) } // sanity check boundary
+};
 
 class instance_eye_of_eternity : public InstanceMapScript
 {
 public:
-    instance_eye_of_eternity() : InstanceMapScript("instance_eye_of_eternity", 616) { }
+    instance_eye_of_eternity() : InstanceMapScript(EoEScriptName, 616) { }
 
-    InstanceScript* GetInstanceScript(InstanceMap* map) const
+    InstanceScript* GetInstanceScript(InstanceMap* map) const override
     {
         return new instance_eye_of_eternity_InstanceMapScript(map);
     }
@@ -35,20 +44,18 @@ public:
     {
         instance_eye_of_eternity_InstanceMapScript(Map* map) : InstanceScript(map)
         {
+            SetHeaders(DataHeader);
             SetBossNumber(MAX_ENCOUNTER);
+            LoadBossBoundaries(boundaries);
+        }
 
-            vortexTriggers.clear();
-            portalTriggers.clear();
+        void OnPlayerEnter(Player* player) override
+        {
+            if (GetBossState(DATA_MALYGOS_EVENT) == DONE)
+                player->CastSpell(player, SPELL_SUMMOM_RED_DRAGON_BUDDY, true);
+        }
 
-            malygosGUID = 0;
-            irisGUID = 0;
-            lastPortalGUID = 0;
-            platformGUID = 0;
-            exitPortalGUID = 0;
-            alexstraszaBunnyGUID = 0;
-        };
-
-        bool SetBossState(uint32 type, EncounterState state)
+        bool SetBossState(uint32 type, EncounterState state) override
         {
             if (!InstanceScript::SetBossState(type, state))
                 return false;
@@ -57,7 +64,7 @@ public:
             {
                 if (state == FAIL)
                 {
-                    for (std::list<uint64>::const_iterator itr_trigger = portalTriggers.begin(); itr_trigger != portalTriggers.end(); ++itr_trigger)
+                    for (GuidList::const_iterator itr_trigger = portalTriggers.begin(); itr_trigger != portalTriggers.end(); ++itr_trigger)
                     {
                         if (Creature* trigger = instance->GetCreature(*itr_trigger))
                         {
@@ -80,12 +87,10 @@ public:
 
         /// @todo this should be handled in map, maybe add a summon function in map
         // There is no other way afaik...
-        void SpawnGameObject(uint32 entry, Position& pos)
+        void SpawnGameObject(uint32 entry, Position const& pos)
         {
-            GameObject* go = new GameObject;
-            if (!go->Create(sObjectMgr->GenerateLowGuid(HIGHGUID_GAMEOBJECT), entry, instance,
-                PHASEMASK_NORMAL, pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), pos.GetOrientation(),
-                0, 0, 0, 0, 120, GO_STATE_READY))
+            GameObject* go = new GameObject();
+            if (!go->Create(instance->GenerateLowGuid<HighGuid::GameObject>(), entry, instance, PHASEMASK_NORMAL, pos, QuaternionData(), 255, GO_STATE_READY))
             {
                 delete go;
                 return;
@@ -94,7 +99,7 @@ public:
             instance->AddToMap(go);
         }
 
-        void OnGameObjectCreate(GameObject* go)
+        void OnGameObjectCreate(GameObject* go) override
         {
             switch (go->GetEntry())
             {
@@ -102,35 +107,24 @@ public:
                     platformGUID = go->GetGUID();
                     break;
                 case GO_FOCUSING_IRIS_10:
-                    if (instance->GetDifficulty() == RAID_DIFFICULTY_10MAN_NORMAL)
-                    {
-                        irisGUID = go->GetGUID();
-                        go->GetPosition(&focusingIrisPosition);
-                    }
-                    break;
                 case GO_FOCUSING_IRIS_25:
-                    if (instance->GetDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL)
-                    {
-                        irisGUID = go->GetGUID();
-                        go->GetPosition(&focusingIrisPosition);
-                    }
+                    irisGUID = go->GetGUID();
+                    focusingIrisPosition = go->GetPosition();
                     break;
                 case GO_EXIT_PORTAL:
                     exitPortalGUID = go->GetGUID();
-                    go->GetPosition(&exitPortalPosition);
+                    exitPortalPosition = go->GetPosition();
                     break;
                 case GO_HEART_OF_MAGIC_10:
-                    if (instance->GetDifficulty() == RAID_DIFFICULTY_10MAN_NORMAL)
-                        heartOfMagicGUID = go->GetGUID();
-                    break;
                 case GO_HEART_OF_MAGIC_25:
-                    if (instance->GetDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL)
-                        heartOfMagicGUID = go->GetGUID();
+                    heartOfMagicGUID = go->GetGUID();
+                    break;
+                default:
                     break;
             }
         }
 
-        void OnCreatureCreate(Creature* creature)
+        void OnCreatureCreate(Creature* creature) override
         {
             switch (creature->GetEntry())
             {
@@ -152,7 +146,7 @@ public:
             }
         }
 
-        void OnUnitDeath(Unit* unit)
+        void OnUnitDeath(Unit* unit) override
         {
             if (unit->GetTypeId() != TYPEID_PLAYER)
                 return;
@@ -165,15 +159,15 @@ public:
             unit->SetControlled(true, UNIT_STATE_ROOT);
         }
 
-        void ProcessEvent(WorldObject* /*obj*/, uint32 eventId)
+        void ProcessEvent(WorldObject* /*obj*/, uint32 eventId) override
         {
             if (eventId == EVENT_FOCUSING_IRIS)
             {
                 if (Creature* alexstraszaBunny = instance->GetCreature(alexstraszaBunnyGUID))
-                {
                     alexstraszaBunny->CastSpell(alexstraszaBunny, SPELL_IRIS_OPENED);
-                    instance->GetGameObject(irisGUID)->SetFlag(GAMEOBJECT_FLAGS, GO_FLAG_IN_USE);
-                }
+
+                if (GameObject* iris = instance->GetGameObject(irisGUID))
+                    iris->SetFlag(GAMEOBJECT_FLAGS, GO_FLAG_IN_USE);
 
                 if (Creature* malygos = instance->GetCreature(malygosGUID))
                     malygos->AI()->DoAction(0); // ACTION_LAND_ENCOUNTER_START
@@ -187,26 +181,20 @@ public:
         {
             if (Creature* malygos = instance->GetCreature(malygosGUID))
             {
-                std::list<HostileReference*> m_threatlist = malygos->getThreatManager().getThreatList();
-                for (std::list<uint64>::const_iterator itr_vortex = vortexTriggers.begin(); itr_vortex != vortexTriggers.end(); ++itr_vortex)
+                for (GuidList::const_iterator itr_vortex = vortexTriggers.begin(); itr_vortex != vortexTriggers.end(); ++itr_vortex)
                 {
-                    if (m_threatlist.empty())
-                        return;
-
                     uint8 counter = 0;
                     if (Creature* trigger = instance->GetCreature(*itr_vortex))
                     {
                         // each trigger have to cast the spell to 5 players.
-                        for (std::list<HostileReference*>::const_iterator itr = m_threatlist.begin(); itr!= m_threatlist.end(); ++itr)
+                        for (auto* ref : malygos->GetThreatManager().GetUnsortedThreatList())
                         {
                             if (counter >= 5)
                                 break;
 
-                            if (Unit* target = (*itr)->getTarget())
+                            if (Player* player = ref->GetVictim()->ToPlayer())
                             {
-                                Player* player = target->ToPlayer();
-
-                                if (!player || player->isGameMaster() || player->HasAura(SPELL_VORTEX_4))
+                                if (player->IsGameMaster() || player->HasAura(SPELL_VORTEX_4))
                                     continue;
 
                                 player->CastSpell(trigger, SPELL_VORTEX_4, true);
@@ -222,7 +210,7 @@ public:
         {
             bool next = (lastPortalGUID == portalTriggers.back() || !lastPortalGUID ? true : false);
 
-            for (std::list<uint64>::const_iterator itr_trigger = portalTriggers.begin(); itr_trigger != portalTriggers.end(); ++itr_trigger)
+            for (GuidList::const_iterator itr_trigger = portalTriggers.begin(); itr_trigger != portalTriggers.end(); ++itr_trigger)
             {
                 if (next)
                 {
@@ -239,7 +227,7 @@ public:
             }
         }
 
-        void SetData(uint32 data, uint32 /*value*/)
+        void SetData(uint32 data, uint32 /*value*/) override
         {
             switch (data)
             {
@@ -255,7 +243,7 @@ public:
             }
         }
 
-        uint64 GetData64(uint32 data) const
+        ObjectGuid GetGuidData(uint32 data) const override
         {
             switch (data)
             {
@@ -275,68 +263,26 @@ public:
                     return giftBoxBunnyGUID;
             }
 
-            return 0;
+            return ObjectGuid::Empty;
         }
 
-        std::string GetSaveData()
-        {
-            OUT_SAVE_INST_DATA;
-
-            std::ostringstream saveStream;
-            saveStream << "E E " << GetBossSaveData();
-
-            OUT_SAVE_INST_DATA_COMPLETE;
-            return saveStream.str();
-        }
-
-        void Load(const char* str)
-        {
-            if (!str)
-            {
-                OUT_LOAD_INST_DATA_FAIL;
-                return;
-            }
-
-            OUT_LOAD_INST_DATA(str);
-
-            char dataHead1, dataHead2;
-
-            std::istringstream loadStream(str);
-            loadStream >> dataHead1 >> dataHead2;
-
-            if (dataHead1 == 'E' && dataHead2 == 'E')
-            {
-                for (uint8 i = 0; i < MAX_ENCOUNTER; ++i)
-                {
-                    uint32 tmpState;
-                    loadStream >> tmpState;
-                    if (tmpState == IN_PROGRESS || tmpState > SPECIAL)
-                        tmpState = NOT_STARTED;
-                    SetBossState(i, EncounterState(tmpState));
-                }
-
-            } else OUT_LOAD_INST_DATA_FAIL;
-
-            OUT_LOAD_INST_DATA_COMPLETE;
-        }
-
-        private:
-            std::list<uint64> vortexTriggers;
-            std::list<uint64> portalTriggers;
-            uint64 malygosGUID;
-            uint64 irisGUID;
-            uint64 lastPortalGUID;
-            uint64 platformGUID;
-            uint64 exitPortalGUID;
-            uint64 heartOfMagicGUID;
-            uint64 alexstraszaBunnyGUID;
-            uint64 giftBoxBunnyGUID;
-            Position focusingIrisPosition;
-            Position exitPortalPosition;
+    private:
+        GuidList vortexTriggers;
+        GuidList portalTriggers;
+        ObjectGuid malygosGUID;
+        ObjectGuid irisGUID;
+        ObjectGuid lastPortalGUID;
+        ObjectGuid platformGUID;
+        ObjectGuid exitPortalGUID;
+        ObjectGuid heartOfMagicGUID;
+        ObjectGuid alexstraszaBunnyGUID;
+        ObjectGuid giftBoxBunnyGUID;
+        Position focusingIrisPosition;
+        Position exitPortalPosition;
     };
 };
 
 void AddSC_instance_eye_of_eternity()
 {
-   new instance_eye_of_eternity();
+    new instance_eye_of_eternity();
 }

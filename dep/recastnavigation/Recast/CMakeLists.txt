@@ -1,4 +1,4 @@
-# Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+# This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without
@@ -9,24 +9,32 @@
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 set(Recast_STAT_SRCS
-    Recast.cpp 
-    RecastAlloc.cpp 
-    RecastArea.cpp 
-    RecastContour.cpp 
-    RecastFilter.cpp 
-	RecastLayers.cpp
-    RecastMesh.cpp 
-    RecastMeshDetail.cpp 
-    RecastRasterization.cpp 
-    RecastRegion.cpp 
+    Source/Recast.cpp 
+    Source/RecastAlloc.cpp 
+	Source/RecastAssert.cpp 
+    Source/RecastArea.cpp 
+    Source/RecastContour.cpp 
+    Source/RecastFilter.cpp 
+    Source/RecastLayers.cpp
+    Source/RecastMesh.cpp 
+    Source/RecastMeshDetail.cpp 
+    Source/RecastRasterization.cpp 
+    Source/RecastRegion.cpp 
 )
-
-if(WIN32)
-  include_directories(
-    ${CMAKE_SOURCE_DIR}/dep/zlib
-  )
-endif()
 
 add_library(Recast STATIC ${Recast_STAT_SRCS})
 
-target_link_libraries(Recast ${ZLIB_LIBRARIES})
+target_include_directories(Recast
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/Include)
+
+target_link_libraries(Recast
+  PRIVATE
+    trinity-dependency-interface
+  PUBLIC
+    zlib)
+
+set_target_properties(Recast
+    PROPERTIES
+      FOLDER
+        "dep")

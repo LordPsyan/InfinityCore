@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,74 +18,57 @@
 /* ScriptData
 SDName: Felwood
 SD%Complete: 95
-SDComment: Quest support: 4101, 4102
+SDComment: Quest support: 7632
 SDCategory: Felwood
 EndScriptData */
 
 /* ContentData
-npcs_riverbreeze_and_silversky
+at_ancient_leaf
 EndContentData */
 
-#include "ScriptPCH.h"
+#include "ScriptMgr.h"
+#include "Map.h"
+#include "Player.h"
+#include "ScriptedCreature.h"
+#include "ScriptedGossip.h"
 
 /*######
-## npcs_riverbreeze_and_silversky
+## at_ancient_leaf
 ######*/
 
-#define GOSSIP_ITEM_BEACON  "Please make me a Cenarion Beacon"
-
-class npcs_riverbreeze_and_silversky : public CreatureScript
+enum AncientMisc
 {
-public:
-    npcs_riverbreeze_and_silversky() : CreatureScript("npcs_riverbreeze_and_silversky") { }
+    QUEST_ANCIENT_LEAF      = 7632,
+    NPC_VARTRUS             = 14524,
+    NPC_STOMA               = 14525,
+    NPC_HASTAT              = 14526,
+    CREATURE_GROUP_ANCIENTS = 1
+};
 
-    bool OnGossipSelect(Player* player, Creature* creature, uint32 /*Sender*/, uint32 action)
-    {
-        player->PlayerTalkClass->ClearMenus();
-        if (action == GOSSIP_ACTION_INFO_DEF+1)
+class at_ancient_leaf : public AreaTriggerScript
+{
+    public:
+        at_ancient_leaf() : AreaTriggerScript("at_ancient_leaf") { }
+
+        bool OnTrigger(Player* player, AreaTriggerEntry const* /*trigger*/) override
         {
-            player->CLOSE_GOSSIP_MENU();
-            creature->CastSpell(player, 15120, false);
-        }
-        return true;
-    }
+            if (player->IsGameMaster() || !player->IsAlive())
+                return false;
 
-    bool OnGossipHello(Player* player, Creature* creature)
-    {
-        uint32 eCreature = creature->GetEntry();
-
-        if (creature->IsQuestGiver())
-            player->PrepareQuestMenu(creature->GetGUID());
-
-        if (eCreature == 9528)
-        {
-            if (player->GetQuestRewardStatus(4101))
+            // Handle Call Ancients event start - The area trigger summons 3 ancients
+            if ((player->GetQuestStatus(QUEST_ANCIENT_LEAF) == QUEST_STATUS_COMPLETE) || (player->GetQuestStatus(QUEST_ANCIENT_LEAF) == QUEST_STATUS_REWARDED))
             {
-                player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_BEACON, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+1);
-                player->SEND_GOSSIP_MENU(2848, creature->GetGUID());
-            } else if (player->GetTeam() == HORDE)
-            player->SEND_GOSSIP_MENU(2845, creature->GetGUID());
-            else
-                player->SEND_GOSSIP_MENU(2844, creature->GetGUID());
-        }
+                // If ancients are already spawned, skip the rest
+                if (GetClosestCreatureWithEntry(player, NPC_VARTRUS, 50.0f) || GetClosestCreatureWithEntry(player, NPC_STOMA, 50.0f) || GetClosestCreatureWithEntry(player, NPC_HASTAT, 50.0f))
+                    return true;
 
-        if (eCreature == 9529)
-        {
-            if (player->GetQuestRewardStatus(4102))
-            {
-                player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_BEACON, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+1);
-                player->SEND_GOSSIP_MENU(2849, creature->GetGUID());
-            } else if (player->GetTeam() == ALLIANCE)
-            player->SEND_GOSSIP_MENU(2843, creature->GetGUID());
-            else
-                player->SEND_GOSSIP_MENU(2842, creature->GetGUID());
+                player->GetMap()->SummonCreatureGroup(CREATURE_GROUP_ANCIENTS);
+            }
+            return false;
         }
-
-        return true;
-    }
 };
 
 void AddSC_felwood()
 {
-    new npcs_riverbreeze_and_silversky();
+    new at_ancient_leaf();
 }

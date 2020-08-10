@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,23 +15,61 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DEF_AZJOL_NERUB_H
-#define DEF_AZJOL_NERUB_H
+#ifndef AZJOL_NERUB_H_
+#define AZJOL_NERUB_H_
 
-enum Data64
+#include "CreatureAIImpl.h"
+
+#define AzjolNerubScriptName "instance_azjol_nerub"
+#define DataHeader           "AN"
+
+uint32 const EncounterCount = 3;
+
+enum ANDataTypes
 {
-    DATA_KRIKTHIR_THE_GATEWATCHER,
-    DATA_HADRONOX,
-    DATA_ANUBARAK,
+    // Encounter States/Boss GUIDs
+    DATA_KRIKTHIR                   = 0,
+    DATA_HADRONOX                   = 1,
+    DATA_ANUBARAK                   = 2,
+
+    // Additional Data
+    DATA_WATCHER_NARJIL,
     DATA_WATCHER_GASHRA,
     DATA_WATCHER_SILTHIK,
-    DATA_WATCHER_NARJIL
-};
-enum Data
-{
-    DATA_KRIKTHIR_THE_GATEWATCHER_EVENT,
-    DATA_HADRONOX_EVENT,
-    DATA_ANUBARAK_EVENT
+    DATA_ANUBARAK_WALL,
+    DATA_ANUBARAK_WALL_2,
+    DATA_GATEWATCHER_GREET
 };
 
-#endif
+enum ANCreatureIds
+{
+    NPC_KRIKTHIR                    = 28684,
+    NPC_HADRONOX                    = 28921,
+    NPC_ANUBARAK                    = 29120,
+
+    NPC_WATCHER_NARJIL              = 28729,
+    NPC_WATCHER_GASHRA              = 28730,
+    NPC_WATCHER_SILTHIK             = 28731
+};
+
+// These are passed as -action to AI's DoAction to differentiate between them and boss scripts' own actions
+enum InstanceActions
+{
+    ACTION_GATEWATCHER_GREET        = 1
+};
+
+enum ANGameObjectIds
+{
+    GO_KRIKTHIR_DOOR                = 192395,
+    GO_ANUBARAK_DOOR_1              = 192396,
+    GO_ANUBARAK_DOOR_2              = 192397,
+    GO_ANUBARAK_DOOR_3              = 192398
+};
+
+template <class AI, class T>
+inline AI* GetAzjolNerubAI(T* obj)
+{
+    return GetInstanceAI<AI>(obj, AzjolNerubScriptName);
+}
+
+#endif // AZJOL_NERUB_H_

@@ -1,6 +1,5 @@
- /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+/*
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,6 +18,7 @@
 #include "LFG.h"
 #include "Language.h"
 #include "ObjectMgr.h"
+#include <sstream>
 
 namespace lfg
 {
@@ -91,9 +91,6 @@ std::string GetStateString(LfgState state)
             break;
         case LFG_STATE_DUNGEON:
             entry = LANG_LFG_STATE_DUNGEON;
-            break;
-        case LFG_STATE_BOOT:
-            entry = LANG_LFG_STATE_BOOT;
             break;
         case LFG_STATE_FINISHED_DUNGEON:
             entry = LANG_LFG_STATE_FINISHED_DUNGEON;

@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -23,11 +22,8 @@
 #ifndef __CLIRUNNABLE_H
 #define __CLIRUNNABLE_H
 
-/// Command Line Interface handling thread
-class CliRunnable : public ACE_Based::Runnable
-{
-    public:
-        void run();
-};
+void CliThread();
+
 #endif
+
 /// @}

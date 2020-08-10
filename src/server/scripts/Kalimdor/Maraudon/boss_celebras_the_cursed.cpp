@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,6 +23,7 @@ SDCategory: Maraudon
 EndScriptData */
 
 #include "ScriptMgr.h"
+#include "maraudon.h"
 #include "ScriptedCreature.h"
 
 enum Spells
@@ -38,34 +38,42 @@ class celebras_the_cursed : public CreatureScript
 public:
     celebras_the_cursed() : CreatureScript("celebras_the_cursed") { }
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new celebras_the_cursedAI (creature);
+        return GetMaraudonAI<celebras_the_cursedAI>(creature);
     }
 
     struct celebras_the_cursedAI : public ScriptedAI
     {
-        celebras_the_cursedAI(Creature* creature) : ScriptedAI(creature) {}
+        celebras_the_cursedAI(Creature* creature) : ScriptedAI(creature)
+        {
+            Initialize();
+        }
 
-        uint32 WrathTimer;
-        uint32 EntanglingRootsTimer;
-        uint32 CorruptForcesTimer;
-
-        void Reset()
+        void Initialize()
         {
             WrathTimer = 8000;
             EntanglingRootsTimer = 2000;
             CorruptForcesTimer = 30000;
         }
 
-        void EnterCombat(Unit* /*who*/) { }
+        uint32 WrathTimer;
+        uint32 EntanglingRootsTimer;
+        uint32 CorruptForcesTimer;
 
-        void JustDied(Unit* /*killer*/)
+        void Reset() override
+        {
+            Initialize();
+        }
+
+        void JustEngagedWith(Unit* /*who*/) override { }
+
+        void JustDied(Unit* /*killer*/) override
         {
             me->SummonCreature(13716, me->GetPositionX(), me->GetPositionY(), me->GetPositionZ(), 0, TEMPSUMMON_TIMED_DESPAWN, 600000);
         }
 
-        void UpdateAI(const uint32 diff)
+        void UpdateAI(uint32 diff) override
         {
             if (!UpdateVictim())
                 return;
@@ -73,7 +81,7 @@ public:
             //Wrath
             if (WrathTimer <= diff)
             {
-                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                     DoCast(target, SPELL_WRATH);
                 WrathTimer = 8000;
             }

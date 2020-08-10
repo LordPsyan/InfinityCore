@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -41,26 +40,19 @@ class boss_ouro : public CreatureScript
 public:
     boss_ouro() : CreatureScript("boss_ouro") { }
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new boss_ouroAI (creature);
+        return GetAQ40AI<boss_ouroAI>(creature);
     }
 
-    struct boss_ouroAI : public ScriptedAI
+    struct boss_ouroAI : public BossAI
     {
-        boss_ouroAI(Creature* creature) : ScriptedAI(creature) {}
+        boss_ouroAI(Creature* creature) : BossAI(creature, DATA_OURO)
+        {
+            Initialize();
+        }
 
-        uint32 Sweep_Timer;
-        uint32 SandBlast_Timer;
-        uint32 Submerge_Timer;
-        uint32 Back_Timer;
-        uint32 ChangeTarget_Timer;
-        uint32 Spawn_Timer;
-
-        bool Enrage;
-        bool Submerged;
-
-        void Reset()
+        void Initialize()
         {
             Sweep_Timer = urand(5000, 10000);
             SandBlast_Timer = urand(20000, 35000);
@@ -73,12 +65,29 @@ public:
             Submerged = false;
         }
 
-        void EnterCombat(Unit* /*who*/)
+        uint32 Sweep_Timer;
+        uint32 SandBlast_Timer;
+        uint32 Submerge_Timer;
+        uint32 Back_Timer;
+        uint32 ChangeTarget_Timer;
+        uint32 Spawn_Timer;
+
+        bool Enrage;
+        bool Submerged;
+
+        void Reset() override
         {
-            DoCastVictim(SPELL_BIRTH);
+            Initialize();
+            _Reset();
         }
 
-        void UpdateAI(const uint32 diff)
+        void JustEngagedWith(Unit* who) override
+        {
+            DoCastVictim(SPELL_BIRTH);
+            BossAI::JustEngagedWith(who);
+        }
+
+        void UpdateAI(uint32 diff) override
         {
             //Return since we have no target
             if (!UpdateVictim())
@@ -104,7 +113,7 @@ public:
                 //Cast
                 me->HandleEmoteCommand(EMOTE_ONESHOT_SUBMERGE);
                 me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-                me->setFaction(35);
+                me->SetFaction(FACTION_FRIENDLY);
                 DoCast(me, SPELL_DIRTMOUND_PASSIVE);
 
                 Submerged = true;
@@ -114,10 +123,7 @@ public:
             //ChangeTarget_Timer
             if (Submerged && ChangeTarget_Timer <= diff)
             {
-                Unit* target = NULL;
-                target = SelectTarget(SELECT_TARGET_RANDOM, 0);
-
-                if (target)
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                     DoTeleportTo(target->GetPositionX(), target->GetPositionY(), target->GetPositionZ());
 
                 ChangeTarget_Timer = urand(10000, 20000);
@@ -127,7 +133,7 @@ public:
             if (Submerged && Back_Timer <= diff)
             {
                 me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-                me->setFaction(14);
+                me->SetFaction(FACTION_MONSTER);
 
                 DoCastVictim(SPELL_GROUND_RUPTURE);
 

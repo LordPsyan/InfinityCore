@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,16 +18,14 @@
 #ifndef DEF_ULDAMAN_H
 #define DEF_ULDAMAN_H
 
-enum eObjects
-{
-    GO_ARCHAEDAS_TEMPLE_DOOR            = 141869,
-    GO_ALTAR_OF_THE_KEEPER_TEMPLE_DOOR  = 124367,
-    GO_ANCIENT_VAULT_DOOR               = 124369,
-    GO_IRONAYA_SEAL_DOOR                = 124372,
-    GO_KEYSTONE                         = 124371,
-};
+#include "CreatureAIImpl.h"
 
-enum eData
+#define UldamanScriptName "instance_uldaman"
+#define DataHeader "UD"
+
+#define MAX_ENCOUNTER                   3
+
+enum UDDataTypes
 {
     DATA_ALTAR_DOORS                    = 1,
     DATA_ANCIENT_DOOR                   = 2,
@@ -38,6 +35,19 @@ enum eData
     DATA_IRONAYA_SEAL                   = 6,
 };
 
-#define MAX_ENCOUNTER                   3
+enum UDGameObjectIds
+{
+    GO_ARCHAEDAS_TEMPLE_DOOR            = 141869,
+    GO_ALTAR_OF_THE_KEEPER_TEMPLE_DOOR  = 124367,
+    GO_ANCIENT_VAULT_DOOR               = 124369,
+    GO_IRONAYA_SEAL_DOOR                = 124372,
+    GO_KEYSTONE                         = 124371,
+};
+
+template <class AI, class T>
+inline AI* GetUldamanAI(T* obj)
+{
+    return GetInstanceAI<AI>(obj, UldamanScriptName);
+}
 
 #endif

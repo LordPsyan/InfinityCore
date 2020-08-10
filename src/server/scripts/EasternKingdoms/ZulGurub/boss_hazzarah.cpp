@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,44 +15,22 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ObjectMgr.h"
-#include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "zulgurub.h"
-
-enum Yells
-{
-    SAY_AGGRO               = 0,
-    SAY_DEATH               = 1,
-    SAY_DREAMSTATE_01       = 2, // Talk Dreamstate 1-3 only on using "Awaken Nightmares"
-    SAY_DREAMSTATE_02       = 3,
-    SAY_DREAMSTATE_03       = 4,
-    SAY_PLAYER_KILL_01      = 5,
-    SAY_PLAYER_KILL_02      = 6,
-};
+#include "ScriptedCreature.h"
+#include "ScriptMgr.h"
+#include "TemporarySummon.h"
 
 enum Spells
 {
-    SPELL_NIGHTMARES        = 96658, // Summon Adds (Triggered Spell of "Awaken Nightmares" 96670)
-    SPELL_NIGHTMARE_SUM     = 96670,
-    SPELL_EARTH_SHOCK       = 96650,
-    SPELL_WRATH             = 96651,
-
-    // Nightmare Illusions
-    SPELL_CONSUME_SOUL      = 96758, // Kill Player instant
-    SPELL_WAKING_NMARES     = 96757
+    SPELL_MANABURN = 26046,
+    SPELL_SLEEP = 24664
 };
 
 enum Events
 {
-    EVENT_NIGHTMARES        = 0,
-    EVENT_EARTH_SHOCK,
-    EVENT_WRATH,
-};
-
-enum Adds
-{
-    NPC_NIGHTMARE_ILLUSION   = 52284
+    EVENT_MANABURN = 1,
+    EVENT_SLEEP = 2,
+    EVENT_ILLUSIONS = 3
 };
 
 class boss_hazzarah : public CreatureScript
@@ -63,141 +40,78 @@ class boss_hazzarah : public CreatureScript
 
         struct boss_hazzarahAI : public BossAI
         {
-            boss_hazzarahAI(Creature* creature) : BossAI(creature, DATA_HAZZARAH) { }
+            boss_hazzarahAI(Creature* creature) : BossAI(creature, DATA_EDGE_OF_MADNESS) { }
 
-            void Reset()
+            void Reset() override
             {
                 _Reset();
-                if (GameObject* forcefield = me->FindNearestGameObject(GO_THE_CACHE_OF_MADNESS_DOOR, 150.0f))
-                    me->RemoveGameObject(forcefield, true);
             }
 
-            void EnterCombat(Unit* /*who*/)
-            {
-                _EnterCombat();
-                Talk(SAY_AGGRO);
-                me->SummonGameObject(GO_THE_CACHE_OF_MADNESS_DOOR, -11938.6f, -1843.32f, 61.7272f, 0.0899053f, 0, 0, 0, 0, 0);
-                events.ScheduleEvent(EVENT_WRATH, 2000);
-                events.ScheduleEvent(EVENT_EARTH_SHOCK, 25000);
-                events.ScheduleEvent(EVENT_NIGHTMARES, 55000);
-            }
-
-            void JustDied(Unit* /*killer*/)
+            void JustDied(Unit* /*killer*/) override
             {
                 _JustDied();
-                Talk(SAY_DEATH);
-                if (GameObject* forcefield = me->FindNearestGameObject(GO_THE_CACHE_OF_MADNESS_DOOR, 150.0f))
-                    me->RemoveGameObject(forcefield, true);
             }
 
-            void KilledUnit(Unit* victim)
+            void JustEngagedWith(Unit* who) override
             {
-                if (victim->GetTypeId() == TYPEID_PLAYER)
-                    Talk(RAND(SAY_PLAYER_KILL_01, SAY_PLAYER_KILL_02));
+                BossAI::JustEngagedWith(who);
+                events.ScheduleEvent(EVENT_MANABURN, 4s, 10s);
+                events.ScheduleEvent(EVENT_SLEEP, 10s, 18s);
+                events.ScheduleEvent(EVENT_ILLUSIONS, 10s, 18s);
             }
 
-            void UpdateAI(uint32 const diff)
+            void UpdateAI(uint32 diff) override
             {
-                if(!UpdateVictim())
+                if (!UpdateVictim())
                     return;
 
                 events.Update(diff);
 
-                if(me->HasUnitState(UNIT_STATE_CASTING))
+                if (me->HasUnitState(UNIT_STATE_CASTING))
                     return;
 
-                if(uint32 eventId = events.ExecuteEvent())
+                while (uint32 eventId = events.ExecuteEvent())
                 {
-                    switch(eventId)
+                    switch (eventId)
                     {
-                        case EVENT_WRATH:
-                            DoCastVictim(SPELL_WRATH);
-                            events.ScheduleEvent(EVENT_WRATH, urand(2700, 5200));
+                        case EVENT_MANABURN:
+                            DoCastVictim(SPELL_MANABURN, true);
+                            events.ScheduleEvent(EVENT_MANABURN, 8s, 16s);
                             break;
-                        case EVENT_EARTH_SHOCK: // Only on active Victim
-                            DoCastVictim(SPELL_EARTH_SHOCK);
-                            events.ScheduleEvent(EVENT_EARTH_SHOCK, urand(20*IN_MILLISECONDS, 25*IN_MILLISECONDS));
+                        case EVENT_SLEEP:
+                            DoCastVictim(SPELL_SLEEP, true);
+                            events.ScheduleEvent(EVENT_SLEEP, 12s, 20s);
                             break;
-                        case EVENT_NIGHTMARES:
-                            Talk(RAND(SAY_DREAMSTATE_01, SAY_DREAMSTATE_02, SAY_DREAMSTATE_03));
-                            DoCast(me, SPELL_NIGHTMARES);
-                            events.ScheduleEvent(EVENT_NIGHTMARES, urand(65*IN_MILLISECONDS, 70*IN_MILLISECONDS));
+                        case EVENT_ILLUSIONS:
+                            // We will summon 3 illusions that will spawn on a random gamer and attack this gamer
+                            // We will just use one model for the beginning
+                            for (uint8 i = 0; i < 3; ++i)
+                            {
+                                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 0.f, true))
+                                    if (TempSummon* illusion = me->SummonCreature(NPC_NIGHTMARE_ILLUSION, target->GetPosition(), TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, 30000))
+                                        illusion->AI()->AttackStart(target);
+                            }
+                            events.ScheduleEvent(EVENT_ILLUSIONS, 15s, 25s);
+                            break;
+                        default:
                             break;
                     }
+
+                    if (me->HasUnitState(UNIT_STATE_CASTING))
+                        return;
                 }
+
                 DoMeleeAttackIfReady();
             }
         };
 
-        CreatureAI* GetAI(Creature* creature) const
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            return new boss_hazzarahAI(creature);
+            return GetZulGurubAI<boss_hazzarahAI>(creature);
         }
-};
-
-class mob_nightmare_illusion : public CreatureScript
-{
-public:
-    mob_nightmare_illusion() : CreatureScript("mob_nightmare_illusion") { }
-
-    struct mob_nightmare_illusionAI : public ScriptedAI
-    {
-        mob_nightmare_illusionAI(Creature* creature) : ScriptedAI(creature)
-        {
-            me->ApplySpellImmune(0, IMMUNITY_STATE, SPELL_AURA_MOD_TAUNT, true); // handle this immunity mask coreside
-        }
-
-        void Reset()
-        {
-            targetGUID = 0;
-            checkTargetTimer = 1000;
-        }
-
-        void EnterCombat(Unit* /*who*/)
-        {
-            DoZoneInCombat();
-
-            me->SetSpeed(MOVE_RUN, 0.3f);
-            DoCastVictim(SPELL_WAKING_NMARES);
-
-            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 50.0f, true))
-            {
-                me->ClearUnitState(UNIT_STATE_CASTING);
-                me->GetMotionMaster()->MoveChase(target);
-                targetGUID = target->GetGUID();
-            }
-        }
-
-        void UpdateAI(const uint32 diff)
-        {
-            if(!UpdateVictim())
-                return;
-
-            if (checkTargetTimer <= diff)
-            {
-                if (Player *player = Unit::GetPlayer(*me, targetGUID))
-                    if (me->GetDistance(player) < 1.3f)
-                    {
-                        DoCastVictim(SPELL_CONSUME_SOUL);
-                        me->DespawnOrUnsummon(100); // we use here 100miliseconds, because its called in one time
-                    }
-                checkTargetTimer = 500; // we check the target every 500miliseconds
-            }
-            else checkTargetTimer -= diff;
-        }
-    private:
-        uint64 targetGUID;
-        uint32 checkTargetTimer;
-    };
-
-    CreatureAI* GetAI(Creature* creature) const
-    {
-        return new mob_nightmare_illusionAI (creature);
-    }
 };
 
 void AddSC_boss_hazzarah()
 {
     new boss_hazzarah();
-    new mob_nightmare_illusion();
 }

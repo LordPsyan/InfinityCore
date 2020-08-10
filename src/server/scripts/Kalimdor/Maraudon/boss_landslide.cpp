@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,6 +23,7 @@ SDCategory: Maraudon
 EndScriptData */
 
 #include "ScriptMgr.h"
+#include "maraudon.h"
 #include "ScriptedCreature.h"
 
 enum Spells
@@ -38,31 +38,39 @@ class boss_landslide : public CreatureScript
 public:
     boss_landslide() : CreatureScript("boss_landslide") { }
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new boss_landslideAI (creature);
+        return GetMaraudonAI<boss_landslideAI>(creature);
     }
 
     struct boss_landslideAI : public ScriptedAI
     {
-        boss_landslideAI(Creature* creature) : ScriptedAI(creature) {}
+        boss_landslideAI(Creature* creature) : ScriptedAI(creature)
+        {
+            Initialize();
+        }
 
-        uint32 KnockAwayTimer;
-        uint32 TrampleTimer;
-        uint32 LandslideTimer;
-
-        void Reset()
+        void Initialize()
         {
             KnockAwayTimer = 8000;
             TrampleTimer = 2000;
             LandslideTimer = 0;
         }
 
-        void EnterCombat(Unit* /*who*/)
+        uint32 KnockAwayTimer;
+        uint32 TrampleTimer;
+        uint32 LandslideTimer;
+
+        void Reset() override
+        {
+            Initialize();
+        }
+
+        void JustEngagedWith(Unit* /*who*/) override
         {
         }
 
-        void UpdateAI(const uint32 diff)
+        void UpdateAI(uint32 diff) override
         {
             if (!UpdateVictim())
                 return;

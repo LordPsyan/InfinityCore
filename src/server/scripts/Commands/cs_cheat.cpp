@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,47 +22,42 @@ Comment: All cheat related commands
 Category: commandscripts
 EndScriptData */
 
+#include "ScriptMgr.h"
 #include "Chat.h"
 #include "Language.h"
-#include "ObjectMgr.h"
 #include "Player.h"
-#include "ScriptMgr.h"
+#include "RBAC.h"
+#include "WorldSession.h"
 
 class cheat_commandscript : public CommandScript
 {
 public:
     cheat_commandscript() : CommandScript("cheat_commandscript") { }
 
-    ChatCommand* GetCommands() const
+    std::vector<ChatCommand> GetCommands() const override
     {
-
-        static ChatCommand cheatCommandTable[] =
+        static std::vector<ChatCommand> cheatCommandTable =
         {
-            { "god",            SEC_GAMEMASTER,     false, &HandleGodModeCheatCommand,         "", NULL },
-            { "casttime",       SEC_GAMEMASTER,     false, &HandleCasttimeCheatCommand,        "", NULL },
-            { "cooldown",       SEC_GAMEMASTER,     false, &HandleCoolDownCheatCommand,        "", NULL },
-            { "power",          SEC_GAMEMASTER,     false, &HandlePowerCheatCommand,           "", NULL },
-            { "waterwalk",      SEC_GAMEMASTER,     false, &HandleWaterWalkCheatCommand,       "", NULL },
-            { "status",         SEC_GAMEMASTER,     false, &HandleCheatStatusCommand,          "", NULL },
-            { "taxi",           SEC_GAMEMASTER,     false, &HandleTaxiCheatCommand,            "", NULL },
-            { "explore",        SEC_GAMEMASTER,     false, &HandleExploreCheatCommand,         "", NULL },
-            { NULL,             0,                  false, NULL,                               "", NULL }
+            { "god",            rbac::RBAC_PERM_COMMAND_CHEAT_GOD,       false, &HandleGodModeCheatCommand,   "" },
+            { "casttime",       rbac::RBAC_PERM_COMMAND_CHEAT_CASTTIME,  false, &HandleCasttimeCheatCommand,  "" },
+            { "cooldown",       rbac::RBAC_PERM_COMMAND_CHEAT_COOLDOWN,  false, &HandleCoolDownCheatCommand,  "" },
+            { "power",          rbac::RBAC_PERM_COMMAND_CHEAT_POWER,     false, &HandlePowerCheatCommand,     "" },
+            { "waterwalk",      rbac::RBAC_PERM_COMMAND_CHEAT_WATERWALK, false, &HandleWaterWalkCheatCommand, "" },
+            { "status",         rbac::RBAC_PERM_COMMAND_CHEAT_STATUS,    false, &HandleCheatStatusCommand,    "" },
+            { "taxi",           rbac::RBAC_PERM_COMMAND_CHEAT_TAXI,      false, &HandleTaxiCheatCommand,      "" },
+            { "explore",        rbac::RBAC_PERM_COMMAND_CHEAT_EXPLORE,   false, &HandleExploreCheatCommand,   "" },
 
         };
 
-        static ChatCommand commandTable[] =
+        static std::vector<ChatCommand> commandTable =
         {
-            { "cheat",          SEC_GAMEMASTER,     false, NULL,                  "", cheatCommandTable },
-            { NULL,             0,                  false, NULL,                               "", NULL }
+            { "cheat",          rbac::RBAC_PERM_COMMAND_CHEAT, false, nullptr, "", cheatCommandTable },
         };
         return commandTable;
     }
 
-    static bool HandleGodModeCheatCommand(ChatHandler* handler, const char* args)
+    static bool HandleGodModeCheatCommand(ChatHandler* handler, char const* args)
     {
-        if (!handler->GetSession() && !handler->GetSession()->GetPlayer())
-            return false;
-
         std::string argstr = (char*)args;
 
         if (!*args)
@@ -84,11 +79,8 @@ public:
         return false;
     }
 
-    static bool HandleCasttimeCheatCommand(ChatHandler* handler, const char* args)
+    static bool HandleCasttimeCheatCommand(ChatHandler* handler, char const* args)
     {
-        if (!handler->GetSession() && !handler->GetSession()->GetPlayer())
-            return false;
-
         std::string argstr = (char*)args;
 
         if (!*args)
@@ -110,11 +102,8 @@ public:
         return false;
     }
 
-    static bool HandleCoolDownCheatCommand(ChatHandler* handler, const char* args)
+    static bool HandleCoolDownCheatCommand(ChatHandler* handler, char const* args)
     {
-        if (!handler->GetSession() && !handler->GetSession()->GetPlayer())
-            return false;
-
         std::string argstr = (char*)args;
 
         if (!*args)
@@ -136,11 +125,8 @@ public:
         return false;
     }
 
-    static bool HandlePowerCheatCommand(ChatHandler* handler, const char* args)
+    static bool HandlePowerCheatCommand(ChatHandler* handler, char const* args)
     {
-        if (!handler->GetSession() && !handler->GetSession()->GetPlayer())
-            return false;
-
         std::string argstr = (char*)args;
 
         if (!*args)
@@ -162,12 +148,12 @@ public:
         return false;
     }
 
-    static bool HandleCheatStatusCommand(ChatHandler* handler, const char* /*args*/)
+    static bool HandleCheatStatusCommand(ChatHandler* handler, char const* /*args*/)
     {
         Player* player = handler->GetSession()->GetPlayer();
 
-        const char* enabled = "enabled";
-        const char* disabled = "disabled";
+        char const* enabled = "ON";
+        char const* disabled = "OFF";
 
         handler->SendSysMessage(LANG_COMMAND_CHEAT_STATUS);
         handler->PSendSysMessage(LANG_COMMAND_CHEAT_GOD, player->GetCommandStatus(CHEAT_GOD) ? enabled : disabled);
@@ -175,38 +161,29 @@ public:
         handler->PSendSysMessage(LANG_COMMAND_CHEAT_CT, player->GetCommandStatus(CHEAT_CASTTIME) ? enabled : disabled);
         handler->PSendSysMessage(LANG_COMMAND_CHEAT_POWER, player->GetCommandStatus(CHEAT_POWER) ? enabled : disabled);
         handler->PSendSysMessage(LANG_COMMAND_CHEAT_WW, player->GetCommandStatus(CHEAT_WATERWALK) ? enabled : disabled);
+        handler->PSendSysMessage(LANG_COMMAND_CHEAT_TAXINODES, player->isTaxiCheater() ? enabled : disabled);
+
         return true;
     }
 
-    static bool HandleWaterWalkCheatCommand(ChatHandler* handler, const char* args)
+    static bool HandleWaterWalkCheatCommand(ChatHandler* handler, char const* args)
     {
-        if (!handler->GetSession() && !handler->GetSession()->GetPlayer())
-            return false;
-
         std::string argstr = (char*)args;
 
         if (!*args)
-        {
             argstr = (handler->GetSession()->GetPlayer()->GetCommandStatus(CHEAT_WATERWALK)) ? "off" : "on";
-            if (handler->GetSession()->GetPlayer()->GetCommandStatus(CHEAT_WATERWALK))
-                argstr = "off";
-            else
-                argstr = "on";
-        }
 
         if (argstr == "off")
         {
             handler->GetSession()->GetPlayer()->SetCommandStatusOff(CHEAT_WATERWALK);
-            handler->GetSession()->GetPlayer()->RemoveUnitMovementFlag(MOVEMENTFLAG_WATERWALKING);
-            handler->GetSession()->GetPlayer()->SendMovementWaterWalking();         // OFF
+            handler->GetSession()->GetPlayer()->SetMovement(MOVE_LAND_WALK);                // OFF
             handler->SendSysMessage("Waterwalking is OFF. You can't walk on water.");
             return true;
         }
         else if (argstr == "on")
         {
             handler->GetSession()->GetPlayer()->SetCommandStatusOn(CHEAT_WATERWALK);
-            handler->GetSession()->GetPlayer()->AddUnitMovementFlag(MOVEMENTFLAG_WATERWALKING);
-            handler->GetSession()->GetPlayer()->SendMovementWaterWalking();         // ON
+            handler->GetSession()->GetPlayer()->SetMovement(MOVE_WATER_WALK);               // ON
             handler->SendSysMessage("Waterwalking is ON. You can walk on water.");
             return true;
         }
@@ -214,31 +191,19 @@ public:
         return false;
     }
 
-    static bool HandleTaxiCheatCommand(ChatHandler* handler, const char* args)
+    static bool HandleTaxiCheatCommand(ChatHandler* handler, char const* args)
     {
-        if (!*args)
-        {
-            handler->SendSysMessage(LANG_USE_BOL);
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
-
         std::string argstr = (char*)args;
-
         Player* chr = handler->getSelectedPlayer();
 
         if (!chr)
             chr = handler->GetSession()->GetPlayer();
-        else if (handler->HasLowerSecurity(chr, 0)) // check online security
+        else if (handler->HasLowerSecurity(chr, ObjectGuid::Empty)) // check online security
             return false;
 
-        if (argstr == "on")
+        if (!*args)
         {
-            chr->SetTaxiCheater(true);
-            handler->PSendSysMessage(LANG_YOU_GIVE_TAXIS, handler->GetNameLink(chr).c_str());
-            if (handler->needReportToTarget(chr))
-                ChatHandler(chr->GetSession()).PSendSysMessage(LANG_YOURS_TAXIS_ADDED, handler->GetNameLink().c_str());
-            return true;
+            argstr = (chr->isTaxiCheater()) ? "off" : "on";
         }
 
         if (argstr == "off")
@@ -247,7 +212,14 @@ public:
             handler->PSendSysMessage(LANG_YOU_REMOVE_TAXIS, handler->GetNameLink(chr).c_str());
             if (handler->needReportToTarget(chr))
                 ChatHandler(chr->GetSession()).PSendSysMessage(LANG_YOURS_TAXIS_REMOVED, handler->GetNameLink().c_str());
-
+            return true;
+        }
+        else if (argstr == "on")
+        {
+            chr->SetTaxiCheater(true);
+            handler->PSendSysMessage(LANG_YOU_GIVE_TAXIS, handler->GetNameLink(chr).c_str());
+            if (handler->needReportToTarget(chr))
+                ChatHandler(chr->GetSession()).PSendSysMessage(LANG_YOURS_TAXIS_ADDED, handler->GetNameLink().c_str());
             return true;
         }
 
@@ -264,7 +236,7 @@ public:
         int flag = atoi((char*)args);
 
         Player* chr = handler->getSelectedPlayer();
-        if (chr == NULL)
+        if (!chr)
         {
             handler->SendSysMessage(LANG_NO_CHAR_SELECTED);
             handler->SetSentErrorMessage(true);

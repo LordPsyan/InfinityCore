@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -28,43 +27,65 @@ at_malfurion_Stormrage_trigger
 EndContentData */
 
 #include "ScriptMgr.h"
+#include "GameObject.h"
+#include "GameObjectAI.h"
+#include "InstanceScript.h"
+#include "Map.h"
+#include "Player.h"
 #include "ScriptedCreature.h"
 #include "sunken_temple.h"
-#include "Player.h"
 
 /*#####
 # at_malfurion_Stormrage_trigger
 #####*/
 
+enum MalfurionMisc
+{
+    NPC_MALFURION_STORMRAGE           = 15362,
+    QUEST_ERANIKUS_TYRANT_OF_DREAMS   = 8733,
+    QUEST_THE_CHARGE_OF_DRAGONFLIGHTS = 8555,
+};
+
 class at_malfurion_stormrage : public AreaTriggerScript
 {
-public:
-    at_malfurion_stormrage() : AreaTriggerScript("at_malfurion_stormrage") { }
+    public:
+        at_malfurion_stormrage() : AreaTriggerScript("at_malfurion_stormrage") { }
 
-    bool OnTrigger(Player* player, const AreaTriggerEntry* /*at*/)
-    {
-        if (player->GetInstanceScript() && !player->FindNearestCreature(15362, 15))
-            player->SummonCreature(15362, player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), -1.52f, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 100000);
-        return false;
-    }
-
+        bool OnTrigger(Player* player, AreaTriggerEntry const* /*at*/) override
+        {
+            if (player->GetInstanceScript() && !player->FindNearestCreature(NPC_MALFURION_STORMRAGE, 15.0f) &&
+                player->GetQuestStatus(QUEST_THE_CHARGE_OF_DRAGONFLIGHTS) == QUEST_STATUS_REWARDED && player->GetQuestStatus(QUEST_ERANIKUS_TYRANT_OF_DREAMS) != QUEST_STATUS_REWARDED)
+                player->SummonCreature(NPC_MALFURION_STORMRAGE, player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), -1.52f, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 100000);
+            return false;
+        }
 };
+
 /*#####
 # go_atalai_statue
 #####*/
 
 class go_atalai_statue : public GameObjectScript
 {
-public:
-    go_atalai_statue() : GameObjectScript("go_atalai_statue") { }
+    public:
+        go_atalai_statue() : GameObjectScript("go_atalai_statue") { }
 
-    bool OnGossipHello(Player* player, GameObject* go)
-    {
-        if (InstanceScript* instance = player->GetInstanceScript())
-            instance->SetData(EVENT_STATE, go->GetEntry());
-        return false;
-    }
+        struct go_atalai_statueAI : public GameObjectAI
+        {
+            go_atalai_statueAI(GameObject* go) : GameObjectAI(go), instance(go->GetInstanceScript()) { }
 
+            InstanceScript* instance;
+
+            bool GossipHello(Player* /*player*/) override
+            {
+                instance->SetData(EVENT_STATE, me->GetEntry());
+                return false;
+            }
+        };
+
+        GameObjectAI* GetAI(GameObject* go) const override
+        {
+            return GetSunkenTempleAI<go_atalai_statueAI>(go);
+        }
 };
 
 void AddSC_sunken_temple()

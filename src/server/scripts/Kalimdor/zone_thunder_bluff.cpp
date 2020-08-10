@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -41,29 +40,26 @@ enum CairneBloodhoof
     SPELL_UPPERCUT          = 22916
 };
 
+enum Sounds
+{
+    SOUND_AGGRO             = 5884
+};
+
 #define GOSSIP_HCB "I know this is rather silly but a young ward who is a bit shy would like your hoofprint."
-//TODO: verify abilities/timers
+/// @todo verify abilities/timers
 class npc_cairne_bloodhoof : public CreatureScript
 {
 public:
     npc_cairne_bloodhoof() : CreatureScript("npc_cairne_bloodhoof") { }
 
-    CreatureAI* GetAI(Creature* creature) const
-    {
-        return new npc_cairne_bloodhoofAI (creature);
-    }
-
     struct npc_cairne_bloodhoofAI : public ScriptedAI
     {
-        npc_cairne_bloodhoofAI(Creature* creature) : ScriptedAI(creature) {}
+        npc_cairne_bloodhoofAI(Creature* creature) : ScriptedAI(creature)
+        {
+            Initialize();
+        }
 
-        uint32 BerserkerChargeTimer;
-        uint32 CleaveTimer;
-        uint32 MortalStrikeTimer;
-        uint32 ThunderclapTimer;
-        uint32 UppercutTimer;
-
-        void Reset()
+        void Initialize()
         {
             BerserkerChargeTimer = 30000;
             CleaveTimer = 5000;
@@ -72,17 +68,30 @@ public:
             UppercutTimer = 10000;
         }
 
-        void EnterCombat(Unit* /*who*/) {}
+        uint32 BerserkerChargeTimer;
+        uint32 CleaveTimer;
+        uint32 MortalStrikeTimer;
+        uint32 ThunderclapTimer;
+        uint32 UppercutTimer;
 
-        void UpdateAI(const uint32 diff)
+        void Reset() override
+        {
+            Initialize();
+        }
+
+        void JustEngagedWith(Unit* /*who*/) override
+        {
+            DoPlaySoundToSet(me, SOUND_AGGRO);
+        }
+
+        void UpdateAI(uint32 diff) override
         {
             if (!UpdateVictim())
                 return;
 
             if (BerserkerChargeTimer <= diff)
             {
-                Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0);
-                if (target)
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                     DoCast(target, SPELL_BERSERKER_CHARGE);
                 BerserkerChargeTimer = 25000;
             } else BerserkerChargeTimer -= diff;
@@ -113,8 +122,37 @@ public:
 
             DoMeleeAttackIfReady();
         }
+
+        bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
+        {
+            uint32 const action = player->PlayerTalkClass->GetGossipOptionAction(gossipListId);
+            ClearGossipMenuFor(player);
+            if (action == GOSSIP_SENDER_INFO)
+            {
+                player->CastSpell(player, 23123, false);
+                SendGossipMenuFor(player, 7014, me->GetGUID());
+            }
+            return true;
+        }
+
+        bool GossipHello(Player* player) override
+        {
+            if (me->IsQuestGiver())
+                player->PrepareQuestMenu(me->GetGUID());
+
+            if (player->GetQuestStatus(925) == QUEST_STATUS_INCOMPLETE)
+                AddGossipItemFor(player, GOSSIP_ICON_CHAT, GOSSIP_HCB, GOSSIP_SENDER_MAIN, GOSSIP_SENDER_INFO);
+
+            SendGossipMenuFor(player, 7013, me->GetGUID());
+
+            return true;
+        }
     };
 
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_cairne_bloodhoofAI(creature);
+    }
 };
 
 void AddSC_thunder_bluff()

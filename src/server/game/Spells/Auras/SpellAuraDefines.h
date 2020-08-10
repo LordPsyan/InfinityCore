@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,7 +17,16 @@
 #ifndef TRINITY_SPELLAURADEFINES_H
 #define TRINITY_SPELLAURADEFINES_H
 
-#define MAX_AURAS 64                                        // client support up to 255, but it will cause problems with group auras updating
+#include "Define.h"
+#include "ObjectGuid.h"
+
+class Item;
+class SpellInfo;
+class Unit;
+class WorldObject;
+
+#define MAX_AURAS 255                         // Client-side limit
+#define MAX_AURAS_GROUP_UPDATE 64             // Limit of SMSG_PARY_MEMBER_STATS_FULL and SMSG_PARTY_MEMBER_STATS
 
 enum AURA_FLAGS
 {
@@ -50,6 +58,16 @@ enum AuraEffectHandleModes
     AURA_EFFECT_HANDLE_REAL_OR_REAPPLY_MASK = (AURA_EFFECT_HANDLE_REAPPLY | AURA_EFFECT_HANDLE_REAL)
 };
 
+enum AuraRemoveMode
+{
+    AURA_REMOVE_NONE = 0,
+    AURA_REMOVE_BY_DEFAULT = 1,       // scripted remove, remove by stack with aura with different ids and sc aura remove
+    AURA_REMOVE_BY_CANCEL,
+    AURA_REMOVE_BY_ENEMY_SPELL,       // dispel and absorb aura destroy
+    AURA_REMOVE_BY_EXPIRE,            // aura duration has ended
+    AURA_REMOVE_BY_DEATH
+};
+
 //m_schoolAbsorb
 enum DAMAGE_ABSORB_TYPE
 {
@@ -57,7 +75,7 @@ enum DAMAGE_ABSORB_TYPE
     ONLY_MAGIC_ABSORB       = -1
 };
 
-enum AuraType
+enum AuraType : uint32
 {
     SPELL_AURA_NONE                                         = 0,
     SPELL_AURA_BIND_SIGHT                                   = 1,
@@ -107,7 +125,7 @@ enum AuraType
     SPELL_AURA_TRACK_RESOURCES                              = 45,
     SPELL_AURA_46                                           = 46,   // Ignore all Gear test spells
     SPELL_AURA_MOD_PARRY_PERCENT                            = 47,
-    SPELL_AURA_48                                           = 48,   // One periodic spell
+    SPELL_AURA_PERIODIC_TRIGGER_SPELL_FROM_CLIENT           = 48,   // One periodic spell
     SPELL_AURA_MOD_DODGE_PERCENT                            = 49,
     SPELL_AURA_MOD_CRITICAL_HEALING_AMOUNT                  = 50,
     SPELL_AURA_MOD_BLOCK_PERCENT                            = 51,
@@ -200,7 +218,7 @@ enum AuraType
     SPELL_AURA_MOD_MELEE_HASTE                              = 138,
     SPELL_AURA_FORCE_REACTION                               = 139,
     SPELL_AURA_MOD_RANGED_HASTE                             = 140,
-    SPELL_AURA_141                                          = 141,  // old SPELL_AURA_MOD_RANGED_AMMO_HASTE, unused now
+    SPELL_AURA_MOD_RANGED_AMMO_HASTE                        = 141,
     SPELL_AURA_MOD_BASE_RESISTANCE_PCT                      = 142,
     SPELL_AURA_MOD_RESISTANCE_EXCLUSIVE                     = 143,
     SPELL_AURA_SAFE_FALL                                    = 144,
@@ -212,14 +230,14 @@ enum AuraType
     SPELL_AURA_MOD_SHIELD_BLOCKVALUE_PCT                    = 150,
     SPELL_AURA_TRACK_STEALTHED                              = 151,  //    Track Stealthed
     SPELL_AURA_MOD_DETECTED_RANGE                           = 152,  //    Mod Detected Range
-    SPELL_AURA_153                                          = 153,  // old SPELL_AURA_SPLIT_DAMAGE_FLAT. unused 4.3.4
+    SPELL_AURA_SPLIT_DAMAGE_FLAT                            = 153,  //    Split Damage Flat
     SPELL_AURA_MOD_STEALTH_LEVEL                            = 154,  //    Stealth Level Modifier
     SPELL_AURA_MOD_WATER_BREATHING                          = 155,  //    Mod Water Breathing
     SPELL_AURA_MOD_REPUTATION_GAIN                          = 156,  //    Mod Reputation Gain
     SPELL_AURA_PET_DAMAGE_MULTI                             = 157,  //    Mod Pet Damage
     SPELL_AURA_MOD_SHIELD_BLOCKVALUE                        = 158,
     SPELL_AURA_NO_PVP_CREDIT                                = 159,
-    SPELL_AURA_160                                          = 160,  // old SPELL_AURA_MOD_AOE_AVOIDANCE. Unused 4.3.4
+    SPELL_AURA_MOD_AOE_AVOIDANCE                            = 160,
     SPELL_AURA_MOD_HEALTH_REGEN_IN_COMBAT                   = 161,
     SPELL_AURA_POWER_BURN                                   = 162,
     SPELL_AURA_MOD_CRIT_DAMAGE_BONUS                        = 163,
@@ -228,7 +246,7 @@ enum AuraType
     SPELL_AURA_MOD_ATTACK_POWER_PCT                         = 166,
     SPELL_AURA_MOD_RANGED_ATTACK_POWER_PCT                  = 167,
     SPELL_AURA_MOD_DAMAGE_DONE_VERSUS                       = 168,
-    SPELL_AURA_169                                          = 169,  // old SPELL_AURA_MOD_CRIT_PERCENT_VERSUS. unused 4.3.4
+    SPELL_AURA_MOD_CRIT_PERCENT_VERSUS                      = 169,
     SPELL_AURA_DETECT_AMORE                                 = 170,
     SPELL_AURA_MOD_SPEED_NOT_STACK                          = 171,
     SPELL_AURA_MOD_MOUNTED_SPEED_NOT_STACK                  = 172,
@@ -237,7 +255,7 @@ enum AuraType
     SPELL_AURA_MOD_SPELL_HEALING_OF_STAT_PERCENT            = 175,
     SPELL_AURA_SPIRIT_OF_REDEMPTION                         = 176,
     SPELL_AURA_AOE_CHARM                                    = 177,
-    SPELL_AURA_178                                          = 178,  // old SPELL_AURA_MOD_DEBUFF_RESISTANCE, unused
+    SPELL_AURA_MOD_DEBUFF_RESISTANCE                        = 178,
     SPELL_AURA_MOD_ATTACKER_SPELL_CRIT_CHANCE               = 179,
     SPELL_AURA_MOD_FLAT_SPELL_DAMAGE_VERSUS                 = 180,
     SPELL_AURA_181                                          = 181,  // old SPELL_AURA_MOD_FLAT_SPELL_CRIT_DAMAGE_VERSUS - possible flat spell crit damage versus
@@ -258,7 +276,7 @@ enum AuraType
     SPELL_AURA_MOD_COOLDOWN                                 = 196,  // only 24818 Noxious Breath
     SPELL_AURA_MOD_ATTACKER_SPELL_AND_WEAPON_CRIT_CHANCE    = 197,
     SPELL_AURA_198                                          = 198,  // old SPELL_AURA_MOD_ALL_WEAPON_SKILLS
-    SPELL_AURA_199                                          = 199,  // old SPELL_AURA_MOD_INCREASES_SPELL_PCT_TO_HIT. unused 4.3.4
+    SPELL_AURA_MOD_INCREASES_SPELL_PCT_TO_HIT               = 199,
     SPELL_AURA_MOD_XP_PCT                                   = 200,
     SPELL_AURA_FLY                                          = 201,
     SPELL_AURA_IGNORE_COMBAT_RESULT                         = 202,
@@ -271,12 +289,12 @@ enum AuraType
     SPELL_AURA_MOD_MOUNTED_FLIGHT_SPEED_ALWAYS              = 209,
     SPELL_AURA_MOD_VEHICLE_SPEED_ALWAYS                     = 210,
     SPELL_AURA_MOD_FLIGHT_SPEED_NOT_STACK                   = 211,
-    SPELL_AURA_212                                          = 212,  // old SPELL_AURA_MOD_RANGED_ATTACK_POWER_OF_STAT_PERCENT. unused 4.3.4
+    SPELL_AURA_MOD_RANGED_ATTACK_POWER_OF_STAT_PERCENT      = 212,
     SPELL_AURA_MOD_RAGE_FROM_DAMAGE_DEALT                   = 213,
     SPELL_AURA_214                                          = 214,
     SPELL_AURA_ARENA_PREPARATION                            = 215,
     SPELL_AURA_HASTE_SPELLS                                 = 216,
-    SPELL_AURA_MOD_MELEE_HASTE_2                            = 217,
+    SPELL_AURA_MOD_MELEE_HASTE_2                            = 217, // NYI
     SPELL_AURA_HASTE_RANGED                                 = 218,
     SPELL_AURA_MOD_MANA_REGEN_FROM_STAT                     = 219,
     SPELL_AURA_MOD_RATING_FROM_STAT                         = 220,
@@ -289,7 +307,7 @@ enum AuraType
     SPELL_AURA_PERIODIC_TRIGGER_SPELL_WITH_VALUE            = 227,
     SPELL_AURA_DETECT_STEALTH                               = 228,
     SPELL_AURA_MOD_AOE_DAMAGE_AVOIDANCE                     = 229,
-    SPELL_AURA_MOD_MAX_HEALTH                               = 230,
+    SPELL_AURA_230                                          = 230,
     SPELL_AURA_PROC_TRIGGER_SPELL_WITH_VALUE                = 231,
     SPELL_AURA_MECHANIC_DURATION_MOD                        = 232,
     SPELL_AURA_CHANGE_MODEL_FOR_ALL_HUMANOIDS               = 233,  // client-side only
@@ -318,28 +336,28 @@ enum AuraType
     SPELL_AURA_NO_REAGENT_USE                               = 256,
     SPELL_AURA_MOD_TARGET_RESIST_BY_SPELL_CLASS             = 257,
     SPELL_AURA_258                                          = 258,
-    SPELL_AURA_259                                          = 259,  // old SPELL_AURA_MOD_HOT_PCT, unused 4.3.4
+    SPELL_AURA_MOD_HOT_PCT                                  = 259,
     SPELL_AURA_SCREEN_EFFECT                                = 260,
     SPELL_AURA_PHASE                                        = 261,
     SPELL_AURA_ABILITY_IGNORE_AURASTATE                     = 262,
     SPELL_AURA_ALLOW_ONLY_ABILITY                           = 263,
-    SPELL_AURA_DETERRENCE                                   = 264,
+    SPELL_AURA_264                                          = 264,
     SPELL_AURA_265                                          = 265,
     SPELL_AURA_266                                          = 266,
     SPELL_AURA_MOD_IMMUNE_AURA_APPLY_SCHOOL                 = 267,
-    SPELL_AURA_268                                          = 268,  // old SPELL_AURA_MOD_ATTACK_POWER_OF_STAT_PERCENT. unused 4.3.4
+    SPELL_AURA_MOD_ATTACK_POWER_OF_STAT_PERCENT = 268,
     SPELL_AURA_MOD_IGNORE_TARGET_RESIST                     = 269,
-    SPELL_AURA_270                                          = 270,  // old SPELL_AURA_MOD_ABILITY_IGNORE_TARGET_RESIST, unused 4.3.4
+    SPELL_AURA_MOD_ABILITY_IGNORE_TARGET_RESIST             = 270,  // Possibly need swap vs 195 aura used only in 1 spell Chaos Bolt Passive
     SPELL_AURA_MOD_DAMAGE_FROM_CASTER                       = 271,
     SPELL_AURA_IGNORE_MELEE_RESET                           = 272,
     SPELL_AURA_X_RAY                                        = 273,
-    SPELL_AURA_274                                          = 274,  // old SPELL_AURA_ABILITY_CONSUME_NO_AMMO, unused 4.3.4
+    SPELL_AURA_ABILITY_CONSUME_NO_AMMO                      = 274,
     SPELL_AURA_MOD_IGNORE_SHAPESHIFT                        = 275,
-    SPELL_AURA_MOD_DAMAGE_DONE_FOR_MECHANIC                 = 276,
-    SPELL_AURA_277                                          = 277,  // old SPELL_AURA_MOD_MAX_AFFECTED_TARGETS. unused 4.3.4
+    SPELL_AURA_MOD_DAMAGE_DONE_FOR_MECHANIC                 = 276,  // NYI
+    SPELL_AURA_MOD_MAX_AFFECTED_TARGETS                     = 277,
     SPELL_AURA_MOD_DISARM_RANGED                            = 278,
     SPELL_AURA_INITIALIZE_IMAGES                            = 279,
-    SPELL_AURA_280                                          = 280,  // old SPELL_AURA_MOD_ARMOR_PENETRATION_PCT unused 4.3.4
+    SPELL_AURA_MOD_ARMOR_PENETRATION_PCT = 280,
     SPELL_AURA_MOD_HONOR_GAIN_PCT                           = 281,
     SPELL_AURA_MOD_BASE_HEALTH_PCT                          = 282,
     SPELL_AURA_MOD_HEALING_RECEIVED                         = 283,  // Possibly only for some spell family class spells
@@ -348,7 +366,7 @@ enum AuraType
     SPELL_AURA_ABILITY_PERIODIC_CRIT                        = 286,
     SPELL_AURA_DEFLECT_SPELLS                               = 287,
     SPELL_AURA_IGNORE_HIT_DIRECTION                         = 288,
-    SPELL_AURA_289                                          = 289,
+    SPELL_AURA_PREVENT_DURABILITY_LOSS                      = 289,
     SPELL_AURA_MOD_CRIT_PCT                                 = 290,
     SPELL_AURA_MOD_XP_QUEST_PCT                             = 291,
     SPELL_AURA_OPEN_STABLE                                  = 292,
@@ -368,75 +386,90 @@ enum AuraType
     SPELL_AURA_306                                          = 306,
     SPELL_AURA_HEAL_ABSORB_TEST                             = 307,
     SPELL_AURA_MOD_CRIT_CHANCE_FOR_CASTER                   = 308,
-    SPELL_AURA_309                                          = 309,  // Not used in 4.3.4
+    SPELL_AURA_309                                          = 309,
     SPELL_AURA_MOD_CREATURE_AOE_DAMAGE_AVOIDANCE            = 310,
     SPELL_AURA_311                                          = 311,
-    SPELL_AURA_ANIM_REPLACEMENT_SET                         = 312,
-    SPELL_AURA_313                                          = 313,  // Not used in 4.3.4 - related to mounts
+    SPELL_AURA_312                                          = 312,
+    SPELL_AURA_313                                          = 313,
     SPELL_AURA_PREVENT_RESURRECTION                         = 314,
     SPELL_AURA_UNDERWATER_WALKING                           = 315,
-    SPELL_AURA_PERIODIC_HASTE                               = 316,  // Not used in 4.3.4 (name from 3.3.5a)
-    SPELL_AURA_MOD_SPELL_POWER_PCT                          = 317,
-    SPELL_AURA_MASTERY                                      = 318,
-    SPELL_AURA_MOD_MELEE_HASTE_3                            = 319,
-    SPELL_AURA_MOD_RANGED_HASTE_2                           = 320,
-    SPELL_AURA_321                                          = 321,
-    SPELL_AURA_INTERFERE_TARGETTING                         = 322,  // NYI
-    SPELL_AURA_323                                          = 323,  // Not used in 4.3.4
-    SPELL_AURA_324                                          = 324,  // spell critical chance (probably by school mask)
-    SPELL_AURA_325                                          = 325,  // Not used in 4.3.4
-    SPELL_AURA_326                                          = 326,  // phase related
-    SPELL_AURA_327                                          = 327,  // Not used in 4.3.4
-    SPELL_AURA_PROC_ON_POWER_AMOUNT                         = 328,
-    SPELL_AURA_MOD_RUNE_REGEN_SPEED                         = 329,  // NYI
-    SPELL_AURA_CAST_WHILE_WALKING                           = 330,
-    SPELL_AURA_FORCE_WEATHER                                = 331,
-    SPELL_AURA_OVERRIDE_ACTIONBAR_SPELLS                    = 332,
-    SPELL_AURA_OVERRIDE_ACTIONBAR_SPELLS_2                  = 333,
-    SPELL_AURA_MOD_BLIND                                    = 334,  // NYI
-    SPELL_AURA_335                                          = 335,
-    SPELL_AURA_MOD_FLYING_RESTRICTIONS                      = 336,  // NYI
-    SPELL_AURA_MOD_VENDOR_ITEMS_PRICES                      = 337,
-    SPELL_AURA_MOD_DURABILITY_LOSS                          = 338,
-    SPELL_AURA_INCREASE_SKILL_GAIN_CHANCE                   = 339,  // NYI
-    SPELL_AURA_MOD_RESURRECTED_HEALTH_BY_GUILD_MEMBER       = 340,  // Increases health gained when resurrected by a guild member by X
-    SPELL_AURA_MOD_SPELL_CATEGORY_COOLDOWN                  = 341,  // Modifies cooldown of all spells using affected category
-    SPELL_AURA_MOD_MELEE_RANGED_HASTE_2                     = 342,
-    SPELL_AURA_343                                          = 343,
-    SPELL_AURA_MOD_AUTOATTACK_DAMAGE                        = 344,  // NYI
-    SPELL_AURA_BYPASS_ARMOR_FOR_CASTER                      = 345,
-    SPELL_AURA_ENABLE_ALT_POWER                             = 346,  // NYI
-    SPELL_AURA_MOD_SPELL_COOLDOWN_BY_HASTE                  = 347,  // NYI
-    SPELL_AURA_DEPOSIT_BONUS_MONEY_IN_GUILD_BANK_ON_LOOT    = 348,  // NYI
-    SPELL_AURA_MOD_CURRENCY_GAIN                            = 349,
-    SPELL_AURA_MOD_GATHERING_ITEMS_GAINED_PERCENT           = 350,  // NYI
-    SPELL_AURA_351                                          = 351,
-    SPELL_AURA_352                                          = 352,
-    SPELL_AURA_MOD_CAMOUFLAGE                               = 353,  // NYI
-    SPELL_AURA_MOD_HEALING_DONE_BY_POWER                    = 354,  // Restoration Shaman mastery - mod healing based on target's health (less = more healing)
-    SPELL_AURA_355                                          = 355,
-    SPELL_AURA_MOD_DAMAGE_DONE_BY_POWER                     = 356,  // Arcane Mage mastery - mod damage based on current mana
-    SPELL_AURA_ENABLE_BOSS1_UNIT_FRAME                      = 357,
-    SPELL_AURA_WORGEN_ALTERED_FORM                          = 358,
-    SPELL_AURA_359                                          = 359,
-    SPELL_AURA_PROC_TRIGGER_SPELL_COPY                      = 360,  // Procs the same spell that caused this proc (Dragonwrath, Tarecgosa's Rest)
-    SPELL_AURA_PROC_TRIGGER_SPELL_2                         = 361,
-    SPELL_AURA_362                                          = 362,  // Not used in 4.3.4
-    SPELL_AURA_MOD_NEXT_SPELL                               = 363,  // Used by 101601 Throw Totem - causes the client to initialize spell cast with specified spell
-    SPELL_AURA_364                                          = 364,  // Not used in 4.3.4
-    SPELL_AURA_MAX_FAR_CLIP_PLANE                           = 365,  // Overrides client's View Distance setting to max("Fair", current_setting) and turns off terrain display
-    SPELL_AURA_OVERRIDE_SPELL_POWER_BY_AP_PCT               = 366,  // NYI - Sets spellpower equal to % of attack power, discarding all other bonuses (from gear and buffs)
-    SPELL_AURA_367                                          = 367,
-    SPELL_AURA_368                                          = 368,  // Not used in 4.3.4
-    SPELL_AURA_ENABLE_POWER_BAR_TIMER                       = 369,
-    SPELL_AURA_SET_FAIR_FAR_CLIP                            = 370,  // Overrides client's View Distance setting to max("Fair", current_setting)
-    TOTAL_AURAS                                             = 371   // 4.3.4
+    SPELL_AURA_PERIODIC_HASTE                               = 316,
+    TOTAL_AURAS                                             = 317
 };
 
 enum AuraObjectType
 {
     UNIT_AURA_TYPE,
     DYNOBJ_AURA_TYPE
+};
+
+// high byte (3 from 0..3) of UNIT_FIELD_BYTES_2
+enum ShapeshiftForm
+{
+    FORM_NONE               = 0x00,
+    FORM_CAT                = 0x01,
+    FORM_TREE               = 0x02,
+    FORM_TRAVEL             = 0x03,
+    FORM_AQUA               = 0x04,
+    FORM_BEAR               = 0x05,
+    FORM_AMBIENT            = 0x06,
+    FORM_GHOUL              = 0x07,
+    FORM_DIREBEAR           = 0x08,
+    FORM_STEVES_GHOUL       = 0x09,
+    FORM_THARONJA_SKELETON  = 0x0A,
+    FORM_TEST_OF_STRENGTH   = 0x0B,
+    FORM_BLB_PLAYER         = 0x0C,
+    FORM_SHADOW_DANCE       = 0x0D,
+    FORM_CREATUREBEAR       = 0x0E,
+    FORM_CREATURECAT        = 0x0F,
+    FORM_GHOSTWOLF          = 0x10,
+    FORM_BATTLESTANCE       = 0x11,
+    FORM_DEFENSIVESTANCE    = 0x12,
+    FORM_BERSERKERSTANCE    = 0x13,
+    FORM_TEST               = 0x14,
+    FORM_ZOMBIE             = 0x15,
+    FORM_METAMORPHOSIS      = 0x16,
+    FORM_UNDEAD             = 0x19,
+    FORM_MASTER_ANGLER      = 0x1A,
+    FORM_FLIGHT_EPIC        = 0x1B,
+    FORM_SHADOW             = 0x1C,
+    FORM_FLIGHT             = 0x1D,
+    FORM_STEALTH            = 0x1E,
+    FORM_MOONKIN            = 0x1F,
+    FORM_SPIRITOFREDEMPTION = 0x20
+};
+
+struct TC_GAME_API AuraCreateInfo
+{
+    friend class Aura;
+    friend class UnitAura;
+    friend class DynObjAura;
+
+    AuraCreateInfo(SpellInfo const* spellInfo, uint8 auraEffMask, WorldObject* owner);
+
+    AuraCreateInfo& SetCasterGUID(ObjectGuid const& guid) { CasterGUID = guid; return *this; }
+    AuraCreateInfo& SetCaster(Unit* caster) { Caster = caster; return *this; }
+    AuraCreateInfo& SetBaseAmount(int32 const* bp) { BaseAmount = bp; return *this; }
+    AuraCreateInfo& SetCastItemGUID(ObjectGuid const& guid) { CastItemGUID = guid; return *this; }
+    AuraCreateInfo& SetPeriodicReset(bool reset) { ResetPeriodicTimer = reset; return *this; }
+    AuraCreateInfo& SetOwnerEffectMask(uint8 effMask) { _targetEffectMask = effMask; return *this; }
+
+    SpellInfo const* GetSpellInfo() const { return _spellInfo; }
+    uint8 GetAuraEffectMask() const { return _auraEffectMask; }
+
+    ObjectGuid CasterGUID;
+    Unit* Caster = nullptr;
+    int32 const* BaseAmount = nullptr;
+    ObjectGuid CastItemGUID;
+    bool* IsRefresh = nullptr;
+    bool ResetPeriodicTimer = true;
+
+    private:
+        SpellInfo const* _spellInfo = nullptr;
+        uint8 _auraEffectMask = 0;
+        WorldObject* _owner = nullptr;
+
+        uint8 _targetEffectMask = 0;
 };
 
 #endif

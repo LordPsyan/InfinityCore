@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,26 +16,24 @@
  */
 
 #include "ScriptMgr.h"
+#include "Creature.h"
 #include "InstanceScript.h"
+#include "Map.h"
 #include "the_botanica.h"
 
 class instance_the_botanica : public InstanceMapScript
 {
     public:
-        instance_the_botanica() : InstanceMapScript("instance_the_botanica", 553) { }
+        instance_the_botanica() : InstanceMapScript(BotanicaScriptName, 553) { }
 
         struct instance_the_botanica_InstanceMapScript : public InstanceScript
         {
             instance_the_botanica_InstanceMapScript(Map* map) : InstanceScript(map)
             {
-                CommanderSarannisGUID       = 0;
-                HighBotanistFreywinnGUID    = 0;
-                ThorngrinTheTenderGUID      = 0;
-                LajGUID                     = 0;
-                WarpSplinterGUID            = 0;
+                SetHeaders(DataHeader);
             }
 
-            void OnCreatureCreate(Creature* creature)
+            void OnCreatureCreate(Creature* creature) override
             {
                 switch (creature->GetEntry())
                 {
@@ -59,7 +57,7 @@ class instance_the_botanica : public InstanceMapScript
                 }
             }
 
-            uint64 GetData64(uint32 type) const
+            ObjectGuid GetGuidData(uint32 type) const override
             {
                 switch (type)
                 {
@@ -77,10 +75,10 @@ class instance_the_botanica : public InstanceMapScript
                         break;
                 }
 
-                return 0;
+                return ObjectGuid::Empty;
             }
 
-            bool SetBossState(uint32 type, EncounterState state)
+            bool SetBossState(uint32 type, EncounterState state) override
             {
                 if (!InstanceScript::SetBossState(type, state))
                     return false;
@@ -100,59 +98,15 @@ class instance_the_botanica : public InstanceMapScript
                 return true;
             }
 
-            std::string GetSaveData()
-            {
-                OUT_SAVE_INST_DATA;
-
-                std::ostringstream saveStream;
-                saveStream << "B O " << GetBossSaveData();
-
-                OUT_SAVE_INST_DATA_COMPLETE;
-                return saveStream.str();
-            }
-
-            void Load(char const* str)
-            {
-                if (!str)
-                {
-                    OUT_LOAD_INST_DATA_FAIL;
-                    return;
-                }
-
-                OUT_LOAD_INST_DATA(str);
-
-                char dataHead1, dataHead2;
-
-                std::istringstream loadStream(str);
-                loadStream >> dataHead1 >> dataHead2;
-
-                if (dataHead1 == 'B' && dataHead2 == 'O')
-                {
-                    for (uint8 i = 0; i < EncounterCount; ++i)
-                    {
-                        uint32 tmpState;
-                        loadStream >> tmpState;
-                        if (tmpState == IN_PROGRESS || tmpState > SPECIAL)
-                            tmpState = NOT_STARTED;
-
-                        SetBossState(i, EncounterState(tmpState));
-                    }
-                }
-                else
-                    OUT_LOAD_INST_DATA_FAIL;
-
-                OUT_LOAD_INST_DATA_COMPLETE;
-            }
-
         protected:
-            uint64 CommanderSarannisGUID;
-            uint64 HighBotanistFreywinnGUID;
-            uint64 ThorngrinTheTenderGUID;
-            uint64 LajGUID;
-            uint64 WarpSplinterGUID;
+            ObjectGuid CommanderSarannisGUID;
+            ObjectGuid HighBotanistFreywinnGUID;
+            ObjectGuid ThorngrinTheTenderGUID;
+            ObjectGuid LajGUID;
+            ObjectGuid WarpSplinterGUID;
         };
 
-        InstanceScript* GetInstanceScript(InstanceMap* map) const
+        InstanceScript* GetInstanceScript(InstanceMap* map) const override
         {
             return new instance_the_botanica_InstanceMapScript(map);
         }

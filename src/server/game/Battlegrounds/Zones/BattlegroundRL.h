@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,7 +17,8 @@
 #ifndef __BATTLEGROUNDRL_H
 #define __BATTLEGROUNDRL_H
 
-#include "Battleground.h"
+#include "Arena.h"
+#include "EventMap.h"
 
 enum BattlegroundRLObjectTypes
 {
@@ -26,37 +26,40 @@ enum BattlegroundRLObjectTypes
     BG_RL_OBJECT_DOOR_2         = 1,
     BG_RL_OBJECT_BUFF_1         = 2,
     BG_RL_OBJECT_BUFF_2         = 3,
-    BG_RL_OBJECT_READYMARKER_1  = 4,
-    BG_RL_OBJECT_READYMARKER_2  = 5,
-    BG_RL_OBJECT_MAX            = 6
+    BG_RL_OBJECT_MAX            = 4
 };
 
-enum BattlegroundRLObjects
+enum BattlegroundRLGameObjects
 {
     BG_RL_OBJECT_TYPE_DOOR_1    = 185918,
     BG_RL_OBJECT_TYPE_DOOR_2    = 185917,
     BG_RL_OBJECT_TYPE_BUFF_1    = 184663,
-    BG_RL_OBJECT_TYPE_BUFF_2    = 184664,
-    BG_RL_OBJECT_READYMARKER    = 940000
+    BG_RL_OBJECT_TYPE_BUFF_2    = 184664
 };
 
-class BattlegroundRL : public Battleground
+constexpr Seconds BG_RL_REMOVE_DOORS_TIMER    = 5s;
+
+enum BattlegroundRLEvents
+{
+    BG_RL_EVENT_REMOVE_DOORS    = 1
+};
+
+class BattlegroundRL : public Arena
 {
     public:
         BattlegroundRL();
-        ~BattlegroundRL();
 
         /* inherited from BattlegroundClass */
-        void AddPlayer(Player* player);
-        void Reset();
-        void FillInitialWorldStates(WorldPacket &d);
-        void StartingEventCloseDoors();
-        void StartingEventOpenDoors();
+        void FillInitialWorldStates(WorldPackets::WorldState::InitWorldStates& packet) override;
+        void StartingEventCloseDoors() override;
+        void StartingEventOpenDoors() override;
 
-        void RemovePlayer(Player* player, uint64 guid, uint32 team);
-        void HandleAreaTrigger(Player* Source, uint32 Trigger);
-        bool SetupBattleground();
-        void HandleKillPlayer(Player* player, Player* killer);
-        bool HandlePlayerUnderMap(Player* player);
+        void HandleAreaTrigger(Player* Source, uint32 Trigger) override;
+        bool SetupBattleground() override;
+
+    private:
+        void PostUpdateImpl(uint32 diff) override;
+
+        EventMap _events;
 };
 #endif

@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,13 +23,16 @@ SDCategory: Tempest Keep, The Eye
 EndScriptData */
 
 #include "ScriptMgr.h"
+#include "InstanceScript.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
 #include "ScriptedCreature.h"
+#include "SpellAuras.h"
 #include "SpellScript.h"
-#include "SpellAuraEffects.h"
-
+#include "TemporarySummon.h"
 #include "the_eye.h"
 
-enum eEnums
+enum Yells
 {
     SAY_AGGRO                           = 0,
     SAY_SUMMON1                         = 1,
@@ -38,8 +40,11 @@ enum eEnums
     SAY_KILL                            = 3,
     SAY_DEATH                           = 4,
     SAY_VOIDA                           = 5,
-    SAY_VOIDB                           = 6,
+    SAY_VOIDB                           = 6
+};
 
+enum Spells
+{
     SPELL_ARCANE_MISSILES               = 33031,
     SPELL_WRATH_OF_THE_ASTROMANCER      = 42783,
     SPELL_WRATH_OF_THE_ASTROMANCER_DOT  = 42784,
@@ -48,18 +53,28 @@ enum eEnums
     SPELL_VOID_BOLT                     = 39329,
 
     SPELL_SPOTLIGHT                     = 25824,
-    NPC_ASTROMANCER_SOLARIAN_SPOTLIGHT  = 18928,
-
-    NPC_SOLARIUM_AGENT                  = 18925,
-    NPC_SOLARIUM_PRIEST                 = 18806,
-
-    MODEL_HUMAN                         = 18239,
-    MODEL_VOIDWALKER                    = 18988,
 
     SPELL_SOLARIUM_GREAT_HEAL           = 33387,
     SPELL_SOLARIUM_HOLY_SMITE           = 25054,
-    SPELL_SOLARIUM_ARCANE_TORRENT       = 33390,
+    SPELL_SOLARIUM_ARCANE_TORRENT       = 33390
+};
 
+enum Creatures
+{
+    NPC_ASTROMANCER_SOLARIAN_SPOTLIGHT  = 18928,
+
+    NPC_SOLARIUM_AGENT                  = 18925,
+    NPC_SOLARIUM_PRIEST                 = 18806
+};
+
+enum Models
+{
+    MODEL_HUMAN                         = 18239,
+    MODEL_VOIDWALKER                    = 18988
+};
+
+enum Misc
+{
     WV_ARMOR                            = 31000
 };
 
@@ -79,23 +94,35 @@ class boss_high_astromancer_solarian : public CreatureScript
 {
     public:
 
-        boss_high_astromancer_solarian()
-            : CreatureScript("boss_high_astromancer_solarian")
-        {
-        }
+        boss_high_astromancer_solarian() : CreatureScript("boss_high_astromancer_solarian") { }
 
-        struct boss_high_astromancer_solarianAI : public ScriptedAI
+        struct boss_high_astromancer_solarianAI : public BossAI
         {
-            boss_high_astromancer_solarianAI(Creature* creature) : ScriptedAI(creature), Summons(me)
+            boss_high_astromancer_solarianAI(Creature* creature) : BossAI(creature, DATA_HIGH_ASTROMANCER_SOLARIAN)
             {
-                instance = creature->GetInstanceScript();
+                Initialize();
 
                 defaultarmor = creature->GetArmor();
-                defaultsize = creature->GetFloatValue(OBJECT_FIELD_SCALE_X);
+                defaultsize = creature->GetObjectScale();
+                memset(Portals, 0, sizeof(Portals));
             }
 
-            InstanceScript* instance;
-            SummonList Summons;
+            void Initialize()
+            {
+                ArcaneMissiles_Timer = 2000;
+                m_uiWrathOfTheAstromancer_Timer = 15000;
+                BlindingLight_Timer = 41000;
+                Fear_Timer = 20000;
+                VoidBolt_Timer = 10000;
+                Phase1_Timer = 50000;
+                Phase2_Timer = 10000;
+                Phase3_Timer = 15000;
+                AppearDelay_Timer = 2000;
+                BlindingLight = false;
+                AppearDelay = false;
+                Wrath_Timer = 20000 + rand32() % 5000;//twice in phase one
+                Phase = 1;
+            }
 
             uint8 Phase;
 
@@ -117,55 +144,35 @@ class boss_high_astromancer_solarian : public CreatureScript
             bool AppearDelay;
             bool BlindingLight;
 
-            void Reset()
+            void Reset() override
             {
-                ArcaneMissiles_Timer = 2000;
-                m_uiWrathOfTheAstromancer_Timer = 15000;
-                BlindingLight_Timer = 41000;
-                Fear_Timer = 20000;
-                VoidBolt_Timer = 10000;
-                Phase1_Timer = 50000;
-                Phase2_Timer = 10000;
-                Phase3_Timer = 15000;
-                AppearDelay_Timer = 2000;
-                BlindingLight = false;
-                AppearDelay = false;
-                Wrath_Timer = 20000+rand()%5000;//twice in phase one
-                Phase = 1;
-
-                if (instance)
-                    instance->SetData(DATA_HIGHASTROMANCERSOLARIANEVENT, NOT_STARTED);
-
+                Initialize();
+                _Reset();
                 me->SetArmor(defaultarmor);
                 me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
                 me->SetVisible(true);
                 me->SetObjectScale(defaultsize);
                 me->SetDisplayId(MODEL_HUMAN);
 
-                Summons.DespawnAll();
             }
 
-            void KilledUnit(Unit* /*victim*/)
+            void KilledUnit(Unit* /*victim*/) override
             {
                 Talk(SAY_KILL);
             }
 
-            void JustDied(Unit* /*killer*/)
+            void JustDied(Unit* /*killer*/) override
             {
                 me->SetObjectScale(defaultsize);
                 me->SetDisplayId(MODEL_HUMAN);
                 Talk(SAY_DEATH);
-                if (instance)
-                    instance->SetData(DATA_HIGHASTROMANCERSOLARIANEVENT, DONE);
+                _JustDied();
             }
 
-            void EnterCombat(Unit* /*who*/)
+            void JustEngagedWith(Unit* who) override
             {
                 Talk(SAY_AGGRO);
-                DoZoneInCombat();
-
-                if (instance)
-                    instance->SetData(DATA_HIGHASTROMANCERSOLARIANEVENT, IN_PROGRESS);
+                BossAI::JustEngagedWith(who);
             }
 
             void SummonMinion(uint32 entry, float x, float y, float z)
@@ -173,10 +180,10 @@ class boss_high_astromancer_solarian : public CreatureScript
                 Creature* Summoned = me->SummonCreature(entry, x, y, z, 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 5000);
                 if (Summoned)
                 {
-                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                         Summoned->AI()->AttackStart(target);
 
-                    Summons.Summon(Summoned);
+                    summons.Summon(Summoned);
                 }
             }
 
@@ -185,17 +192,17 @@ class boss_high_astromancer_solarian : public CreatureScript
                 if (urand(0, 1))
                     radius = -radius;
 
-                return radius * (float)(rand()%100)/100.0f + CENTER_X;
+                return radius * (float)(rand32() % 100) / 100.0f + CENTER_X;
             }
 
             float Portal_Y(float x, float radius)
             {
                 float z = RAND(1.0f, -1.0f);
 
-                return (z*sqrt(radius*radius - (x - CENTER_X)*(x - CENTER_X)) + CENTER_Y);
+                return (z*std::sqrt(radius*radius - (x - CENTER_X)*(x - CENTER_X)) + CENTER_Y);
             }
 
-            void UpdateAI(const uint32 diff)
+            void UpdateAI(uint32 diff) override
             {
                 if (!UpdateVictim())
                     return;
@@ -229,9 +236,9 @@ class boss_high_astromancer_solarian : public CreatureScript
                     if (Wrath_Timer <= diff)
                     {
                         me->InterruptNonMeleeSpells(false);
-                        if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1, 100, true))
+                        if (Unit* target = SelectTarget(SelectTargetMethod::Random, 1, 100, true))
                             DoCast(target, SPELL_WRATH_OF_THE_ASTROMANCER, true);
-                        Wrath_Timer = 20000+rand()%5000;
+                        Wrath_Timer = 20000 + rand32() % 5000;
                     }
                     else
                         Wrath_Timer -= diff;
@@ -245,11 +252,13 @@ class boss_high_astromancer_solarian : public CreatureScript
                         }
                         else
                         {
-                            Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0);
-                            if (!me->HasInArc(2.5f, target))
-                                target = me->GetVictim();
-                            if (target)
+                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                            {
+                                if (!me->HasInArc(2.5f, target))
+                                    target = me->GetVictim();
+
                                 DoCast(target, SPELL_ARCANE_MISSILES);
+                            }
                         }
                         ArcaneMissiles_Timer = 3000;
                     }
@@ -260,7 +269,7 @@ class boss_high_astromancer_solarian : public CreatureScript
                     {
                         me->InterruptNonMeleeSpells(false);
                         //Target the tank ?
-                        if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1))
+                        if (Unit* target = SelectTarget(SelectTargetMethod::Random, 1))
                         {
                             if (target->GetTypeId() == TYPEID_PLAYER)
                             {
@@ -281,8 +290,8 @@ class boss_high_astromancer_solarian : public CreatureScript
                         Phase1_Timer = 50000;
                         //After these 50 seconds she portals to the middle of the room and disappears, leaving 3 light portals behind.
                         me->GetMotionMaster()->Clear();
-                        me->SetPosition(CENTER_X, CENTER_Y, CENTER_Z, CENTER_O);
-                        for (uint8 i=0; i <= 2; ++i)
+                        me->UpdatePosition(CENTER_X, CENTER_Y, CENTER_Z, CENTER_O);
+                        for (uint8 i = 0; i <= 2; ++i)
                         {
                             if (!i)
                             {
@@ -297,17 +306,17 @@ class boss_high_astromancer_solarian : public CreatureScript
                                 Portals[i][2] = PORTAL_Z;
                             }
                         }
-                        if ((abs(Portals[2][0] - Portals[1][0]) < 7) && (abs(Portals[2][1] - Portals[1][1]) < 7))
+                        if ((std::abs(Portals[2][0] - Portals[1][0]) < 7) && (std::abs(Portals[2][1] - Portals[1][1]) < 7))
                         {
-                            int i=1;
-                            if (abs(CENTER_X + 26.0f - Portals[2][0]) < 7)
+                            int i = 1;
+                            if (std::abs(CENTER_X + 26.0f - Portals[2][0]) < 7)
                                 i = -1;
-                            Portals[2][0] = Portals[2][0]+7*i;
+                            Portals[2][0] = Portals[2][0] + 7 * i;
                             Portals[2][1] = Portal_Y(Portals[2][0], LARGE_PORTAL_RADIUS);
                         }
-                        for (int i=0; i <= 2; ++i)
+                        for (int i = 0; i <= 2; ++i)
                         {
-                            if (Creature* Summoned = me->SummonCreature(NPC_ASTROMANCER_SOLARIAN_SPOTLIGHT, Portals[i][0], Portals[i][1], Portals[i][2], CENTER_O, TEMPSUMMON_TIMED_DESPAWN, Phase2_Timer+Phase3_Timer+AppearDelay_Timer+1700))
+                            if (Creature* Summoned = me->SummonCreature(NPC_ASTROMANCER_SOLARIAN_SPOTLIGHT, Portals[i][0], Portals[i][1], Portals[i][2], CENTER_O, TEMPSUMMON_TIMED_DESPAWN, Phase2_Timer + Phase3_Timer + AppearDelay_Timer + 1700))
                             {
                                 Summoned->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
                                 Summoned->CastSpell(Summoned, SPELL_SPOTLIGHT, false);
@@ -316,112 +325,116 @@ class boss_high_astromancer_solarian : public CreatureScript
                         AppearDelay = true;
                     }
                     else
-                        Phase1_Timer-=diff;
+                        Phase1_Timer -= diff;
                 }
-                else
-                    if (Phase == 2)
+                else if (Phase == 2)
+                {
+                    //10 seconds after Solarian disappears, 12 mobs spawn out of the three portals.
+                    me->AttackStop();
+                    me->StopMoving();
+                    if (Phase2_Timer <= diff)
                     {
-                        //10 seconds after Solarian disappears, 12 mobs spawn out of the three portals.
-                        me->AttackStop();
-                        me->StopMoving();
-                        if (Phase2_Timer <= diff)
-                        {
-                            Phase = 3;
-                            for (int i=0; i <= 2; ++i)
-                                for (int j=1; j <= 4; j++)
-                                    SummonMinion(NPC_SOLARIUM_AGENT, Portals[i][0], Portals[i][1], Portals[i][2]);
+                        Phase = 3;
+                        for (int i=0; i <= 2; ++i)
+                            for (int j=1; j <= 4; j++)
+                                SummonMinion(NPC_SOLARIUM_AGENT, Portals[i][0], Portals[i][1], Portals[i][2]);
 
-                            Talk(SAY_SUMMON1);
-                            Phase2_Timer = 10000;
-                        }
-                        else
-                            Phase2_Timer -= diff;
+                        Talk(SAY_SUMMON1);
+                        Phase2_Timer = 10000;
                     }
                     else
-                        if (Phase == 3)
-                        {
-                            me->AttackStop();
-                            me->StopMoving();
-                            //Check Phase3_Timer
-                            if (Phase3_Timer <= diff)
-                            {
-                                Phase = 1;
-                                //15 seconds later Solarian reappears out of one of the 3 portals. Simultaneously, 2 healers appear in the two other portals.
-                                int i = rand()%3;
-                                me->GetMotionMaster()->Clear();
-                                me->SetPosition(Portals[i][0], Portals[i][1], Portals[i][2], CENTER_O);
+                        Phase2_Timer -= diff;
+                }
+                else if (Phase == 3)
+                {
+                    me->AttackStop();
+                    me->StopMoving();
+                    //Check Phase3_Timer
+                    if (Phase3_Timer <= diff)
+                    {
+                        Phase = 1;
+                        //15 seconds later Solarian reappears out of one of the 3 portals. Simultaneously, 2 healers appear in the two other portals.
+                        int i = rand32() % 3;
+                        me->GetMotionMaster()->Clear();
+                        me->UpdatePosition(Portals[i][0], Portals[i][1], Portals[i][2], CENTER_O);
 
-                                for (int j=0; j <= 2; j++)
-                                    if (j != i)
-                                        SummonMinion(NPC_SOLARIUM_PRIEST, Portals[j][0], Portals[j][1], Portals[j][2]);
+                        for (int j=0; j <= 2; j++)
+                            if (j != i)
+                                SummonMinion(NPC_SOLARIUM_PRIEST, Portals[j][0], Portals[j][1], Portals[j][2]);
 
-                                me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-                                me->SetVisible(true);
+                        me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                        me->SetVisible(true);
 
-                                Talk(SAY_SUMMON2);
-                                AppearDelay = true;
-                                Phase3_Timer = 15000;
-                            }
-                            else
-                                Phase3_Timer -= diff;
-                        }
-                        else
-                            if (Phase == 4)
-                            {
-                                //Fear_Timer
-                                if (Fear_Timer <= diff)
-                                {
-                                    DoCast(me, SPELL_FEAR);
-                                    Fear_Timer = 20000;
-                                }
-                                else
-                                    Fear_Timer -= diff;
-                                //VoidBolt_Timer
-                                if (VoidBolt_Timer <= diff)
-                                {
-                                    DoCastVictim(SPELL_VOID_BOLT);
-                                    VoidBolt_Timer = 10000;
-                                }
-                                else
-                                    VoidBolt_Timer -= diff;
-                            }
-                            //When Solarian reaches 20% she will transform into a huge void walker.
-                            if (Phase != 4 && me->HealthBelowPct(20))
-                            {
-                                Phase = 4;
-                                //To make sure she wont be invisible or not selecatble
-                                me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-                                me->SetVisible(true);
-                                Talk(SAY_VOIDA);
-                                Talk(SAY_VOIDB);
-                                me->SetArmor(WV_ARMOR);
-                                me->SetDisplayId(MODEL_VOIDWALKER);
-                                me->SetObjectScale(defaultsize*2.5f);
-                            }
+                        Talk(SAY_SUMMON2);
+                        AppearDelay = true;
+                        Phase3_Timer = 15000;
+                    }
+                    else
+                        Phase3_Timer -= diff;
+                }
+                else if (Phase == 4)
+                {
+                    //Fear_Timer
+                    if (Fear_Timer <= diff)
+                    {
+                        DoCast(me, SPELL_FEAR);
+                        Fear_Timer = 20000;
+                    }
+                    else
+                        Fear_Timer -= diff;
+                    //VoidBolt_Timer
+                    if (VoidBolt_Timer <= diff)
+                    {
+                        DoCastVictim(SPELL_VOID_BOLT);
+                        VoidBolt_Timer = 10000;
+                    }
+                    else
+                        VoidBolt_Timer -= diff;
+                }
+
+                //When Solarian reaches 20% she will transform into a huge void walker.
+                if (Phase != 4 && me->HealthBelowPct(20))
+                {
+                    Phase = 4;
+                    //To make sure she wont be invisible or not selecatble
+                    me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                    me->SetVisible(true);
+                    Talk(SAY_VOIDA);
+                    Talk(SAY_VOIDB);
+                    me->SetArmor(WV_ARMOR);
+                    me->SetDisplayId(MODEL_VOIDWALKER);
+                    me->SetObjectScale(defaultsize*2.5f);
+                }
+
                 DoMeleeAttackIfReady();
             }
         };
 
-        CreatureAI* GetAI(Creature* creature) const
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            return new boss_high_astromancer_solarianAI (creature);
+            return GetTheEyeAI<boss_high_astromancer_solarianAI>(creature);
         }
 };
 
-class mob_solarium_priest : public CreatureScript
+class npc_solarium_priest : public CreatureScript
 {
     public:
 
-        mob_solarium_priest()
-            : CreatureScript("mob_solarium_priest")
-        {
-        }
+        npc_solarium_priest() : CreatureScript("npc_solarium_priest") { }
 
-        struct mob_solarium_priestAI : public ScriptedAI
+        struct npc_solarium_priestAI : public ScriptedAI
         {
-            mob_solarium_priestAI(Creature* creature) : ScriptedAI(creature)
+            npc_solarium_priestAI(Creature* creature) : ScriptedAI(creature)
             {
+                Initialize();
                 instance = creature->GetInstanceScript();
+            }
+
+            void Initialize()
+            {
+                healTimer = 9000;
+                holysmiteTimer = 1;
+                aoesilenceTimer = 15000;
             }
 
             InstanceScript* instance;
@@ -430,30 +443,25 @@ class mob_solarium_priest : public CreatureScript
             uint32 holysmiteTimer;
             uint32 aoesilenceTimer;
 
-            void Reset()
+            void Reset() override
             {
-                healTimer = 9000;
-                holysmiteTimer = 1;
-                aoesilenceTimer = 15000;
+                Initialize();
             }
 
-            void EnterCombat(Unit* /*who*/)
-            {
-            }
+            void JustEngagedWith(Unit* /*who*/) override { }
 
-            void UpdateAI(const uint32 diff)
+            void UpdateAI(uint32 diff) override
             {
                 if (!UpdateVictim())
                     return;
 
                 if (healTimer <= diff)
                 {
-                    Unit* target = NULL;
+                    Unit* target = nullptr;
                     switch (urand(0, 1))
                     {
                         case 0:
-                            if (instance)
-                                target = Unit::GetUnit(*me, instance->GetData64(DATA_ASTROMANCER));
+                            target = ObjectAccessor::GetUnit(*me, instance->GetGuidData(DATA_ASTROMANCER));
                             break;
                         case 1:
                             target = me;
@@ -489,9 +497,9 @@ class mob_solarium_priest : public CreatureScript
             }
         };
 
-        CreatureAI* GetAI(Creature* creature) const
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            return new mob_solarium_priestAI(creature);
+            return GetTheEyeAI<npc_solarium_priestAI>(creature);
         }
 };
 
@@ -504,11 +512,9 @@ class spell_astromancer_wrath_of_the_astromancer : public SpellScriptLoader
         {
             PrepareAuraScript(spell_astromancer_wrath_of_the_astromancer_AuraScript);
 
-            bool Validate(SpellInfo const* /*SpellEntry*/)
+            bool Validate(SpellInfo const* /*spellInfo*/) override
             {
-                if (!sSpellMgr->GetSpellInfo(SPELL_WRATH_OF_THE_ASTROMANCER_DOT))
-                    return false;
-                return true;
+                return ValidateSpellInfo({ SPELL_WRATH_OF_THE_ASTROMANCER_DOT });
             }
 
             void AfterRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
@@ -521,13 +527,13 @@ class spell_astromancer_wrath_of_the_astromancer : public SpellScriptLoader
                 target->CastSpell(target, GetSpellInfo()->Effects[EFFECT_1].CalcValue(), false);
             }
 
-            void Register()
+            void Register() override
             {
                 AfterEffectRemove += AuraEffectRemoveFn(spell_astromancer_wrath_of_the_astromancer_AuraScript::AfterRemove, EFFECT_0, SPELL_AURA_PERIODIC_TRIGGER_SPELL, AURA_EFFECT_HANDLE_REAL);
             }
         };
 
-        AuraScript* GetAuraScript() const
+        AuraScript* GetAuraScript() const override
         {
             return new spell_astromancer_wrath_of_the_astromancer_AuraScript();
         }
@@ -536,7 +542,6 @@ class spell_astromancer_wrath_of_the_astromancer : public SpellScriptLoader
 void AddSC_boss_high_astromancer_solarian()
 {
     new boss_high_astromancer_solarian();
-    new mob_solarium_priest();
+    new npc_solarium_priest();
     new spell_astromancer_wrath_of_the_astromancer();
 }
-

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -34,8 +34,7 @@ enum Says
 enum Spells
 {
     SPELL_SACRIFICE             = 34661,
-    SPELL_HELLFIRE_NORMAL       = 34659,
-    SPELL_HELLFIRE_HEROIC       = 39131,
+    SPELL_HELLFIRE              = 34659,
     SPELL_ENRAGE                = 34670
 };
 
@@ -52,36 +51,47 @@ class boss_thorngrin_the_tender : public CreatureScript
 
         struct boss_thorngrin_the_tenderAI : public BossAI
         {
-            boss_thorngrin_the_tenderAI(Creature* creature) : BossAI(creature, DATA_THORNGRIN_THE_TENDER) { }
-
-            void Reset()
+            boss_thorngrin_the_tenderAI(Creature* creature) : BossAI(creature, DATA_THORNGRIN_THE_TENDER)
             {
-                _Reset();
+                Initialize();
+            }
+
+            void Initialize()
+            {
                 _phase1 = true;
                 _phase2 = true;
             }
 
-            void EnterCombat(Unit* /*who*/)
+            void Reset() override
             {
-                _EnterCombat();
-                Talk(SAY_AGGRO);
-                events.ScheduleEvent(EVENT_SACRIFICE, 5700);
-                events.ScheduleEvent(EVENT_HELLFIRE, IsHeroic() ? urand(17400, 19300) : 18000);
-                events.ScheduleEvent(EVENT_ENRAGE, 12000);
+                _Reset();
+                Initialize();
             }
 
-            void KilledUnit(Unit* /*victim*/)
+            void JustEngagedWith(Unit* who) override
+            {
+                BossAI::JustEngagedWith(who);
+                Talk(SAY_AGGRO);
+                events.ScheduleEvent(EVENT_SACRIFICE, 5700ms);
+                if (IsHeroic())
+                    events.ScheduleEvent(EVENT_HELLFIRE, 17400ms, 19300ms);
+                else
+                    events.ScheduleEvent(EVENT_HELLFIRE, 18s);
+                events.ScheduleEvent(EVENT_ENRAGE, 12s);
+            }
+
+            void KilledUnit(Unit* /*victim*/) override
             {
                 Talk(SAY_KILL);
             }
 
-            void JustDied(Unit* /*killer*/)
+            void JustDied(Unit* /*killer*/) override
             {
                 _JustDied();
                 Talk(SAY_DEATH);
             }
 
-            void DamageTaken(Unit* /*killer*/, uint32 &damage)
+            void DamageTaken(Unit* /*killer*/, uint32 &damage) override
             {
                 if (me->HealthBelowPctDamaged(50, damage) && _phase1)
                 {
@@ -95,7 +105,7 @@ class boss_thorngrin_the_tender : public CreatureScript
                 }
             }
 
-            void UpdateAI(uint32 const diff)
+            void UpdateAI(uint32 diff) override
             {
                 if (!UpdateVictim())
                     return;
@@ -110,26 +120,32 @@ class boss_thorngrin_the_tender : public CreatureScript
                     switch (eventId)
                     {
                         case EVENT_SACRIFICE:
-                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1, 0.0f, true))
+                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 1, 0.0f, true))
                             {
                                 Talk(SAY_CAST_SACRIFICE);
                                 DoCast(target, SPELL_SACRIFICE, true);
                             }
-                            events.ScheduleEvent(EVENT_SACRIFICE, 29400);
+                            events.ScheduleEvent(EVENT_SACRIFICE, 29400ms);
                             break;
                         case EVENT_HELLFIRE:
                             Talk(SAY_CAST_HELLFIRE);
-                            DoCastVictim(DUNGEON_MODE(SPELL_HELLFIRE_NORMAL, SPELL_HELLFIRE_HEROIC), true);
-                            events.ScheduleEvent(EVENT_HELLFIRE, IsHeroic() ? urand(17400, 19300) : 18000);
+                            DoCastVictim(SPELL_HELLFIRE, true);
+                            if (IsHeroic())
+                                events.ScheduleEvent(EVENT_HELLFIRE, 17400ms, 19300ms);
+                            else
+                                events.ScheduleEvent(EVENT_HELLFIRE, 18s);
                             break;
                         case EVENT_ENRAGE:
                             Talk(EMOTE_ENRAGE);
                             DoCast(me, SPELL_ENRAGE);
-                            events.ScheduleEvent(EVENT_ENRAGE, 33000);
+                            events.ScheduleEvent(EVENT_ENRAGE, 33s);
                             break;
                         default:
                             break;
                     }
+
+                    if (me->HasUnitState(UNIT_STATE_CASTING))
+                        return;
                 }
 
                 DoMeleeAttackIfReady();
@@ -140,9 +156,9 @@ class boss_thorngrin_the_tender : public CreatureScript
             bool _phase2;
         };
 
-        CreatureAI* GetAI(Creature* creature) const
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            return new boss_thorngrin_the_tenderAI(creature);
+            return GetBotanicaAI<boss_thorngrin_the_tenderAI>(creature);
         }
 };
 

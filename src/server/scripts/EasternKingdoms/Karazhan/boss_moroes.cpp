@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2008 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,32 +23,64 @@ SDCategory: Karazhan
 EndScriptData */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "karazhan.h"
+#include "InstanceScript.h"
+#include "ObjectAccessor.h"
+#include "ScriptedCreature.h"
+#include "TemporarySummon.h"
 
-enum Moroes
+enum Yells
 {
     SAY_AGGRO           = 0,
     SAY_SPECIAL         = 1,
     SAY_KILL            = 2,
-    SAY_DEATH           = 3,
-
-    SPELL_VANISH        = 29448,
-    SPELL_GARROTE       = 37066,
-    SPELL_BLIND         = 34694,
-    SPELL_GOUGE         = 29425,
-    SPELL_FRENZY        = 37023,
+    SAY_DEATH           = 3
 };
 
-
-#define POS_Z               81.73f
-
-float Locations[4][3]=
+enum Spells
 {
-    {-10991.0f, -1884.33f, 0.614315f},
-    {-10989.4f, -1885.88f, 0.904913f},
-    {-10978.1f, -1887.07f, 2.035550f},
-    {-10975.9f, -1885.81f, 2.253890f},
+    SPELL_VANISH                = 29448,
+    SPELL_GARROTE               = 37066,
+    SPELL_BLIND                 = 34694,
+    SPELL_GOUGE                 = 29425,
+    SPELL_FRENZY                = 37023,
+
+    // Adds
+    SPELL_MANABURN              = 29405,
+    SPELL_MINDFLY               = 29570,
+    SPELL_SWPAIN                = 34441,
+    SPELL_SHADOWFORM            = 29406,
+
+    SPELL_HAMMEROFJUSTICE       = 13005,
+    SPELL_JUDGEMENTOFCOMMAND    = 29386,
+    SPELL_SEALOFCOMMAND         = 29385,
+
+    SPELL_DISPELMAGIC           = 15090,
+    SPELL_GREATERHEAL           = 29564,
+    SPELL_HOLYFIRE              = 29563,
+    SPELL_PWSHIELD              = 29408,
+
+    SPELL_CLEANSE               = 29380,
+    SPELL_GREATERBLESSOFMIGHT   = 29381,
+    SPELL_HOLYLIGHT             = 29562,
+    SPELL_DIVINESHIELD          = 41367,
+
+    SPELL_HAMSTRING             = 9080,
+    SPELL_MORTALSTRIKE          = 29572,
+    SPELL_WHIRLWIND             = 29573,
+
+    SPELL_DISARM                = 8379,
+    SPELL_HEROICSTRIKE          = 29567,
+    SPELL_SHIELDBASH            = 11972,
+    SPELL_SHIELDWALL            = 29390
+};
+
+Position const Locations[4] =
+{
+    {-10991.0f, -1884.33f, 81.73f, 0.614315f},
+    {-10989.4f, -1885.88f, 81.73f, 0.904913f},
+    {-10978.1f, -1887.07f, 81.73f, 2.035550f},
+    {-10975.9f, -1885.81f, 81.73f, 2.253890f},
 };
 
 const uint32 Adds[6]=
@@ -67,24 +98,36 @@ class boss_moroes : public CreatureScript
 public:
     boss_moroes() : CreatureScript("boss_moroes") { }
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new boss_moroesAI (creature);
+        return GetKarazhanAI<boss_moroesAI>(creature);
     }
 
     struct boss_moroesAI : public ScriptedAI
     {
         boss_moroesAI(Creature* creature) : ScriptedAI(creature)
         {
+            Initialize();
             memset(AddId, 0, sizeof(AddId));
-            memset(AddGUID, 0, sizeof(AddGUID));
 
             instance = creature->GetInstanceScript();
         }
 
+        void Initialize()
+        {
+            Vanish_Timer = 30000;
+            Blind_Timer = 35000;
+            Gouge_Timer = 23000;
+            Wait_Timer = 0;
+            CheckAdds_Timer = 5000;
+
+            Enrage = false;
+            InVanish = false;
+        }
+
         InstanceScript* instance;
 
-        uint64 AddGUID[4];
+        ObjectGuid AddGUID[4];
 
         uint32 Vanish_Timer;
         uint32 Blind_Timer;
@@ -96,32 +139,23 @@ public:
         bool InVanish;
         bool Enrage;
 
-        void Reset()
+        void Reset() override
         {
-            Vanish_Timer = 30000;
-            Blind_Timer = 35000;
-            Gouge_Timer = 23000;
-            Wait_Timer = 0;
-            CheckAdds_Timer = 5000;
-
-            Enrage = false;
-            InVanish = false;
-            if (me->GetHealth())
+            Initialize();
+            if (me->IsAlive())
                 SpawnAdds();
 
-            if (instance)
-                instance->SetData(TYPE_MOROES, NOT_STARTED);
+            instance->SetBossState(DATA_MOROES, NOT_STARTED);
         }
 
         void StartEvent()
         {
-            if (instance)
-                instance->SetData(TYPE_MOROES, IN_PROGRESS);
+            instance->SetBossState(DATA_MOROES, IN_PROGRESS);
 
             DoZoneInCombat();
         }
 
-        void EnterCombat(Unit* /*who*/)
+        void JustEngagedWith(Unit* /*who*/) override
         {
             StartEvent();
 
@@ -130,61 +164,54 @@ public:
             DoZoneInCombat();
         }
 
-        void KilledUnit(Unit* /*victim*/)
+        void KilledUnit(Unit* /*victim*/) override
         {
             Talk(SAY_KILL);
         }
 
-        void JustDied(Unit* /*killer*/)
+        void JustDied(Unit* /*killer*/) override
         {
             Talk(SAY_DEATH);
 
-            if (instance)
-                instance->SetData(TYPE_MOROES, DONE);
+            instance->SetBossState(DATA_MOROES, DONE);
 
             DeSpawnAdds();
 
             //remove aura from spell Garrote when Moroes dies
-            if (instance)
-                instance->DoRemoveAurasDueToSpellOnPlayers(SPELL_GARROTE);
+            instance->DoRemoveAurasDueToSpellOnPlayers(SPELL_GARROTE);
         }
 
         void SpawnAdds()
         {
             DeSpawnAdds();
+
             if (isAddlistEmpty())
             {
-                Creature* creature = NULL;
-                std::vector<uint32> AddList;
+                std::list<uint32> AddList;
 
                 for (uint8 i = 0; i < 6; ++i)
                     AddList.push_back(Adds[i]);
 
-                while (AddList.size() > 4)
-                    AddList.erase((AddList.begin())+(rand()%AddList.size()));
+                Trinity::Containers::RandomResize(AddList, 4);
 
                 uint8 i = 0;
-                for (std::vector<uint32>::const_iterator itr = AddList.begin(); itr != AddList.end(); ++itr)
+                for (std::list<uint32>::const_iterator itr = AddList.begin(); itr != AddList.end() && i < 4; ++itr, ++i)
                 {
                     uint32 entry = *itr;
 
-                    creature = me->SummonCreature(entry, Locations[i][0], Locations[i][1], POS_Z, Locations[i][2], TEMPSUMMON_CORPSE_TIMED_DESPAWN, 10000);
-                    if (creature)
+                    if (Creature* creature = me->SummonCreature(entry, Locations[i], TEMPSUMMON_CORPSE_TIMED_DESPAWN, 10000))
                     {
                         AddGUID[i] = creature->GetGUID();
                         AddId[i] = entry;
                     }
-                    ++i;
                 }
-            }else
+            }
+            else
             {
                 for (uint8 i = 0; i < 4; ++i)
                 {
-                    Creature* creature = me->SummonCreature(AddId[i], Locations[i][0], Locations[i][1], POS_Z, Locations[i][2], TEMPSUMMON_CORPSE_TIMED_DESPAWN, 10000);
-                    if (creature)
-                    {
+                    if (Creature* creature = me->SummonCreature(AddId[i], Locations[i], TEMPSUMMON_CORPSE_TIMED_DESPAWN, 10000))
                         AddGUID[i] = creature->GetGUID();
-                    }
                 }
             }
         }
@@ -204,9 +231,8 @@ public:
             {
                 if (AddGUID[i])
                 {
-                    Creature* temp = Creature::GetCreature((*me), AddGUID[i]);
-                    if (temp && temp->isAlive())
-                        temp->DisappearAndDie();
+                    if (Creature* temp = ObjectAccessor::GetCreature(*me, AddGUID[i]))
+                        temp->DespawnOrUnsummon();
                 }
             }
         }
@@ -217,8 +243,8 @@ public:
             {
                 if (AddGUID[i])
                 {
-                    Creature* temp = Creature::GetCreature((*me), AddGUID[i]);
-                    if (temp && temp->isAlive())
+                    Creature* temp = ObjectAccessor::GetCreature((*me), AddGUID[i]);
+                    if (temp && temp->IsAlive())
                     {
                         temp->AI()->AttackStart(me->GetVictim());
                         DoZoneInCombat(temp);
@@ -228,16 +254,10 @@ public:
             }
         }
 
-        void UpdateAI(const uint32 diff)
+        void UpdateAI(uint32 diff) override
         {
             if (!UpdateVictim())
                 return;
-
-            if (instance && !instance->GetData(TYPE_MOROES))
-            {
-                EnterEvadeMode();
-                return;
-            }
 
             if (!Enrage && HealthBelowPct(30))
             {
@@ -251,8 +271,8 @@ public:
                 {
                     if (AddGUID[i])
                     {
-                        Creature* temp = Unit::GetCreature((*me), AddGUID[i]);
-                        if (temp && temp->isAlive())
+                        Creature* temp = ObjectAccessor::GetCreature((*me), AddGUID[i]);
+                        if (temp && temp->IsAlive())
                             if (!temp->GetVictim())
                                 temp->AI()->AttackStart(me->GetVictim());
                     }
@@ -279,14 +299,8 @@ public:
 
                 if (Blind_Timer <= diff)
                 {
-                    std::list<Unit*> targets;
-                    SelectTargetList(targets, 5, SELECT_TARGET_RANDOM, me->GetMeleeReach()*5, true);
-                    for (std::list<Unit*>::const_iterator i = targets.begin(); i != targets.end(); ++i)
-                        if (!me->IsWithinMeleeRange(*i))
-                        {
-                            DoCast(*i, SPELL_BLIND);
-                            break;
-                        }
+                    if (Unit* target = SelectTarget(SelectTargetMethod::MinDistance, 0, 0.0f, true, false))
+                      DoCast(target, SPELL_BLIND);
                     Blind_Timer = 40000;
                 } else Blind_Timer -= diff;
             }
@@ -297,7 +311,7 @@ public:
                 {
                     Talk(SAY_SPECIAL);
 
-                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true))
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100, true))
                         target->CastSpell(target, SPELL_GARROTE, true);
 
                     InVanish = false;
@@ -314,114 +328,87 @@ struct boss_moroes_guestAI : public ScriptedAI
 {
     InstanceScript* instance;
 
-    uint64 GuestGUID[4];
+    ObjectGuid GuestGUID[4];
 
     boss_moroes_guestAI(Creature* creature) : ScriptedAI(creature)
     {
-        for (uint8 i = 0; i < 4; ++i)
-            GuestGUID[i] = 0;
-
         instance = creature->GetInstanceScript();
     }
 
-    void Reset()
+    void Reset() override
     {
-        if (instance)
-            instance->SetData(TYPE_MOROES, NOT_STARTED);
+        instance->SetBossState(DATA_MOROES, NOT_STARTED);
     }
 
     void AcquireGUID()
     {
-        if (!instance)
-            return;
-
-        if (Creature* Moroes = Unit::GetCreature(*me, instance->GetData64(DATA_MOROES)))
+        if (Creature* Moroes = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_MOROES)))
             for (uint8 i = 0; i < 4; ++i)
-                if (uint64 GUID = CAST_AI(boss_moroes::boss_moroesAI, Moroes->AI())->AddGUID[i])
+                if (ObjectGuid GUID = ENSURE_AI(boss_moroes::boss_moroesAI, Moroes->AI())->AddGUID[i])
                     GuestGUID[i] = GUID;
     }
 
     Unit* SelectGuestTarget()
     {
-        uint64 TempGUID = GuestGUID[rand()%4];
+        ObjectGuid TempGUID = GuestGUID[rand32() % 4];
         if (TempGUID)
         {
-            Unit* unit = Unit::GetUnit(*me, TempGUID);
-            if (unit && unit->isAlive())
+            Unit* unit = ObjectAccessor::GetUnit(*me, TempGUID);
+            if (unit && unit->IsAlive())
                 return unit;
         }
 
         return me;
     }
 
-    void UpdateAI(const uint32 /*diff*/)
+    void UpdateAI(uint32 /*diff*/) override
     {
-        if (instance && !instance->GetData(TYPE_MOROES))
+        if (instance->GetBossState(DATA_MOROES) != IN_PROGRESS)
             EnterEvadeMode();
 
         DoMeleeAttackIfReady();
     }
 };
 
-#define SPELL_MANABURN       29405
-#define SPELL_MINDFLY        29570
-#define SPELL_SWPAIN         34441
-#define SPELL_SHADOWFORM     29406
-
-#define SPELL_HAMMEROFJUSTICE       13005
-#define SPELL_JUDGEMENTOFCOMMAND    29386
-#define SPELL_SEALOFCOMMAND         29385
-
-#define SPELL_DISPELMAGIC           15090                   //Self or other guest+Moroes
-#define SPELL_GREATERHEAL           29564                   //Self or other guest+Moroes
-#define SPELL_HOLYFIRE              29563
-#define SPELL_PWSHIELD              29408
-
-#define SPELL_CLEANSE               29380                   //Self or other guest+Moroes
-#define SPELL_GREATERBLESSOFMIGHT   29381                   //Self or other guest+Moroes
-#define SPELL_HOLYLIGHT             29562                   //Self or other guest+Moroes
-#define SPELL_DIVINESHIELD          41367
-
-#define SPELL_HAMSTRING         9080
-#define SPELL_MORTALSTRIKE      29572
-#define SPELL_WHIRLWIND         29573
-
-#define SPELL_DISARM            8379
-#define SPELL_HEROICSTRIKE      29567
-#define SPELL_SHIELDBASH        11972
-#define SPELL_SHIELDWALL        29390
-
 class boss_baroness_dorothea_millstipe : public CreatureScript
 {
 public:
     boss_baroness_dorothea_millstipe() : CreatureScript("boss_baroness_dorothea_millstipe") { }
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new boss_baroness_dorothea_millstipeAI (creature);
+        return GetKarazhanAI<boss_baroness_dorothea_millstipeAI>(creature);
     }
 
     struct boss_baroness_dorothea_millstipeAI : public boss_moroes_guestAI
     {
         //Shadow Priest
-        boss_baroness_dorothea_millstipeAI(Creature* creature) : boss_moroes_guestAI(creature) {}
+        boss_baroness_dorothea_millstipeAI(Creature* creature) : boss_moroes_guestAI(creature)
+        {
+            Initialize();
+        }
+
+        void Initialize()
+        {
+            ManaBurn_Timer = 7000;
+            MindFlay_Timer = 1000;
+            ShadowWordPain_Timer = 6000;
+        }
 
         uint32 ManaBurn_Timer;
         uint32 MindFlay_Timer;
         uint32 ShadowWordPain_Timer;
 
-        void Reset()
+        void Reset() override
         {
-            ManaBurn_Timer = 7000;
-            MindFlay_Timer = 1000;
-            ShadowWordPain_Timer = 6000;
+            Initialize();
 
             DoCast(me, SPELL_SHADOWFORM, true);
 
             boss_moroes_guestAI::Reset();
         }
 
-        void UpdateAI(const uint32 diff)
+        void UpdateAI(uint32 diff) override
         {
             if (!UpdateVictim())
                 return;
@@ -436,15 +423,15 @@ public:
 
             if (ManaBurn_Timer <= diff)
             {
-                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true))
-                    if (target->getPowerType() == POWER_MANA)
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100, true))
+                    if (target->GetPowerType() == POWER_MANA)
                         DoCast(target, SPELL_MANABURN);
                 ManaBurn_Timer = 5000;                          // 3 sec cast
             } else ManaBurn_Timer -= diff;
 
             if (ShadowWordPain_Timer <= diff)
             {
-                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true))
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100, true))
                 {
                     DoCast(target, SPELL_SWPAIN);
                     ShadowWordPain_Timer = 7000;
@@ -459,30 +446,38 @@ class boss_baron_rafe_dreuger : public CreatureScript
 public:
     boss_baron_rafe_dreuger() : CreatureScript("boss_baron_rafe_dreuger") { }
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new boss_baron_rafe_dreugerAI (creature);
+        return GetKarazhanAI<boss_baron_rafe_dreugerAI>(creature);
     }
 
     struct boss_baron_rafe_dreugerAI : public boss_moroes_guestAI
     {
         //Retr Pally
-        boss_baron_rafe_dreugerAI(Creature* creature) : boss_moroes_guestAI(creature){}
+        boss_baron_rafe_dreugerAI(Creature* creature) : boss_moroes_guestAI(creature)
+        {
+            Initialize();
+        }
+
+        void Initialize()
+        {
+            HammerOfJustice_Timer = 1000;
+            SealOfCommand_Timer = 7000;
+            JudgementOfCommand_Timer = SealOfCommand_Timer + 29000;
+        }
 
         uint32 HammerOfJustice_Timer;
         uint32 SealOfCommand_Timer;
         uint32 JudgementOfCommand_Timer;
 
-        void Reset()
+        void Reset() override
         {
-            HammerOfJustice_Timer = 1000;
-            SealOfCommand_Timer = 7000;
-            JudgementOfCommand_Timer = SealOfCommand_Timer + 29000;
+            Initialize();
 
             boss_moroes_guestAI::Reset();
         }
 
-        void UpdateAI(const uint32 diff)
+        void UpdateAI(uint32 diff) override
         {
             if (!UpdateVictim())
                 return;
@@ -516,34 +511,42 @@ class boss_lady_catriona_von_indi : public CreatureScript
 public:
     boss_lady_catriona_von_indi() : CreatureScript("boss_lady_catriona_von_indi") { }
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new boss_lady_catriona_von_indiAI (creature);
+        return GetKarazhanAI<boss_lady_catriona_von_indiAI>(creature);
     }
 
     struct boss_lady_catriona_von_indiAI : public boss_moroes_guestAI
     {
         //Holy Priest
-        boss_lady_catriona_von_indiAI(Creature* creature) : boss_moroes_guestAI(creature) {}
+        boss_lady_catriona_von_indiAI(Creature* creature) : boss_moroes_guestAI(creature)
+        {
+            Initialize();
+        }
+
+        void Initialize()
+        {
+            DispelMagic_Timer = 11000;
+            GreaterHeal_Timer = 1500;
+            HolyFire_Timer = 5000;
+            PowerWordShield_Timer = 1000;
+        }
 
         uint32 DispelMagic_Timer;
         uint32 GreaterHeal_Timer;
         uint32 HolyFire_Timer;
         uint32 PowerWordShield_Timer;
 
-        void Reset()
+        void Reset() override
         {
-            DispelMagic_Timer = 11000;
-            GreaterHeal_Timer = 1500;
-            HolyFire_Timer = 5000;
-            PowerWordShield_Timer = 1000;
+            Initialize();
 
             AcquireGUID();
 
             boss_moroes_guestAI::Reset();
         }
 
-        void UpdateAI(const uint32 diff)
+        void UpdateAI(uint32 diff) override
         {
             if (!UpdateVictim())
                 return;
@@ -572,7 +575,7 @@ public:
 
             if (DispelMagic_Timer <= diff)
             {
-                if (Unit* target = RAND(SelectGuestTarget(), SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true)))
+                if (Unit* target = RAND(SelectGuestTarget(), SelectTarget(SelectTargetMethod::Random, 0, 100, true)))
                     DoCast(target, SPELL_DISPELMAGIC);
 
                 DispelMagic_Timer = 25000;
@@ -586,34 +589,42 @@ class boss_lady_keira_berrybuck : public CreatureScript
 public:
     boss_lady_keira_berrybuck() : CreatureScript("boss_lady_keira_berrybuck") { }
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new boss_lady_keira_berrybuckAI (creature);
+        return GetKarazhanAI<boss_lady_keira_berrybuckAI>(creature);
     }
 
     struct boss_lady_keira_berrybuckAI : public boss_moroes_guestAI
     {
         //Holy Pally
-        boss_lady_keira_berrybuckAI(Creature* creature) : boss_moroes_guestAI(creature)  {}
+        boss_lady_keira_berrybuckAI(Creature* creature) : boss_moroes_guestAI(creature)
+        {
+            Initialize();
+        }
+
+        void Initialize()
+        {
+            Cleanse_Timer = 13000;
+            GreaterBless_Timer = 1000;
+            HolyLight_Timer = 7000;
+            DivineShield_Timer = 31000;
+        }
 
         uint32 Cleanse_Timer;
         uint32 GreaterBless_Timer;
         uint32 HolyLight_Timer;
         uint32 DivineShield_Timer;
 
-        void Reset()
+        void Reset() override
         {
-            Cleanse_Timer = 13000;
-            GreaterBless_Timer = 1000;
-            HolyLight_Timer = 7000;
-            DivineShield_Timer = 31000;
+            Initialize();
 
             AcquireGUID();
 
             boss_moroes_guestAI::Reset();
         }
 
-        void UpdateAI(const uint32 diff)
+        void UpdateAI(uint32 diff) override
         {
             if (!UpdateVictim())
                 return;
@@ -660,30 +671,38 @@ class boss_lord_robin_daris : public CreatureScript
 public:
     boss_lord_robin_daris() : CreatureScript("boss_lord_robin_daris") { }
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new boss_lord_robin_darisAI (creature);
+        return GetKarazhanAI<boss_lord_robin_darisAI>(creature);
     }
 
     struct boss_lord_robin_darisAI : public boss_moroes_guestAI
     {
         //Arms Warr
-        boss_lord_robin_darisAI(Creature* creature) : boss_moroes_guestAI(creature) {}
+        boss_lord_robin_darisAI(Creature* creature) : boss_moroes_guestAI(creature)
+        {
+            Initialize();
+        }
+
+        void Initialize()
+        {
+            Hamstring_Timer = 7000;
+            MortalStrike_Timer = 10000;
+            WhirlWind_Timer = 21000;
+        }
 
         uint32 Hamstring_Timer;
         uint32 MortalStrike_Timer;
         uint32 WhirlWind_Timer;
 
-        void Reset()
+        void Reset() override
         {
-            Hamstring_Timer = 7000;
-            MortalStrike_Timer = 10000;
-            WhirlWind_Timer = 21000;
+            Initialize();
 
             boss_moroes_guestAI::Reset();
         }
 
-        void UpdateAI(const uint32 diff)
+        void UpdateAI(uint32 diff) override
         {
             if (!UpdateVictim())
                 return;
@@ -716,32 +735,40 @@ class boss_lord_crispin_ference : public CreatureScript
 public:
     boss_lord_crispin_ference() : CreatureScript("boss_lord_crispin_ference") { }
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new boss_lord_crispin_ferenceAI (creature);
+        return GetKarazhanAI<boss_lord_crispin_ferenceAI>(creature);
     }
 
     struct boss_lord_crispin_ferenceAI : public boss_moroes_guestAI
     {
         //Arms Warr
-        boss_lord_crispin_ferenceAI(Creature* creature) : boss_moroes_guestAI(creature) {}
+        boss_lord_crispin_ferenceAI(Creature* creature) : boss_moroes_guestAI(creature)
+        {
+            Initialize();
+        }
+
+        void Initialize()
+        {
+            Disarm_Timer = 6000;
+            HeroicStrike_Timer = 10000;
+            ShieldBash_Timer = 8000;
+            ShieldWall_Timer = 4000;
+        }
 
         uint32 Disarm_Timer;
         uint32 HeroicStrike_Timer;
         uint32 ShieldBash_Timer;
         uint32 ShieldWall_Timer;
 
-        void Reset()
+        void Reset() override
         {
-            Disarm_Timer = 6000;
-            HeroicStrike_Timer = 10000;
-            ShieldBash_Timer = 8000;
-            ShieldWall_Timer = 4000;
+            Initialize();
 
             boss_moroes_guestAI::Reset();
         }
 
-        void UpdateAI(const uint32 diff)
+        void UpdateAI(uint32 diff) override
         {
             if (!UpdateVictim())
                 return;

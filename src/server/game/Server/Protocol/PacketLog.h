@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,7 +19,9 @@
 #define TRINITY_PACKETLOG_H
 
 #include "Common.h"
-#include <ace/Singleton.h>
+
+#include <boost/asio/ip/address.hpp>
+#include <mutex>
 
 enum Direction
 {
@@ -29,22 +31,24 @@ enum Direction
 
 class WorldPacket;
 
-class PacketLog
+class TC_GAME_API PacketLog
 {
-    friend class ACE_Singleton<PacketLog, ACE_Thread_Mutex>;
-
     private:
         PacketLog();
         ~PacketLog();
+        std::mutex _logPacketLock;
+        std::once_flag _initializeFlag;
 
     public:
+        static PacketLog* instance();
+
         void Initialize();
-        bool CanLogPacket() const { return (_file != NULL); }
-        void LogPacket(WorldPacket const& packet, Direction direction);
+        bool CanLogPacket() const { return (_file != nullptr); }
+        void LogPacket(WorldPacket const& packet, Direction direction, boost::asio::ip::address const& addr, uint16 port);
 
     private:
         FILE* _file;
 };
 
-#define sPacketLog ACE_Singleton<PacketLog, ACE_Thread_Mutex>::instance()
+#define sPacketLog PacketLog::instance()
 #endif

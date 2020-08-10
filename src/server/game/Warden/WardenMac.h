@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -28,19 +27,19 @@
 class WorldSession;
 class Warden;
 
-class WardenMac : public Warden
+class TC_GAME_API WardenMac : public Warden
 {
     public:
         WardenMac();
         ~WardenMac();
 
-        void Init(WorldSession* session, BigNumber* k);
-        ClientWardenModule* GetModuleForClient();
-        void InitializeModule();
-        void RequestHash();
-        void HandleHashResult(ByteBuffer& buff);
-        void RequestData();
-        void HandleData(ByteBuffer& buff);
+        void Init(WorldSession* session, BigNumber* k) override;
+        ClientWardenModule* GetModuleForClient() override;
+        void InitializeModule() override;
+        void RequestHash() override;
+        void HandleHashResult(ByteBuffer& buff) override;
+        void RequestData() override;
+        void HandleData(ByteBuffer& buff) override;
 };
 
 #endif

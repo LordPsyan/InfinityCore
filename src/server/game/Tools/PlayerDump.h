@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,6 +21,7 @@
 #include <string>
 #include <map>
 #include <set>
+#include "ObjectGuid.h"
 
 enum DumpTableType
 {
@@ -30,8 +30,7 @@ enum DumpTableType
     DTT_CHAR_TABLE,     //                                  // character_achievement, character_achievement_progress,
                                                             // character_action, character_aura, character_homebind,
                                                             // character_queststatus, character_queststatus_rewarded, character_reputation,
-                                                            // character_spell, character_spell_cooldown, character_ticket, character_talent.
-                                                            // character_cuf_profiles, character_currency
+                                                            // character_spell, character_spell_cooldown, character_ticket, character_talent
 
     DTT_EQSET_TABLE,    // <- guid                          // character_equipmentsets
 
@@ -57,42 +56,48 @@ enum DumpReturn
     DUMP_SUCCESS,
     DUMP_FILE_OPEN_ERROR,
     DUMP_TOO_MANY_CHARS,
-    DUMP_UNEXPECTED_END,
     DUMP_FILE_BROKEN,
     DUMP_CHARACTER_DELETED
 };
 
-class PlayerDump
+struct DumpTable;
+struct TableStruct;
+class StringTransaction;
+
+class TC_GAME_API PlayerDump
 {
+    public:
+        static void InitializeTables();
+
     protected:
-        PlayerDump() {}
+        PlayerDump() { }
 };
 
-class PlayerDumpWriter : public PlayerDump
+class TC_GAME_API PlayerDumpWriter : public PlayerDump
 {
     public:
-        PlayerDumpWriter() {}
+        PlayerDumpWriter() { }
 
-        bool GetDump(uint32 guid, std::string& dump);
-        DumpReturn WriteDump(std::string const& file, uint32 guid);
+        bool GetDump(ObjectGuid::LowType guid, std::string& dump);
+        DumpReturn WriteDump(std::string const& file, ObjectGuid::LowType guid);
+
     private:
-        typedef std::set<uint32> GUIDs;
+        bool AppendTable(StringTransaction& trans, ObjectGuid::LowType guid, TableStruct const& tableStruct, DumpTable const& dumpTable);
+        void PopulateGuids(ObjectGuid::LowType guid);
 
-        bool DumpTable(std::string& dump, uint32 guid, char const*tableFrom, char const*tableTo, DumpTableType type);
-        std::string GenerateWhereStr(char const* field, GUIDs const& guids, GUIDs::const_iterator& itr);
-        std::string GenerateWhereStr(char const* field, uint32 guid);
+        std::set<ObjectGuid::LowType> _pets;
+        std::set<ObjectGuid::LowType> _mails;
+        std::set<ObjectGuid::LowType> _items;
 
-        GUIDs pets;
-        GUIDs mails;
-        GUIDs items;
+        std::set<uint64> _itemSets;
 };
 
-class PlayerDumpReader : public PlayerDump
+class TC_GAME_API PlayerDumpReader : public PlayerDump
 {
     public:
-        PlayerDumpReader() {}
+        PlayerDumpReader() { }
 
-        DumpReturn LoadDump(std::string const& file, uint32 account, std::string name, uint32 guid);
+        DumpReturn LoadDump(std::string const& file, uint32 account, std::string name, ObjectGuid::LowType guid);
 };
 
 #endif

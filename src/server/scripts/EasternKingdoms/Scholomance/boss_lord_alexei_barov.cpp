@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,14 +22,15 @@ SDComment: aura applied/defined in database
 SDCategory: Scholomance
 EndScriptData */
 
+#include "scholomance.h"
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
-#include "scholomance.h"
 
 enum Spells
 {
-    SPELL_IMMOLATE                  = 20294, // Old ID  was 15570
-    SPELL_VEILOFSHADOW              = 17820
+    SPELL_IMMOLATE                  = 20294,
+    SPELL_VEILOFSHADOW              = 17820,
+    SPELL_UNHOLY_AURA               = 17467
 };
 
 enum Events
@@ -44,22 +45,24 @@ class boss_lord_alexei_barov : public CreatureScript
 
         struct boss_lordalexeibarovAI : public BossAI
         {
-            boss_lordalexeibarovAI(Creature* creature) : BossAI(creature, DATA_LORDALEXEIBAROV) {}
+            boss_lordalexeibarovAI(Creature* creature) : BossAI(creature, DATA_LORDALEXEIBAROV) { }
 
-            void Reset()
+            void Reset() override
             {
                 _Reset();
-                me->LoadCreaturesAddon();
+
+                if (!me->HasAura(SPELL_UNHOLY_AURA))
+                    DoCast(me, SPELL_UNHOLY_AURA);
             }
 
-            void EnterCombat(Unit* /*who*/)
+            void JustEngagedWith(Unit* who) override
             {
-                _EnterCombat();
-                events.ScheduleEvent(EVENT_IMMOLATE, 7000);
-                events.ScheduleEvent(EVENT_VEILOFSHADOW, 15000);
+                BossAI::JustEngagedWith(who);
+                events.ScheduleEvent(EVENT_IMMOLATE, 7s);
+                events.ScheduleEvent(EVENT_VEILOFSHADOW, 15s);
             }
 
-            void UpdateAI(uint32 const diff)
+            void UpdateAI(uint32 diff) override
             {
                 if (!UpdateVictim())
                     return;
@@ -74,25 +77,28 @@ class boss_lord_alexei_barov : public CreatureScript
                     switch (eventId)
                     {
                         case EVENT_IMMOLATE:
-                            DoCast(SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true), SPELL_IMMOLATE, true);
-                            events.ScheduleEvent(EVENT_IMMOLATE, 12000);
+                            DoCast(SelectTarget(SelectTargetMethod::Random, 0, 100, true), SPELL_IMMOLATE, true);
+                            events.ScheduleEvent(EVENT_IMMOLATE, 12s);
                             break;
                         case EVENT_VEILOFSHADOW:
                             DoCastVictim(SPELL_VEILOFSHADOW, true);
-                            events.ScheduleEvent(EVENT_VEILOFSHADOW, 20000);
+                            events.ScheduleEvent(EVENT_VEILOFSHADOW, 20s);
                             break;
                         default:
                             break;
                     }
+
+                    if (me->HasUnitState(UNIT_STATE_CASTING))
+                        return;
                 }
 
                 DoMeleeAttackIfReady();
             }
         };
 
-        CreatureAI* GetAI(Creature* creature) const
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            return new boss_lordalexeibarovAI (creature);
+            return GetScholomanceAI<boss_lordalexeibarovAI>(creature);
         }
 };
 

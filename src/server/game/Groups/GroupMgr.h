@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,18 +20,19 @@
 
 #include "Group.h"
 
-class GroupMgr
+class TC_GAME_API GroupMgr
 {
-    friend class ACE_Singleton<GroupMgr, ACE_Null_Mutex>;
 private:
     GroupMgr();
     ~GroupMgr();
 
 public:
-    typedef std::map<uint32, Group*> GroupContainer;
+    static GroupMgr* instance();
+
+    typedef std::map<ObjectGuid::LowType, Group*> GroupContainer;
     typedef std::vector<Group*>      GroupDbContainer;
 
-    Group* GetGroupByGUID(uint32 guid) const;
+    Group* GetGroupByGUID(ObjectGuid::LowType guid) const;
 
     uint32 GenerateNewGroupDbStoreId();
     void   RegisterGroupDbStoreId(uint32 storageId, Group* group);
@@ -40,19 +41,21 @@ public:
     Group* GetGroupByDbStoreId(uint32 storageId) const;
     void   SetGroupDbStoreSize(uint32 newSize) { GroupDbStore.resize(newSize); }
 
+    void Update(uint32 diff);
+
     void   LoadGroups();
-    uint32 GenerateGroupId();
+    ObjectGuid::LowType GenerateGroupId();
     void   AddGroup(Group* group);
     void   RemoveGroup(Group* group);
 
 
 protected:
-    uint32           NextGroupId;
+    ObjectGuid::LowType           NextGroupId;
     uint32           NextGroupDbStoreId;
     GroupContainer   GroupStore;
     GroupDbContainer GroupDbStore;
 };
 
-#define sGroupMgr ACE_Singleton<GroupMgr, ACE_Null_Mutex>::instance()
+#define sGroupMgr GroupMgr::instance()
 
 #endif

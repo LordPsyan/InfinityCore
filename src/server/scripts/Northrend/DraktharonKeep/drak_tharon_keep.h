@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,14 +18,14 @@
 #ifndef DRAK_THARON_KEEP_H_
 #define DRAK_THARON_KEEP_H_
 
-#include "Map.h"
-#include "Creature.h"
+#include "CreatureAIImpl.h"
 
 #define DrakTharonKeepScriptName "instance_drak_tharon_keep"
+#define DataHeader               "DTK"
 
 uint32 const EncounterCount = 4;
 
-enum DataTypes
+enum DTKDataTypes
 {
     // Encounter States/Boss GUIDs
     DATA_TROLLGORE                      = 0,
@@ -39,6 +39,7 @@ enum DataTypes
     DATA_TROLLGORE_INVADER_SUMMONER_1,
     DATA_TROLLGORE_INVADER_SUMMONER_2,
     DATA_TROLLGORE_INVADER_SUMMONER_3,
+
     DATA_NOVOS_CRYSTAL_1,
     DATA_NOVOS_CRYSTAL_2,
     DATA_NOVOS_CRYSTAL_3,
@@ -51,7 +52,7 @@ enum DataTypes
     ACTION_CRYSTAL_HANDLER_DIED
 };
 
-enum CreatureIds
+enum DTKCreatureIds
 {
     NPC_TROLLGORE                       = 26630,
     NPC_NOVOS                           = 26631,
@@ -62,6 +63,7 @@ enum CreatureIds
     NPC_DRAKKARI_INVADER_A              = 27709,
     NPC_DRAKKARI_INVADER_B              = 27753,
     NPC_DRAKKARI_INVADER_C              = 27754,
+
     // Novos
     NPC_CRYSTAL_CHANNEL_TARGET          = 26712,
     NPC_CRYSTAL_HANDLER                 = 26627,
@@ -76,7 +78,7 @@ enum CreatureIds
     NPC_WORLD_TRIGGER                   = 22515
 };
 
-enum GameObjectIds
+enum DTKGameObjectIds
 {
     GO_NOVOS_CRYSTAL_1                  = 189299,
     GO_NOVOS_CRYSTAL_2                  = 189300,
@@ -84,14 +86,10 @@ enum GameObjectIds
     GO_NOVOS_CRYSTAL_4                  = 189302
 };
 
-template<class AI>
-AI* GetDrakTharonKeepAI(Creature* creature)
+template <class AI, class T>
+inline AI* GetDrakTharonKeepAI(T* obj)
 {
-    if (InstanceMap* instance = creature->GetMap()->ToInstanceMap())
-        if (instance->GetInstanceScript())
-            if (instance->GetScriptId() == sObjectMgr->GetScriptId(DrakTharonKeepScriptName))
-                return new AI(creature);
-    return NULL;
+    return GetInstanceAI<AI>(obj, DrakTharonKeepScriptName);
 }
 
 #endif // DRAK_THARON_KEEP_H_

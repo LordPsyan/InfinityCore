@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -25,8 +24,9 @@ EndScriptData */
 
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
+#include "stratholme.h"
 
-enum eEnums
+enum Spells
 {
     //Dathrohan spells
     SPELL_CRUSADERSHAMMER           = 17286,                //AOE stun
@@ -41,8 +41,11 @@ enum eEnums
     SPELL_MINDBLAST                 = 17287,
     SPELL_PSYCHICSCREAM             = 13704,
     SPELL_SLEEP                     = 12098,
-    SPELL_MINDCONTROL               = 15690,
+    SPELL_MINDCONTROL               = 15690
+};
 
+enum Creatures
+{
     NPC_DATHROHAN                   = 10812,
     NPC_BALNAZZAR                   = 10813,
     NPC_ZOMBIE                      = 10698                 //probably incorrect
@@ -71,14 +74,30 @@ class boss_dathrohan_balnazzar : public CreatureScript
 public:
     boss_dathrohan_balnazzar() : CreatureScript("boss_dathrohan_balnazzar") { }
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new boss_dathrohan_balnazzarAI (creature);
+        return GetStratholmeAI<boss_dathrohan_balnazzarAI>(creature);
     }
 
     struct boss_dathrohan_balnazzarAI : public ScriptedAI
     {
-        boss_dathrohan_balnazzarAI(Creature* creature) : ScriptedAI(creature) {}
+        boss_dathrohan_balnazzarAI(Creature* creature) : ScriptedAI(creature)
+        {
+            Initialize();
+        }
+
+        void Initialize()
+        {
+            m_uiCrusadersHammer_Timer = 8000;
+            m_uiCrusaderStrike_Timer = 12000;
+            m_uiMindBlast_Timer = 6000;
+            m_uiHolyStrike_Timer = 18000;
+            m_uiShadowShock_Timer = 4000;
+            m_uiPsychicScream_Timer = 16000;
+            m_uiDeepSleep_Timer = 20000;
+            m_uiMindControl_Timer = 10000;
+            m_bTransformed = false;
+        }
 
         uint32 m_uiCrusadersHammer_Timer;
         uint32 m_uiCrusaderStrike_Timer;
@@ -90,23 +109,15 @@ public:
         uint32 m_uiMindControl_Timer;
         bool m_bTransformed;
 
-        void Reset()
+        void Reset() override
         {
-            m_uiCrusadersHammer_Timer = 8000;
-            m_uiCrusaderStrike_Timer = 12000;
-            m_uiMindBlast_Timer = 6000;
-            m_uiHolyStrike_Timer = 18000;
-            m_uiShadowShock_Timer = 4000;
-            m_uiPsychicScream_Timer = 16000;
-            m_uiDeepSleep_Timer = 20000;
-            m_uiMindControl_Timer = 10000;
-            m_bTransformed = false;
+            Initialize();
 
             if (me->GetEntry() == NPC_BALNAZZAR)
                 me->UpdateEntry(NPC_DATHROHAN);
         }
 
-        void JustDied(Unit* /*killer*/)
+        void JustDied(Unit* /*killer*/) override
         {
             static uint32 uiCount = sizeof(m_aSummonPoint)/sizeof(SummonDef);
 
@@ -116,11 +127,11 @@ public:
                 TEMPSUMMON_TIMED_DESPAWN, HOUR*IN_MILLISECONDS);
         }
 
-        void EnterCombat(Unit* /*who*/)
+        void JustEngagedWith(Unit* /*who*/) override
         {
         }
 
-        void UpdateAI(const uint32 uiDiff)
+        void UpdateAI(uint32 uiDiff) override
         {
             if (!UpdateVictim())
                 return;
@@ -159,7 +170,7 @@ public:
                 //BalnazzarTransform
                 if (HealthBelowPct(40))
                 {
-                    if (me->IsNonMeleeSpellCasted(false))
+                    if (me->IsNonMeleeSpellCast(false))
                         me->InterruptNonMeleeSpells(false);
 
                     //restore hp, mana and stun
@@ -187,7 +198,7 @@ public:
                 //PsychicScream
                 if (m_uiPsychicScream_Timer <= uiDiff)
                 {
-                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                         DoCast(target, SPELL_PSYCHICSCREAM);
 
                     m_uiPsychicScream_Timer = 20000;
@@ -196,7 +207,7 @@ public:
                 //DeepSleep
                 if (m_uiDeepSleep_Timer <= uiDiff)
                 {
-                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                         DoCast(target, SPELL_SLEEP);
 
                     m_uiDeepSleep_Timer = 15000;

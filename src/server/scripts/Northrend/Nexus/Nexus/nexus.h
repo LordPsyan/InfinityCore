@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,26 +18,57 @@
 #ifndef DEF_NEXUS_H
 #define DEF_NEXUS_H
 
-enum eTypes
+#include "CreatureAIImpl.h"
+
+#define NexusScriptName "instance_nexus"
+#define DataHeader "NEX"
+
+uint32 const EncounterCount = 5;
+
+enum NEXDataTypes
 {
-    DATA_MAGUS_TELESTRA_EVENT,
-    DATA_ANOMALUS_EVENT,
-    DATA_ORMOROK_EVENT,
-    DATA_KERISTRASZA_EVENT,
+    DATA_COMMANDER                    = 0,
+    DATA_MAGUS_TELESTRA               = 1,
+    DATA_ANOMALUS                     = 2,
+    DATA_ORMOROK                      = 3,
+    DATA_KERISTRASZA                  = 4,
 
-    DATA_ANOMALUS,
-    DATA_KERISTRASZA,
-
-    ANOMALUS_CONTAINMET_SPHERE,
-    ORMOROKS_CONTAINMET_SPHERE,
-    TELESTRAS_CONTAINMET_SPHERE
+    ANOMALUS_CONTAINMENT_SPHERE        = 5,
+    ORMOROKS_CONTAINMENT_SPHERE        = 6,
+    TELESTRAS_CONTAINMENT_SPHERE       = 7
 };
 
-enum LegendaryCreatures
+enum NEXCreatureIds
 {
-    NPC_TARECGOSA         = 53439,
-    NPC_ICEBOUND_SENTINEL = 53484,
-    NPC_NEXUS_WARDEN      = 53383,
+    NPC_ANOMALUS                      = 26763,
+    NPC_KERISTRASZA                   = 26723,
+
+    // Alliance
+    NPC_ALLIANCE_BERSERKER            = 26800,
+    NPC_ALLIANCE_RANGER               = 26802,
+    NPC_ALLIANCE_CLERIC               = 26805,
+    NPC_ALLIANCE_COMMANDER            = 27949,
+    NPC_COMMANDER_STOUTBEARD          = 26796,
+
+    // Horde
+    NPC_HORDE_BERSERKER               = 26799,
+    NPC_HORDE_RANGER                  = 26801,
+    NPC_HORDE_CLERIC                  = 26803,
+    NPC_HORDE_COMMANDER               = 27947,
+    NPC_COMMANDER_KOLURG              = 26798
 };
+
+enum NEXGameObjectIds
+{
+    GO_ANOMALUS_CONTAINMENT_SPHERE     = 188527,
+    GO_ORMOROKS_CONTAINMENT_SPHERE     = 188528,
+    GO_TELESTRAS_CONTAINMENT_SPHERE    = 188526
+};
+
+template <class AI, class T>
+inline AI* GetNexusAI(T* obj)
+{
+    return GetInstanceAI<AI>(obj, NexusScriptName);
+}
 
 #endif

@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -27,7 +26,7 @@ EndScriptData */
 #include "ScriptedCreature.h"
 #include "the_botanica.h"
 
-enum eSpells
+enum Spells
 {
     SPELL_ALLERGIC_REACTION    = 34697,
     SPELL_TELEPORT_SELF        = 34673,
@@ -41,7 +40,7 @@ enum eSpells
     SPELL_SUMMON_LASHER_4      = 34688,
     SPELL_SUMMON_FLAYER_3      = 34690
 };
-enum eOthers
+enum Misc
 {
     EMOTE_SUMMON               = 0,
     MODEL_DEFAULT              = 13109,
@@ -62,7 +61,19 @@ class boss_laj : public CreatureScript
 
         struct boss_lajAI : public BossAI
         {
-            boss_lajAI(Creature* creature) : BossAI(creature, DATA_LAJ) { }
+            boss_lajAI(Creature* creature) : BossAI(creature, DATA_LAJ)
+            {
+                Initialize();
+            }
+
+            void Initialize()
+            {
+                CanSummon = false;
+                Teleport_Timer = 20000;
+                Summon_Timer = 2500;
+                Transform_Timer = 30000;
+                Allergic_Timer = 5000;
+            }
 
             bool CanSummon;
             uint32 Teleport_Timer;
@@ -70,7 +81,7 @@ class boss_laj : public CreatureScript
             uint32 Transform_Timer;
             uint32 Allergic_Timer;
 
-            void Reset()
+            void Reset() override
             {
                 me->SetDisplayId(MODEL_DEFAULT);
                 me->ApplySpellImmune(0, IMMUNITY_SCHOOL, SPELL_SCHOOL_MASK_SHADOW, true);
@@ -79,16 +90,12 @@ class boss_laj : public CreatureScript
                 me->ApplySpellImmune(0, IMMUNITY_SCHOOL, SPELL_SCHOOL_MASK_FROST, false);
                 me->ApplySpellImmune(0, IMMUNITY_SCHOOL, SPELL_SCHOOL_MASK_NATURE, false);
 
-                CanSummon = false;
-                Teleport_Timer = 20000;
-                Summon_Timer = 2500;
-                Transform_Timer = 30000;
-                Allergic_Timer = 5000;
+                Initialize();
             }
 
             void DoTransform()
             {
-                switch (rand()%5)
+                switch (rand32() % 5)
                 {
                     case 0:
                         me->SetDisplayId(MODEL_DEFAULT);
@@ -135,7 +142,7 @@ class boss_laj : public CreatureScript
 
             void DoSummons()
             {
-                switch (rand()%4)
+                switch (rand32() % 4)
                 {
                     case 0:
                         DoCast(me, SPELL_SUMMON_LASHER_1, true);
@@ -157,17 +164,17 @@ class boss_laj : public CreatureScript
                 CanSummon = false;
             }
 
-            void EnterCombat(Unit* /*who*/)
+            void JustEngagedWith(Unit* /*who*/) override
             {
             }
 
-            void JustSummoned(Creature* summon)
+            void JustSummoned(Creature* summon) override
             {
                 if (summon && me->GetVictim())
-                    summon->AI()->AttackStart(SelectTarget(SELECT_TARGET_RANDOM, 0));
+                    summon->AI()->AttackStart(SelectTarget(SelectTargetMethod::Random, 0));
             }
 
-            void UpdateAI(const uint32 diff)
+            void UpdateAI(uint32 diff) override
             {
                 if (!UpdateVictim())
                     return;
@@ -187,7 +194,7 @@ class boss_laj : public CreatureScript
                 if (Allergic_Timer <= diff)
                 {
                     DoCastVictim(SPELL_ALLERGIC_REACTION);
-                    Allergic_Timer = 25000+rand()%15000;
+                    Allergic_Timer = 25000 + rand32() % 15000;
                 }
                 else
                     Allergic_Timer -= diff;
@@ -195,7 +202,7 @@ class boss_laj : public CreatureScript
                 if (Teleport_Timer <= diff)
                 {
                     DoCast(me, SPELL_TELEPORT_SELF);
-                    Teleport_Timer = 30000+rand()%10000;
+                    Teleport_Timer = 30000 + rand32() % 10000;
                     CanSummon = true;
                 }
                 else
@@ -204,7 +211,7 @@ class boss_laj : public CreatureScript
                 if (Transform_Timer <= diff)
                 {
                     DoTransform();
-                    Transform_Timer = 25000+rand()%15000;
+                    Transform_Timer = 25000 + rand32() % 15000;
                 }
                 else
                     Transform_Timer -= diff;
@@ -213,9 +220,9 @@ class boss_laj : public CreatureScript
             }
         };
 
-        CreatureAI* GetAI(Creature* creature) const
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            return new boss_lajAI(creature);
+            return GetBotanicaAI<boss_lajAI>(creature);
         }
 };
 
@@ -223,4 +230,3 @@ void AddSC_boss_laj()
 {
     new boss_laj();
 }
-

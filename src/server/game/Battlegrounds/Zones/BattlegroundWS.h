@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,6 +19,7 @@
 #define __BATTLEGROUNDWS_H
 
 #include "Battleground.h"
+#include "BattlegroundScore.h"
 
 enum BG_WS_TimerOrScore
 {
@@ -28,6 +28,23 @@ enum BG_WS_TimerOrScore
     BG_WS_FLAG_DROP_TIME    = 10000,
     BG_WS_SPELL_FORCE_TIME  = 600000,
     BG_WS_SPELL_BRUTAL_TIME = 900000
+};
+
+enum BG_WS_BroadcastTexts
+{
+    BG_WS_TEXT_START_ONE_MINUTE         = 10015,
+    BG_WS_TEXT_START_HALF_MINUTE        = 10016,
+    BG_WS_TEXT_BATTLE_HAS_BEGUN         = 10014,
+
+    BG_WS_TEXT_CAPTURED_HORDE_FLAG      = 9801,
+    BG_WS_TEXT_CAPTURED_ALLIANCE_FLAG   = 9802,
+    BG_WS_TEXT_FLAGS_PLACED             = 9803,
+    BG_WS_TEXT_ALLIANCE_FLAG_PICKED_UP  = 9804,
+    BG_WS_TEXT_ALLIANCE_FLAG_DROPPED    = 9805,
+    BG_WS_TEXT_HORDE_FLAG_PICKED_UP     = 9807,
+    BG_WS_TEXT_HORDE_FLAG_DROPPED       = 9806,
+    BG_WS_TEXT_ALLIANCE_FLAG_RETURNED   = 9808,
+    BG_WS_TEXT_HORDE_FLAG_RETURNED      = 9809,
 };
 
 enum BG_WS_Sound
@@ -146,12 +163,36 @@ enum BG_WS_Objectives
 
 #define WS_EVENT_START_BATTLE   8563
 
-struct BattlegroundWGScore : public BattlegroundScore
+struct BattlegroundWGScore final : public BattlegroundScore
 {
-    BattlegroundWGScore() : FlagCaptures(0), FlagReturns(0) { }
-    ~BattlegroundWGScore() { }
-    uint32 FlagCaptures;
-    uint32 FlagReturns;
+    friend class BattlegroundWS;
+
+    protected:
+        BattlegroundWGScore(ObjectGuid playerGuid) : BattlegroundScore(playerGuid), FlagCaptures(0), FlagReturns(0) { }
+
+        void UpdateScore(uint32 type, uint32 value) override
+        {
+            switch (type)
+            {
+                case SCORE_FLAG_CAPTURES:   // Flags captured
+                    FlagCaptures += value;
+                    break;
+                case SCORE_FLAG_RETURNS:    // Flags returned
+                    FlagReturns += value;
+                    break;
+                default:
+                    BattlegroundScore::UpdateScore(type, value);
+                    break;
+            }
+        }
+
+        void BuildObjectivesBlock(WorldPacket& data) final override;
+
+        uint32 GetAttr1() const final override { return FlagCaptures; }
+        uint32 GetAttr2() const final override { return FlagReturns; }
+
+        uint32 FlagCaptures;
+        uint32 FlagReturns;
 };
 
 class BattlegroundWS : public Battleground
@@ -162,60 +203,64 @@ class BattlegroundWS : public Battleground
         ~BattlegroundWS();
 
         /* inherited from BattlegroundClass */
-        void AddPlayer(Player* player);
-        void StartingEventCloseDoors();
-        void StartingEventOpenDoors();
+        void AddPlayer(Player* player) override;
+        void StartingEventCloseDoors() override;
+        void StartingEventOpenDoors() override;
 
         /* BG Flags */
-        uint64 GetFlagPickerGUID(int32 team) const
+        ObjectGuid GetFlagPickerGUID(int32 team) const override
         {
             if (team == TEAM_ALLIANCE || team == TEAM_HORDE)
                 return m_FlagKeepers[team];
-            return 0;
+            return ObjectGuid::Empty;
         }
-        void SetAllianceFlagPicker(uint64 guid)     { m_FlagKeepers[TEAM_ALLIANCE] = guid; }
-        void SetHordeFlagPicker(uint64 guid)        { m_FlagKeepers[TEAM_HORDE] = guid; }
-        bool IsAllianceFlagPickedup() const         { return m_FlagKeepers[TEAM_ALLIANCE] != 0; }
-        bool IsHordeFlagPickedup() const            { return m_FlagKeepers[TEAM_HORDE] != 0; }
+        void SetAllianceFlagPicker(ObjectGuid guid) { m_FlagKeepers[TEAM_ALLIANCE] = guid; }
+        void SetHordeFlagPicker(ObjectGuid guid)    { m_FlagKeepers[TEAM_HORDE] = guid; }
+        bool IsAllianceFlagPickedup() const         { return !m_FlagKeepers[TEAM_ALLIANCE].IsEmpty(); }
+        bool IsHordeFlagPickedup() const            { return !m_FlagKeepers[TEAM_HORDE].IsEmpty(); }
         void RespawnFlag(uint32 Team, bool captured);
         void RespawnFlagAfterDrop(uint32 Team);
         uint8 GetFlagState(uint32 team)             { return _flagState[GetTeamIndexByTeamId(team)]; }
 
         /* Battleground Events */
-        void EventPlayerDroppedFlag(Player* Source);
-        void EventPlayerClickedOnFlag(Player* Source, GameObject* target_obj);
-        void EventPlayerCapturedFlag(Player* Source);
+        void EventPlayerDroppedFlag(Player* player) override;
+        void EventPlayerClickedOnFlag(Player* player, GameObject* target_obj) override;
+        void EventPlayerCapturedFlag(Player* player);
 
-        void RemovePlayer(Player* player, uint64 guid, uint32 team);
-        void HandleAreaTrigger(Player* Source, uint32 Trigger);
-        void HandleKillPlayer(Player* player, Player* killer);
-        bool SetupBattleground();
-        void Reset();
-        void EndBattleground(uint32 winner);
-        WorldSafeLocsEntry const* GetClosestGraveYard(Player* player);
+        void RemovePlayer(Player* player, ObjectGuid guid, uint32 team) override;
+        void HandleAreaTrigger(Player* player, uint32 trigger) override;
+        void HandleKillPlayer(Player* player, Player* killer) override;
+        bool SetupBattleground() override;
+        void Reset() override;
+        void EndBattleground(uint32 winner) override;
+        WorldSafeLocsEntry const* GetClosestGraveyard(Player* player) override;
 
         void UpdateFlagState(uint32 team, uint32 value);
         void SetLastFlagCapture(uint32 team)                { _lastFlagCaptureTeam = team; }
         void UpdateTeamScore(uint32 team);
-        void UpdatePlayerScore(Player* Source, uint32 type, uint32 value, bool doAddHonor = true);
-        void SetDroppedFlagGUID(uint64 guid, int32 team = -1)
+        bool UpdatePlayerScore(Player* player, uint32 type, uint32 value, bool doAddHonor = true) override;
+        void SetDroppedFlagGUID(ObjectGuid guid, int32 team = -1) override
         {
             if (team == TEAM_ALLIANCE || team == TEAM_HORDE)
                 m_DroppedFlagGUID[team] = guid;
         }
 
-        uint64 GetDroppedFlagGUID(uint32 TeamID)             { return m_DroppedFlagGUID[GetTeamIndexByTeamId(TeamID)];}
-        void FillInitialWorldStates(WorldPacket& data);
+        ObjectGuid GetDroppedFlagGUID(uint32 TeamID)             { return m_DroppedFlagGUID[GetTeamIndexByTeamId(TeamID)]; }
+        void FillInitialWorldStates(WorldPackets::WorldState::InitWorldStates& packet) override;
 
         /* Scorekeeping */
         void AddPoint(uint32 TeamID, uint32 Points = 1)     { m_TeamScores[GetTeamIndexByTeamId(TeamID)] += Points; }
         void SetTeamPoint(uint32 TeamID, uint32 Points = 0) { m_TeamScores[GetTeamIndexByTeamId(TeamID)] = Points; }
         void RemovePoint(uint32 TeamID, uint32 Points = 1)  { m_TeamScores[GetTeamIndexByTeamId(TeamID)] -= Points; }
 
-        uint32 GetPrematureWinner();
+        uint32 GetPrematureWinner() override;
+
+        /* Achievements*/
+        bool CheckAchievementCriteriaMeet(uint32 criteriaId, Player const* source, Unit const* target = nullptr, uint32 miscvalue1 = 0) override;
+
     private:
-        uint64 m_FlagKeepers[2];                            // 0 - alliance, 1 - horde
-        uint64 m_DroppedFlagGUID[2];
+        ObjectGuid m_FlagKeepers[2];                            // 0 - alliance, 1 - horde
+        ObjectGuid m_DroppedFlagGUID[2];
         uint8 _flagState[2];                               // for checking flag state
         int32 _flagsTimer[2];
         int32 _flagsDropTimer[2];
@@ -229,6 +274,6 @@ class BattlegroundWS : public Battleground
         uint8 _flagDebuffState;                            // 0 - no debuffs, 1 - focused assault, 2 - brutal assault
         uint8 _minutesElapsed;
 
-        void PostUpdateImpl(uint32 diff);
+        void PostUpdateImpl(uint32 diff) override;
 };
 #endif

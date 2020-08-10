@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -34,16 +33,18 @@ enum Spells
     SPELL_ARCANE_EXPLOSION      = 26192,
     SPELL_EARTH_SHOCK           = 26194,
     SPELL_TRUE_FULFILLMENT      = 785,
+    SPELL_TRUE_FULFILLMENT_2    = 2313,
     SPELL_INITIALIZE_IMAGE      = 3730,
-    SPELL_SUMMON_IMAGES         = 747
+    SPELL_SUMMON_IMAGES         = 747,
+    SPELL_GENERIC_DISMOUNT      = 61286
 };
 
 enum Events
 {
-    EVENT_ARCANE_EXPLOSION      = 0,
-    EVENT_FULLFILMENT           = 1,
-    EVENT_BLINK                 = 2,
-    EVENT_EARTH_SHOCK           = 3
+    EVENT_ARCANE_EXPLOSION      = 1,
+    EVENT_FULLFILMENT           = 2,
+    EVENT_BLINK                 = 3,
+    EVENT_EARTH_SHOCK           = 4
 };
 
 uint32 const BlinkSpells[3] = { 4801, 8195, 20449 };
@@ -55,28 +56,36 @@ class boss_skeram : public CreatureScript
 
         struct boss_skeramAI : public BossAI
         {
-            boss_skeramAI(Creature* creature) : BossAI(creature, DATA_SKERAM) { }
+            boss_skeramAI(Creature* creature) : BossAI(creature, DATA_SKERAM)
+            {
+                Initialize();
+            }
 
-            void Reset()
+            void Initialize()
             {
                 _flag = 0;
                 _hpct = 75.0f;
+            }
+
+            void Reset() override
+            {
+                Initialize();
                 me->SetVisible(true);
             }
 
-            void KilledUnit(Unit* /*victim*/)
+            void KilledUnit(Unit* /*victim*/) override
             {
                 Talk(SAY_SLAY);
             }
 
-            void EnterEvadeMode()
+            void EnterEvadeMode(EvadeReason why) override
             {
-                ScriptedAI::EnterEvadeMode();
-                if (me->isSummon())
-                    ((TempSummon*)me)->UnSummon();
+                ScriptedAI::EnterEvadeMode(why);
+                if (me->IsSummon())
+                    me->DespawnOrUnsummon();
             }
 
-            void JustSummoned(Creature* creature)
+            void JustSummoned(Creature* creature) override
             {
                 // Shift the boss and images (Get it? *Shift*?)
                 uint8 rand = 0;
@@ -97,7 +106,7 @@ class boss_skeram : public CreatureScript
                 if (_flag & (1 << 7))
                     _flag = 0;
 
-                if (Unit* Target = SelectTarget(SELECT_TARGET_RANDOM))
+                if (Unit* Target = SelectTarget(SelectTargetMethod::Random))
                     creature->AI()->AttackStart(Target);
 
                 float ImageHealthPct;
@@ -111,30 +120,35 @@ class boss_skeram : public CreatureScript
 
                 creature->SetMaxHealth(me->GetMaxHealth() * ImageHealthPct);
                 creature->SetHealth(creature->GetMaxHealth() * (me->GetHealthPct() / 100.0f));
+
+                summons.Summon(creature);
             }
 
-            void JustDied(Unit* /*killer*/)
+            void JustDied(Unit* killer) override
             {
-                if (!me->isSummon())
+                if (!me->IsSummon())
+                {
                     Talk(SAY_DEATH);
+                    BossAI::JustDied(killer);
+                }
                 else
-                    me->RemoveCorpse();
+                    me->DespawnOrUnsummon();
             }
 
-            void EnterCombat(Unit* /*who*/)
+            void JustEngagedWith(Unit* who) override
             {
-                _EnterCombat();
+                BossAI::JustEngagedWith(who);
                 events.Reset();
 
-                events.ScheduleEvent(EVENT_ARCANE_EXPLOSION, urand(6000, 12000));
-                events.ScheduleEvent(EVENT_FULLFILMENT, 15000);
-                events.ScheduleEvent(EVENT_BLINK, urand(30000, 45000));
-                events.ScheduleEvent(EVENT_EARTH_SHOCK, 2000);
+                events.ScheduleEvent(EVENT_ARCANE_EXPLOSION, 6s, 12s);
+                events.ScheduleEvent(EVENT_FULLFILMENT, 15s);
+                events.ScheduleEvent(EVENT_BLINK, 30s, 45s);
+                events.ScheduleEvent(EVENT_EARTH_SHOCK, 2s);
 
                 Talk(SAY_AGGRO);
             }
 
-            void UpdateAI(uint32 const diff)
+            void UpdateAI(uint32 diff) override
             {
                 if (!UpdateVictim())
                     return;
@@ -147,39 +161,38 @@ class boss_skeram : public CreatureScript
                     {
                         case EVENT_ARCANE_EXPLOSION:
                             DoCastAOE(SPELL_ARCANE_EXPLOSION, true);
-                            events.ScheduleEvent(EVENT_ARCANE_EXPLOSION, urand(8000, 18000));
+                            events.ScheduleEvent(EVENT_ARCANE_EXPLOSION, 8s, 18s);
                             break;
                         case EVENT_FULLFILMENT:
-                            // TODO: For some weird reason boss does not cast this
-                            // Spell actually works, tested in duel
-                            DoCast(SelectTarget(SELECT_TARGET_RANDOM, 0, 0.0f, true), SPELL_TRUE_FULFILLMENT, true);
-                            events.ScheduleEvent(EVENT_FULLFILMENT, urand(20000, 30000));
+                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 1, 45.0f, true))
+                                DoCast(target, SPELL_TRUE_FULFILLMENT);
+                            events.ScheduleEvent(EVENT_FULLFILMENT, 20s, 30s);
                             break;
                         case EVENT_BLINK:
                             DoCast(me, BlinkSpells[urand(0, 2)]);
-                            DoResetThreat();
+                            ResetThreatList();
                             me->SetVisible(true);
-                            events.ScheduleEvent(EVENT_BLINK, urand(10000, 30000));
+                            events.ScheduleEvent(EVENT_BLINK, 10s, 30s);
                             break;
                         case EVENT_EARTH_SHOCK:
                             DoCastVictim(SPELL_EARTH_SHOCK);
-                            events.ScheduleEvent(EVENT_EARTH_SHOCK, 2000);
+                            events.ScheduleEvent(EVENT_EARTH_SHOCK, 2s);
                             break;
                     }
                 }
 
-                if (!me->isSummon() && me->GetHealthPct() < _hpct)
+                if (!me->IsSummon() && me->GetHealthPct() < _hpct)
                 {
-                    DoCast(me, SPELL_SUMMON_IMAGES);
+                    DoCastAOE(SPELL_SUMMON_IMAGES, true);
                     Talk(SAY_SPLIT);
                     _hpct -= 25.0f;
                     me->SetVisible(false);
-                    events.RescheduleEvent(EVENT_BLINK, 2000);
+                    events.RescheduleEvent(EVENT_BLINK, 2s);
                 }
 
                 if (me->IsWithinMeleeRange(me->GetVictim()))
                 {
-                    events.RescheduleEvent(EVENT_EARTH_SHOCK, 2000);
+                    events.RescheduleEvent(EVENT_EARTH_SHOCK, 2s);
                     DoMeleeAttackIfReady();
                 }
             }
@@ -189,25 +202,13 @@ class boss_skeram : public CreatureScript
             uint8 _flag;
         };
 
-    CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        return new boss_skeramAI(creature);
+        return GetAQ40AI<boss_skeramAI>(creature);
     }
 };
 
-class PlayerOrPetCheck
-{
-    public:
-        bool operator()(WorldObject* object) const
-        {
-            if (object->GetTypeId() != TYPEID_PLAYER)
-                if (!object->ToCreature()->isPet())
-                    return true;
-
-            return false;
-        }
-};
-
+// 26192 - Arcane Explosion
 class spell_skeram_arcane_explosion : public SpellScriptLoader
 {
     public:
@@ -219,23 +220,66 @@ class spell_skeram_arcane_explosion : public SpellScriptLoader
 
             void FilterTargets(std::list<WorldObject*>& targets)
             {
-                targets.remove_if(PlayerOrPetCheck());
+                targets.remove_if([](WorldObject* object) -> bool
+                {
+                    if (object->GetTypeId() == TYPEID_PLAYER)
+                        return false;
+
+                    if (Creature* creature = object->ToCreature())
+                        return !creature->IsPet();
+
+                    return true;
+                });
             }
 
-            void Register()
+            void Register() override
             {
                 OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_skeram_arcane_explosion_SpellScript::FilterTargets, EFFECT_0, TARGET_UNIT_SRC_AREA_ENEMY);
             }
         };
 
-        SpellScript* GetSpellScript() const
+        SpellScript* GetSpellScript() const override
         {
             return new spell_skeram_arcane_explosion_SpellScript();
         }
+};
+
+// 785 - True Fulfillment
+class spell_skeram_true_fulfillment : public SpellScriptLoader
+{
+public:
+    spell_skeram_true_fulfillment() : SpellScriptLoader("spell_skeram_true_fulfillment") { }
+
+    class spell_skeram_true_fulfillment_SpellScript : public SpellScript
+    {
+        PrepareSpellScript(spell_skeram_true_fulfillment_SpellScript);
+
+        bool Validate(SpellInfo const* /*spell*/) override
+        {
+            return ValidateSpellInfo({ SPELL_TRUE_FULFILLMENT_2, SPELL_GENERIC_DISMOUNT });
+        }
+
+        void HandleEffect(SpellEffIndex /*effIndex*/)
+        {
+            GetCaster()->CastSpell(GetHitUnit(), SPELL_GENERIC_DISMOUNT, true);
+            GetCaster()->CastSpell(GetHitUnit(), SPELL_TRUE_FULFILLMENT_2, true);
+        }
+
+        void Register() override
+        {
+            OnEffectHitTarget += SpellEffectFn(spell_skeram_true_fulfillment_SpellScript::HandleEffect, EFFECT_0, SPELL_AURA_MOD_CHARM);
+        }
+    };
+
+    SpellScript* GetSpellScript() const override
+    {
+        return new spell_skeram_true_fulfillment_SpellScript();
+    }
 };
 
 void AddSC_boss_skeram()
 {
     new boss_skeram();
     new spell_skeram_arcane_explosion();
+    new spell_skeram_true_fulfillment();
 }

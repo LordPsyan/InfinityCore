@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,16 +16,18 @@
  */
 
 #include "ScriptMgr.h"
-#include "InstanceScript.h"
+#include "AreaBoundary.h"
+#include "Creature.h"
 #include "forge_of_souls.h"
+#include "InstanceScript.h"
+#include "Map.h"
 #include "Player.h"
 
-#define MAX_ENCOUNTER 2
-
-/* Forge of Souls encounters:
-0- Bronjahm, The Godfather of Souls
-1- The Devourer of Souls
-*/
+BossBoundaryData const boundaries =
+{
+    { DATA_BRONJAHM,          new CircleBoundary(Position(5297.3f, 2506.45f), 100.96)                                                             },
+    { DATA_DEVOURER_OF_SOULS, new ParallelogramBoundary(Position(5663.56f, 2570.53f), Position(5724.39f, 2520.45f), Position(5570.36f, 2461.42f)) }
+};
 
 class instance_forge_of_souls : public InstanceMapScript
 {
@@ -36,44 +38,57 @@ class instance_forge_of_souls : public InstanceMapScript
         {
             instance_forge_of_souls_InstanceScript(Map* map) : InstanceScript(map)
             {
-                SetBossNumber(MAX_ENCOUNTER);
-                bronjahm = 0;
-                devourerOfSouls = 0;
+                SetHeaders(DataHeader);
+                SetBossNumber(EncounterCount);
+                LoadBossBoundaries(boundaries);
 
                 teamInInstance = 0;
             }
 
-            void OnCreatureCreate(Creature* creature)
+            void OnPlayerEnter(Player* player) override
             {
-                Map::PlayerList const &players = instance->GetPlayers();
-                if (!players.isEmpty())
-                    if (Player* player = players.begin()->getSource())
-                        teamInInstance = player->GetTeam();
+                if (!teamInInstance)
+                    teamInInstance = player->GetTeam();
+            }
 
+            void OnCreatureCreate(Creature* creature) override
+            {
                 switch (creature->GetEntry())
                 {
-                    case CREATURE_BRONJAHM:
+                    case NPC_BRONJAHM:
                         bronjahm = creature->GetGUID();
                         break;
-                    case CREATURE_DEVOURER:
+                    case NPC_DEVOURER:
                         devourerOfSouls = creature->GetGUID();
-                        break;
-                    case NPC_SYLVANAS_PART1:
-                        if (teamInInstance == ALLIANCE)
-                            creature->UpdateEntry(NPC_JAINA_PART1, ALLIANCE);
-                        break;
-                    case NPC_LORALEN:
-                        if (teamInInstance == ALLIANCE)
-                            creature->UpdateEntry(NPC_ELANDRA, ALLIANCE);
-                        break;
-                    case NPC_KALIRA:
-                        if (teamInInstance == ALLIANCE)
-                            creature->UpdateEntry(NPC_KORELN, ALLIANCE);
                         break;
                 }
             }
 
-            uint32 GetData(uint32 type) const
+            uint32 GetCreatureEntry(ObjectGuid::LowType /*guidLow*/, CreatureData const* data) override
+            {
+                if (!teamInInstance)
+                {
+                    Map::PlayerList const& players = instance->GetPlayers();
+                    if (!players.isEmpty())
+                        if (Player* player = players.begin()->GetSource())
+                            teamInInstance = player->GetTeam();
+                }
+
+                uint32 entry = data->id;
+                switch (entry)
+                {
+                    case NPC_SYLVANAS_PART1:
+                        return teamInInstance == ALLIANCE ? NPC_JAINA_PART1 : NPC_SYLVANAS_PART1;
+                    case NPC_LORALEN:
+                        return teamInInstance == ALLIANCE ? NPC_ELANDRA : NPC_LORALEN;
+                    case NPC_KALIRA:
+                        return teamInInstance == ALLIANCE ? NPC_KORELN : NPC_KALIRA;
+                    default:
+                        return entry;
+                }
+            }
+
+            uint32 GetData(uint32 type) const override
             {
                 switch (type)
                 {
@@ -86,70 +101,29 @@ class instance_forge_of_souls : public InstanceMapScript
                 return 0;
             }
 
-            uint64 GetData64(uint32 type) const
+            ObjectGuid GetGuidData(uint32 type) const override
             {
                 switch (type)
                 {
                     case DATA_BRONJAHM:
                         return bronjahm;
-                    case DATA_DEVOURER:
+                    case DATA_DEVOURER_OF_SOULS:
                         return devourerOfSouls;
                     default:
                         break;
                 }
 
-                return 0;
-            }
-
-            std::string GetSaveData()
-            {
-                OUT_SAVE_INST_DATA;
-
-                std::ostringstream saveStream;
-                saveStream << "F S " << GetBossSaveData();
-
-                OUT_SAVE_INST_DATA_COMPLETE;
-                return saveStream.str();
-            }
-
-            void Load(const char* in)
-            {
-                if (!in)
-                {
-                    OUT_LOAD_INST_DATA_FAIL;
-                    return;
-                }
-
-                OUT_LOAD_INST_DATA(in);
-
-                char dataHead1, dataHead2;
-
-                std::istringstream loadStream(in);
-                loadStream >> dataHead1 >> dataHead2;
-
-                if (dataHead1 == 'F' && dataHead2 == 'S')
-                {
-                    for (uint8 i = 0; i < MAX_ENCOUNTER; ++i)
-                    {
-                        uint32 tmpState;
-                        loadStream >> tmpState;
-                        if (tmpState == IN_PROGRESS || tmpState > SPECIAL)
-                            tmpState = NOT_STARTED;
-                        SetBossState(i, EncounterState(tmpState));
-                    }
-                } else OUT_LOAD_INST_DATA_FAIL;
-
-                OUT_LOAD_INST_DATA_COMPLETE;
+                return ObjectGuid::Empty;
             }
 
         private:
-            uint64 bronjahm;
-            uint64 devourerOfSouls;
+            ObjectGuid bronjahm;
+            ObjectGuid devourerOfSouls;
 
             uint32 teamInInstance;
         };
 
-        InstanceScript* GetInstanceScript(InstanceMap* map) const
+        InstanceScript* GetInstanceScript(InstanceMap* map) const override
         {
             return new instance_forge_of_souls_InstanceScript(map);
         }

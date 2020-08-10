@@ -1,58 +1,59 @@
+/*
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
 
 #ifndef DEF_SHADOWFANG_H
 #define DEF_SHADOWFANG_H
 
-enum ShadowfangKeepBoss
+#include "CreatureAIImpl.h"
+
+#define SFKScriptName "instance_shadowfang_keep"
+#define DataHeader "SK"
+
+enum SKDataTypes
 {
-   BOSS_BARON_ASHBURY             = 46962,
-   BOSS_BARON_SILVERLAINE         =  3887,
-   BOSS_COMMANDER_SPRINGVALE      =  4278,
-   BOSS_LORD_GODFREY              = 46964,
-   BOSS_LORD_WALDEN               = 46963,
+    TYPE_FREE_NPC               = 1,
+    TYPE_RETHILGORE             = 2,
+    TYPE_FENRUS                 = 3,
+    TYPE_NANDOS                 = 4,
+    BOSS_ARUGAL                 = 5,
+    DATA_APOTHECARY_HUMMEL      = 6,
+    DATA_SPAWN_VALENTINE_ADDS   = 7
 };
 
-enum Npcs
+enum SKCreatures
 {
-   NPC_TORMENTED_OFFICER          = 50615,
-   NPC_WAILING_GUARDSMAN          = 50613,
-   NPC_DREAD_SCRYER               = 47141,
-   NPC_DESECRATION_TR             = 50503,
-   NPC_TOXIN_TRIGGER              = 50439
-//   NPC_HORDE_QUESTGIVER
-//   NPC_ALLIANCE_QUESTGIVER
+    NPC_ASH                             = 3850,
+    NPC_ADA                             = 3849,
+    NPC_ARCHMAGE_ARUGAL                 = 4275,
+    NPC_ARUGAL_VOIDWALKER               = 4627,
+    NPC_DND_CRAZED_APOTHECARY_GENERATOR = 36212
 };
 
-enum Achievements
+enum SKGameObjects
 {
-   ACHIEVEMENT_TO_THE_GROUND      = 5504,
+    GO_COURTYARD_DOOR   = 18895, //door to open when talking to NPC's
+    GO_SORCERER_DOOR    = 18972, //door to open when Fenrus the Devourer
+    GO_ARUGAL_DOOR      = 18971  //door to open when Wolf Master Nandos
 };
 
-enum GameObjectIds
+template <class AI, class T>
+inline AI* GetShadowfangKeepAI(T* obj)
 {
-   GO_BARON_ASHBURY_DOOR          = 18895,
-   GO_LORD_GODFREY_DOOR           = 18971,
-   GO_LORD_WALDEN_DOOR            = 18972
-};
-
-enum Data
-{
-    DATA_BARON_ASHBURY_EVENT,
-    DATA_BARON_SILVERLAINE_EVENT,
-    DATA_COMMANDER_SPRINGVALE_EVENT,
-    DATA_LORD_GODFREY_EVENT,
-    DATA_LORD_WALDEN_EVENT,
-    MAX_ENCOUNTER,
-
-    TEAM_IN_INSTANCE
-};
-
-enum Data64
-{
-    DATA_BARON_ASHBURY,
-    DATA_BARON_SILVERLAINE,
-    DATA_COMMANDER_SPRINGVALE,
-    DATA_LORD_GODFREY,
-    DATA_LORD_WALDEN
-};
+    return GetInstanceAI<AI>(obj, SFKScriptName);
+}
 
 #endif

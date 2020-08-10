@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,11 +23,16 @@ SDCategory: Tempest Keep, The Eye
 EndScriptData */
 
 #include "ScriptMgr.h"
+#include "InstanceScript.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
 #include "ScriptedCreature.h"
-#include "the_eye.h"
 #include "SpellInfo.h"
+#include "SpellScript.h"
+#include "TemporarySummon.h"
+#include "the_eye.h"
 
-enum eSpells
+enum Spells
 {
     SPELL_FLAME_BUFFET           = 34121, // Flame Buffet - every 1, 5 secs in phase 1 if there is no victim in melee range and after Dive Bomb in phase 2 with same conditions
     SPELL_FLAME_QUILLS           = 34229, // Randomly after changing position in phase after watching tons of movies, set probability 20%
@@ -72,23 +76,65 @@ enum WaitEventType
     WE_SUMMON   = 10
 };
 
+uint32 const flameQuillsSpells[] =
+{
+    34269,
+    34270,
+    34271,
+    34272,
+    34273,
+    34274,
+    34275,
+    34276,
+    34277,
+    34278,
+    34279,
+    34280,
+    34281,
+    34282,
+    34283,
+    34284,
+    34285,
+    34286,
+    34287,
+    34288,
+    34289,
+    34314,
+    34315,
+    34316
+};
+
 class boss_alar : public CreatureScript
 {
     public:
+        boss_alar() : CreatureScript("boss_alar") { }
 
-        boss_alar()
-            : CreatureScript("boss_alar")
+        struct boss_alarAI : public BossAI
         {
-        }
-        struct boss_alarAI : public ScriptedAI
-        {
-            boss_alarAI(Creature* creature) : ScriptedAI(creature)
+            boss_alarAI(Creature* creature) : BossAI(creature, DATA_ALAR)
             {
-                instance = creature->GetInstanceScript();
+                Initialize();
                 DefaultMoveSpeedRate = creature->GetSpeedRate(MOVE_RUN);
+                DiveBomb_Timer = 0;
+                MeltArmor_Timer = 0;
+                Charge_Timer = 0;
+                FlamePatch_Timer = 0;
             }
 
-            InstanceScript* instance;
+            void Initialize()
+            {
+                Berserk_Timer = 1200000;
+                Platforms_Move_Timer = 0;
+
+                Phase1 = true;
+                WaitEvent = WE_NONE;
+                WaitTimer = 0;
+                AfterMoving = false;
+                ForceMove = false;
+                ForceTimer = 5000;
+
+                cur_wp = 4;
+            }
 
             WaitEventType WaitEvent;
             uint32 WaitTimer;
@@ -110,59 +156,38 @@ class boss_alar : public CreatureScript
 
             int8 cur_wp;
 
-            void Reset()
+            void Reset() override
             {
-                if (instance)
-                    instance->SetData(DATA_ALAREVENT, NOT_STARTED);
-
-                Berserk_Timer = 1200000;
-                Platforms_Move_Timer = 0;
-
-                Phase1 = true;
-                WaitEvent = WE_NONE;
-                WaitTimer = 0;
-                AfterMoving = false;
-                ForceMove = false;
-                ForceTimer = 5000;
-
-                cur_wp = 4;
+                Initialize();
+                _Reset();
 
                 me->SetDisplayId(me->GetNativeDisplayId());
-                me->SetSpeed(MOVE_RUN, DefaultMoveSpeedRate);
+                me->SetSpeedRate(MOVE_RUN, DefaultMoveSpeedRate);
                 //me->SetFloatValue(UNIT_FIELD_BOUNDINGRADIUS, 10);
                 //me->SetFloatValue(UNIT_FIELD_COMBATREACH, 10);
                 me->ApplySpellImmune(0, IMMUNITY_SCHOOL, SPELL_SCHOOL_MASK_FIRE, true);
-                me->SetUnitMovementFlags(MOVEMENTFLAG_DISABLE_GRAVITY);
+                me->SetDisableGravity(true);
                 me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
                 me->setActive(false);
             }
 
-            void EnterCombat(Unit* /*who*/)
+            void JustEngagedWith(Unit* who) override
             {
-                if (instance)
-                    instance->SetData(DATA_ALAREVENT, IN_PROGRESS);
-
-                me->SetUnitMovementFlags(MOVEMENTFLAG_DISABLE_GRAVITY); // after enterevademode will be set walk movement
-                DoZoneInCombat();
+                BossAI::JustEngagedWith(who);
+                me->SetDisableGravity(true); // after enterevademode will be set walk movement
                 me->setActive(true);
             }
 
-            void JustDied(Unit* /*killer*/)
-            {
-                if (instance)
-                    instance->SetData(DATA_ALAREVENT, DONE);
-            }
-
-            void JustSummoned(Creature* summon)
+            void JustSummoned(Creature* summon) override
             {
                 if (summon->GetEntry() == CREATURE_EMBER_OF_ALAR)
-                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                         summon->AI()->AttackStart(target);
             }
 
-            void MoveInLineOfSight(Unit* /*who*/) {}
+            void MoveInLineOfSight(Unit* /*who*/) override { }
 
-            void AttackStart(Unit* who)
+            void AttackStart(Unit* who) override
             {
                 if (Phase1)
                     AttackStartNoMove(who);
@@ -170,7 +195,7 @@ class boss_alar : public CreatureScript
                     ScriptedAI::AttackStart(who);
             }
 
-            void DamageTaken(Unit* /*killer*/, uint32 &damage)
+            void DamageTaken(Unit* /*killer*/, uint32 &damage) override
             {
                 if (damage >= me->GetHealth() && Phase1)
                 {
@@ -184,25 +209,25 @@ class boss_alar : public CreatureScript
                         me->RemoveAllAuras();
                         me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
                         me->AttackStop();
-                        me->SetTarget(0);
-                        me->SetSpeed(MOVE_RUN, 5.0f);
+                        me->SetTarget(ObjectGuid::Empty);
+                        me->SetSpeedRate(MOVE_RUN, 5.0f);
                         me->GetMotionMaster()->Clear();
                         me->GetMotionMaster()->MovePoint(0, waypoint[5][0], waypoint[5][1], waypoint[5][2]);
                     }
                 }
             }
 
-            void SpellHit(Unit*, const SpellInfo* spell)
+            void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
             {
-                if (spell->Id == SPELL_DIVE_BOMB_VISUAL)
+                if (spellInfo->Id == SPELL_DIVE_BOMB_VISUAL)
                 {
                     me->ApplySpellImmune(0, IMMUNITY_SCHOOL, SPELL_SCHOOL_MASK_FIRE, true);
                     me->SetDisplayId(11686);
-                    //me->SendUpdateObjectToAllExcept(NULL);
+                    //me->SendUpdateObjectToAllExcept(nullptr);
                 }
             }
 
-            void MovementInform(uint32 type, uint32 /*id*/)
+            void MovementInform(uint32 type, uint32 /*id*/) override
             {
                 if (type == POINT_MOTION_TYPE)
                 {
@@ -212,9 +237,9 @@ class boss_alar : public CreatureScript
                 }
             }
 
-            void UpdateAI(const uint32 diff)
+            void UpdateAI(uint32 diff) override
             {
-                if (!me->isInCombat()) // sometimes isincombat but !incombat, faction bug?
+                if (!me->IsEngaged())
                     return;
 
                 if (Berserk_Timer <= diff)
@@ -251,7 +276,7 @@ class boss_alar : public CreatureScript
                             switch (WaitEvent)
                             {
                             case WE_PLATFORM:
-                                Platforms_Move_Timer = 30000+rand()%5000;
+                                Platforms_Move_Timer = 30000 + rand32() % 5000;
                                 break;
                             case WE_QUILL:
                                 DoCast(me, SPELL_FLAME_QUILLS, true);
@@ -261,20 +286,20 @@ class boss_alar : public CreatureScript
                                 return;
                             case WE_DIE:
                                 ForceMove = false;
-                                me->SetUInt32Value(UNIT_FIELD_BYTES_1, UNIT_STAND_STATE_DEAD);
+                                me->SetStandState(UNIT_STAND_STATE_DEAD);
                                 WaitTimer = 5000;
                                 WaitEvent = WE_REVIVE;
                                 return;
                             case WE_REVIVE:
-                                me->SetUInt32Value(UNIT_FIELD_BYTES_1, UNIT_STAND_STATE_STAND);
+                                me->SetStandState(UNIT_STAND_STATE_STAND);
                                 me->SetFullHealth();
-                                me->SetSpeed(MOVE_RUN, DefaultMoveSpeedRate);
+                                me->SetSpeedRate(MOVE_RUN, DefaultMoveSpeedRate);
                                 me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
                                 DoZoneInCombat();
                                 DoCast(me, SPELL_REBIRTH, true);
                                 MeltArmor_Timer = 60000;
                                 Charge_Timer = 7000;
-                                DiveBomb_Timer = 40000+rand()%5000;
+                                DiveBomb_Timer = 40000 + rand32() % 5000;
                                 FlamePatch_Timer = 30000;
                                 Phase1 = false;
                                 break;
@@ -285,7 +310,7 @@ class boss_alar : public CreatureScript
                                 WaitTimer = 4000;
                                 return;
                             case WE_DIVE:
-                                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+                                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                                 {
                                     me->RemoveAurasDueToSpell(SPELL_DIVE_BOMB_VISUAL);
                                     DoCast(target, SPELL_DIVE_BOMB, true);
@@ -293,9 +318,10 @@ class boss_alar : public CreatureScript
                                     if (me->IsWithinDist3d(target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(), 5.0f))
                                         dist = 5.0f;
                                     WaitTimer = 1000 + uint32(floor(dist / 80 * 1000.0f));
-                                    me->SetPosition(target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(), 0.0f);
+                                    me->UpdatePosition(target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(), 0.0f);
                                     me->StopMoving();
                                     WaitEvent = WE_LAND;
+                                    return;
                                 }
                                 else
                                 {
@@ -330,7 +356,7 @@ class boss_alar : public CreatureScript
 
                 if (Phase1)
                 {
-                    if (me->getThreatManager().getThreatList().empty())
+                    if (!me->IsThreatened())
                     {
                         EnterEvadeMode();
                         return;
@@ -373,7 +399,7 @@ class boss_alar : public CreatureScript
                 {
                     if (Charge_Timer <= diff)
                     {
-                        Unit* target= SelectTarget(SELECT_TARGET_RANDOM, 1, 100, true);
+                        Unit* target= SelectTarget(SelectTargetMethod::Random, 1, 100, true);
                         if (target)
                             DoCast(target, SPELL_CHARGE);
                         Charge_Timer = 30000;
@@ -397,7 +423,7 @@ class boss_alar : public CreatureScript
                         me->SetFloatValue(UNIT_FIELD_BOUNDINGRADIUS, 50);
                         WaitEvent = WE_METEOR;
                         WaitTimer = 0;
-                        DiveBomb_Timer = 40000+rand()%5000;
+                        DiveBomb_Timer = 40000 + rand32() % 5000;
                         return;
                     }
                     else
@@ -405,16 +431,16 @@ class boss_alar : public CreatureScript
 
                     if (FlamePatch_Timer <= diff)
                     {
-                        if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
+                        if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                         {
                             Creature* Summoned = me->SummonCreature(CREATURE_FLAME_PATCH_ALAR, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(), 0, TEMPSUMMON_TIMED_DESPAWN, 120000);
                             if (Summoned)
                             {
                                 Summoned->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-                                Summoned->SetObjectScale(Summoned->GetFloatValue(OBJECT_FIELD_SCALE_X)*2.5f);
+                                Summoned->SetObjectScale(Summoned->GetObjectScale() * 2.5f);
                                 Summoned->SetDisplayId(11686);
-                                Summoned->setFaction(me->getFaction());
-                                Summoned->SetLevel(me->getLevel());
+                                Summoned->SetFaction(me->GetFaction());
+                                Summoned->SetLevel(me->GetLevel());
                                 Summoned->CastSpell(Summoned, SPELL_FLAME_PATCH, false);
                             }
                         }
@@ -429,7 +455,7 @@ class boss_alar : public CreatureScript
 
             void DoMeleeAttackIfReady()
             {
-                if (me->isAttackReady() && !me->IsNonMeleeSpellCasted(false))
+                if (me->isAttackReady() && !me->IsNonMeleeSpellCast(false))
                 {
                     if (me->IsWithinMeleeRange(me->GetVictim()))
                     {
@@ -438,10 +464,8 @@ class boss_alar : public CreatureScript
                     }
                     else
                     {
-                        Unit* target = NULL;
-                        target = me->SelectNearestTargetInAttackDistance(5);
-                        if (target)
-                            me->AI()->AttackStart(target);
+                        if (Unit* target = me->SelectNearestTargetInAttackDistance(5))
+                            AttackStart(target);
                         else
                         {
                             DoCast(me, SPELL_FLAME_BUFFET, true);
@@ -452,47 +476,51 @@ class boss_alar : public CreatureScript
             }
         };
 
-        CreatureAI* GetAI(Creature* creature) const
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            return new boss_alarAI(creature);
+            return GetTheEyeAI<boss_alarAI>(creature);
         }
 };
 
-class mob_ember_of_alar : public CreatureScript
+class npc_ember_of_alar : public CreatureScript
 {
     public:
+        npc_ember_of_alar() : CreatureScript("npc_ember_of_alar") { }
 
-        mob_ember_of_alar()
-            : CreatureScript("mob_ember_of_alar")
+        struct npc_ember_of_alarAI : public ScriptedAI
         {
-        }
-
-        struct mob_ember_of_alarAI : public ScriptedAI
-        {
-            mob_ember_of_alarAI(Creature* creature) : ScriptedAI(creature)
+            npc_ember_of_alarAI(Creature* creature) : ScriptedAI(creature)
             {
+                Initialize();
                 instance = creature->GetInstanceScript();
-                creature->SetUnitMovementFlags(MOVEMENTFLAG_DISABLE_GRAVITY);
+                creature->SetDisableGravity(true);
                 creature->ApplySpellImmune(0, IMMUNITY_SCHOOL, SPELL_SCHOOL_MASK_FIRE, true);
+            }
+
+            void Initialize()
+            {
+                toDie = false;
             }
 
             InstanceScript* instance;
             bool toDie;
 
-            void Reset()
+            void Reset() override
             {
-                toDie = false;
+                Initialize();
             }
-            void EnterCombat(Unit* /*who*/)
+
+            void JustEngagedWith(Unit* /*who*/) override
             {
                 DoZoneInCombat();
             }
-            void EnterEvadeMode()
+
+            void EnterEvadeMode(EvadeReason /*why*/) override
             {
                 me->setDeathState(JUST_DIED);
             }
 
-            void DamageTaken(Unit* killer, uint32 &damage)
+            void DamageTaken(Unit* killer, uint32& damage) override
             {
                 if (damage >= me->GetHealth() && killer != me && !toDie)
                 {
@@ -500,9 +528,9 @@ class mob_ember_of_alar : public CreatureScript
                     DoCast(me, SPELL_EMBER_BLAST, true);
                     me->SetDisplayId(11686);
                     me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-                    if (instance && instance->GetData(DATA_ALAREVENT) == 2)
+                    if (instance->GetBossState(DATA_ALAR) == IN_PROGRESS)
                     {
-                        if (Unit* Alar = Unit::GetUnit(*me, instance->GetData64(DATA_ALAR)))
+                        if (Unit* Alar = ObjectAccessor::GetUnit(*me, instance->GetGuidData(DATA_ALAR)))
                         {
                             int32 AlarHealth = int32(Alar->GetHealth()) - int32(Alar->CountPctFromMaxHealth(3));
                             if (AlarHealth > 0)
@@ -515,14 +543,14 @@ class mob_ember_of_alar : public CreatureScript
                 }
             }
 
-            void UpdateAI(const uint32 /*diff*/)
+            void UpdateAI(uint32 /*diff*/) override
             {
                 if (!UpdateVictim())
                     return;
 
                 if (toDie)
                 {
-                    me->DealDamage(me, me->GetHealth(), NULL, DIRECT_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, NULL, false);
+                    me->KillSelf();
                     //me->SetVisibility(VISIBILITY_OFF);
                 }
 
@@ -531,41 +559,68 @@ class mob_ember_of_alar : public CreatureScript
 
         };
 
-        CreatureAI* GetAI(Creature* creature) const
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            return new mob_ember_of_alarAI(creature);
+            return GetTheEyeAI<npc_ember_of_alarAI>(creature);
         }
 };
 
-class mob_flame_patch_alar : public CreatureScript
+class npc_flame_patch_alar : public CreatureScript
 {
     public:
+        npc_flame_patch_alar() : CreatureScript("npc_flame_patch_alar") { }
 
-        mob_flame_patch_alar()
-            : CreatureScript("mob_flame_patch_alar")
+        struct npc_flame_patch_alarAI : public ScriptedAI
         {
-        }
+            npc_flame_patch_alarAI(Creature* creature) : ScriptedAI(creature) { }
+            void Reset() override { }
+            void JustEngagedWith(Unit* /*who*/) override { }
+            void AttackStart(Unit* /*who*/) override { }
+            void MoveInLineOfSight(Unit* /*who*/) override { }
 
-        struct mob_flame_patch_alarAI : public ScriptedAI
-        {
-            mob_flame_patch_alarAI(Creature* creature) : ScriptedAI(creature) {}
-            void Reset() {}
-            void EnterCombat(Unit* /*who*/) {}
-            void AttackStart(Unit* /*who*/) {}
-            void MoveInLineOfSight(Unit* /*who*/) {}
-            void UpdateAI(const uint32 /*diff*/) {}
+            void UpdateAI(uint32 /*diff*/) override { }
         };
 
-        CreatureAI* GetAI(Creature* creature) const
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            return new mob_flame_patch_alarAI(creature);
+            return GetTheEyeAI<npc_flame_patch_alarAI>(creature);
         }
+};
+
+// 34229 - Flame Quills
+class spell_alar_flame_quills : public AuraScript
+{
+    PrepareAuraScript(spell_alar_flame_quills);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo(flameQuillsSpells);
+    }
+
+    bool Load() override
+    {
+        return InstanceHasScript(GetUnitOwner(), TheEyeScriptName);
+    }
+
+    void PeriodicTick(AuraEffect const* aurEff)
+    {
+        PreventDefaultAction();
+
+        // cast 24 spells 34269-34289, 34314-34316
+        for (uint32 spellId : flameQuillsSpells)
+            GetTarget()->CastSpell(nullptr, spellId, aurEff);
+    }
+
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_alar_flame_quills::PeriodicTick, EFFECT_0, SPELL_AURA_PERIODIC_TRIGGER_SPELL);
+    }
 };
 
 void AddSC_boss_alar()
 {
     new boss_alar();
-    new mob_ember_of_alar();
-    new mob_flame_patch_alar();
+    new npc_ember_of_alar();
+    new npc_flame_patch_alar();
+    RegisterAuraScript(spell_alar_flame_quills);
 }
-

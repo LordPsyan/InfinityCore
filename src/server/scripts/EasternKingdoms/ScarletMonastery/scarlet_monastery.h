@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,36 +15,63 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DEF_SCARLET_M
-#define DEF_SCARLET_M
+#ifndef SCARLET_M_
+#define SCARLET_M_
 
-enum eEnums
+#include "CreatureAIImpl.h"
+
+#define SMScriptName "instance_scarlet_monastery"
+#define DataHeader "SM"
+
+uint32 const EncounterCount = 10;
+
+enum SMDataTypes
 {
-    TYPE_MOGRAINE_AND_WHITE_EVENT   = 1,
+    DATA_INTERROGATOR_VISHAS = 0,
+    DATA_BLOODMAGE_THALNOS,
+    DATA_HOUNDMASTER_LOKSEY,
+    DATA_ARCANIST_DOAN,
+    DATA_HEROD,
+    DATA_HIGH_INQUISITOR_FAIRBANKS,
+    DATA_MOGRAINE_AND_WHITE_EVENT, // Last DungeonEncounter.dbc entry
 
-    DATA_MOGRAINE                   = 2,
-    DATA_WHITEMANE                  = 3,
-    DATA_DOOR_WHITEMANE             = 4,
+    DATA_AZSHIR,
+    DATA_SCORN,
+    DATA_HORSEMAN_EVENT, // Last defined encounter
 
-    DATA_HORSEMAN_EVENT             = 5,
-    GAMEOBJECT_PUMPKIN_SHRINE       = 6,
+    DATA_HEAD,
+    DATA_HORSEMAN,
+    DATA_MOGRAINE,
+    DATA_VORREL,
+    DATA_WHITEMANE,
 
-    DATA_VORREL                     = 7
+    DATA_PUMPKIN_SHRINE,
+    DATA_HIGH_INQUISITORS_DOOR,
 };
 
-enum Gameobjects
+enum SMCreatureIds
 {
-    GOB_KEL_DOOR        = 207619, // Kelestres Door
-    GOB_ASM_DOOR        = 208953, // Asmodina Door
+    NPC_MOGRAINE = 3976,
+    NPC_WHITEMANE = 3977,
+    NPC_VORREL = 3981,
+    NPC_HORSEMAN = 23682,
+    NPC_HEAD = 23775,
+    NPC_PUMPKIN = 23694
 };
 
-enum Creatures
+enum SMGameObjectIds
 {
-    NPC_STORM           = 91001,
-    NPC_JINARA          = 91002,
-    NPC_JINARA_BEAM     = 91003,
-    NPC_POISON          = 30207,
-    NPC_KELESTRES       = 91010,
-    NPC_ASMODINA        = 91009
+    GO_HIGH_INQUISITORS_DOOR = 104600,
+    GO_PUMPKIN_SHRINE = 186267
 };
-#endif
+
+template <class AI, class T>
+inline AI* GetScarletMonasteryAI(T* obj)
+{
+    return GetInstanceAI<AI>(obj, SMScriptName);
+}
+
+#define RegisterScarletMonasteryCreatureAI(ai) RegisterCreatureAIWithFactory(ai, GetScarletMonasteryAI)
+#define RegisterScarletMonasteryGameObjectAI(ai) RegisterGameObjectAIWithFactory(ai, GetScarletMonasteryAI)
+
+#endif // SCARLET_M_

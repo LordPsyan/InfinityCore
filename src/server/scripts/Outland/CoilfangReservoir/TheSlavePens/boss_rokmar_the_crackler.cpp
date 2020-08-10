@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -48,30 +48,38 @@ class boss_rokmar_the_crackler : public CreatureScript
 
         struct boss_rokmar_the_cracklerAI : public BossAI
         {
-            boss_rokmar_the_cracklerAI(Creature* creature) : BossAI(creature, DATA_MENNU_THE_BETRAYER) { }
-
-            void Reset() 
+            boss_rokmar_the_cracklerAI(Creature* creature) : BossAI(creature, DATA_MENNU_THE_BETRAYER)
             {
-                _Reset();
+                Initialize();
+            }
+
+            void Initialize()
+            {
                 rokmarFrenzy = false;
             }
 
-            void JustDied(Unit* /*killer*/) 
+            void Reset() override
+            {
+                _Reset();
+                Initialize();
+            }
+
+            void JustDied(Unit* /*killer*/) override
             {
                 _JustDied();
             }
 
-            void EnterCombat(Unit* /*who*/) 
+            void JustEngagedWith(Unit* who) override
             {
-                _EnterCombat();
-                events.ScheduleEvent(EVENT_GRIEVOUS_WOUND, 10000);
-                events.ScheduleEvent(EVENT_ENSNARING_MOSS, 20000);
-                events.ScheduleEvent(EVENT_WATER_SPIT, 14000);
+                BossAI::JustEngagedWith(who);
+                events.ScheduleEvent(EVENT_GRIEVOUS_WOUND, 10s);
+                events.ScheduleEvent(EVENT_ENSNARING_MOSS, 20s);
+                events.ScheduleEvent(EVENT_WATER_SPIT, 14s);
             }
 
-            void KilledUnit(Unit* /*victim*/)  { }
+            void KilledUnit(Unit* /*victim*/) override { }
 
-            void UpdateAI(const uint32 diff) 
+            void UpdateAI(uint32 diff) override
             {
                 if (!UpdateVictim())
                     return;
@@ -87,19 +95,22 @@ class boss_rokmar_the_crackler : public CreatureScript
                     {
                         case EVENT_GRIEVOUS_WOUND:
                             DoCastVictim(SPELL_GRIEVOUS_WOUND, true);
-                            events.ScheduleEvent(EVENT_GRIEVOUS_WOUND, urand(20000, 30000));
+                            events.ScheduleEvent(EVENT_GRIEVOUS_WOUND, 20s, 30s);
                             break;
                         case EVENT_ENSNARING_MOSS:
                             DoCastAOE(SPELL_ENSNARING_MOSS);
-                            events.ScheduleEvent(EVENT_ENSNARING_MOSS, urand(20000, 30000));
+                            events.ScheduleEvent(EVENT_ENSNARING_MOSS, 20s, 30s);
                             break;
                         case EVENT_WATER_SPIT:
                             DoCastAOE(SPELL_WATER_SPIT);
-                            events.ScheduleEvent(EVENT_WATER_SPIT, urand(14000, 18000));
+                            events.ScheduleEvent(EVENT_WATER_SPIT, 14s, 18s);
                             break;
                         default:
                             break;
                     }
+
+                    if (me->HasUnitState(UNIT_STATE_CASTING))
+                        return;
                 }
 
                 if (HealthBelowPct(10) && !rokmarFrenzy)
@@ -115,9 +126,9 @@ class boss_rokmar_the_crackler : public CreatureScript
                 bool   rokmarFrenzy;
         };
 
-        CreatureAI* GetAI(Creature* creature) const 
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            return new boss_rokmar_the_cracklerAI(creature);
+            return GetSlavePensAI<boss_rokmar_the_cracklerAI>(creature);
         }
 };
 

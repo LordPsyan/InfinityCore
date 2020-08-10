@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -31,6 +30,7 @@ struct GossipTextOption
 {
     std::string Text_0;
     std::string Text_1;
+    uint32 BroadcastTextID;
     uint32 Language;
     float Probability;
     QEmote Emotes[MAX_GOSSIP_TEXT_EMOTES];
@@ -45,15 +45,14 @@ struct GossipText
 
 struct PageTextLocale
 {
-    StringVector Text;
+    std::vector<std::string> Text;
 };
 
 struct NpcTextLocale
 {
-    NpcTextLocale() { Text_0.resize(8); Text_1.resize(8); }
+    NpcTextLocale() { }
 
-    std::vector<StringVector> Text_0;
-    std::vector<StringVector> Text_1;
+    std::vector<std::string> Text_0[MAX_GOSSIP_TEXT_OPTIONS];
+    std::vector<std::string> Text_1[MAX_GOSSIP_TEXT_OPTIONS];
 };
 #endif
-

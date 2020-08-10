@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,22 +15,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: Razorfen Kraul
-SD%Complete: 100
-SDComment: Quest support: 1144
-SDCategory: Razorfen Kraul
-EndScriptData */
-
-/* ContentData
-npc_willix
-EndContentData */
-
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "ScriptedEscortAI.h"
-#include "razorfen_kraul.h"
+#include "PetAI.h"
 #include "Player.h"
+#include "razorfen_kraul.h"
+#include "ScriptedEscortAI.h"
+#include "SpellScript.h"
 
 enum Willix
 {
@@ -56,28 +45,21 @@ class npc_willix : public CreatureScript
 public:
     npc_willix() : CreatureScript("npc_willix") { }
 
-    bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest)
+    struct npc_willixAI : public EscortAI
     {
-        if (quest->GetQuestId() == QUEST_WILLIX_THE_IMPORTER)
+        npc_willixAI(Creature* creature) : EscortAI(creature) { }
+
+        void QuestAccept(Player* player, Quest const* quest) override
         {
-            CAST_AI(npc_escortAI, (creature->AI()))->Start(true, false, player->GetGUID());
-            creature->AI()->Talk(SAY_READY, player->GetGUID());
-            creature->setFaction(113);
+            if (quest->GetQuestId() == QUEST_WILLIX_THE_IMPORTER)
+            {
+                Start(true, false, player->GetGUID());
+                Talk(SAY_READY, player);
+                me->SetFaction(FACTION_ESCORTEE_N_NEUTRAL_PASSIVE);
+            }
         }
 
-        return true;
-    }
-
-    CreatureAI* GetAI(Creature* creature) const
-    {
-        return new npc_willixAI(creature);
-    }
-
-    struct npc_willixAI : public npc_escortAI
-    {
-        npc_willixAI(Creature* creature) : npc_escortAI(creature) {}
-
-        void WaypointReached(uint32 waypointId)
+        void WaypointReached(uint32 waypointId, uint32 /*pathId*/) override
         {
             Player* player = GetPlayerForEscort();
             if (!player)
@@ -87,66 +69,69 @@ public:
             {
                 case 3:
                     me->HandleEmoteCommand(EMOTE_STATE_POINT);
-                    Talk(SAY_POINT, player->GetGUID());
+                    Talk(SAY_POINT, player);
                     break;
                 case 4:
                     me->SummonCreature(ENTRY_BOAR, 2137.66f, 1843.98f, 48.08f, 1.54f, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 25000);
                     break;
                 case 8:
-                    Talk(SAY_BLUELEAF, player->GetGUID());
+                    Talk(SAY_BLUELEAF, player);
                     break;
                 case 9:
-                    Talk(SAY_DANGER, player->GetGUID());
+                    Talk(SAY_DANGER, player);
                     break;
                 case 13:
-                    Talk(SAY_BAD, player->GetGUID());
+                    Talk(SAY_BAD, player);
                     break;
                 case 14:
                     me->SummonCreature(ENTRY_BOAR, 2078.91f, 1704.54f, 56.77f, 1.54f, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 25000);
                     break;
                 case 25:
-                    Talk(SAY_THINK, player->GetGUID());
+                    Talk(SAY_THINK, player);
                     break;
                 case 31:
-                    Talk(SAY_SOON, player->GetGUID());
+                    Talk(SAY_SOON, player);
                     break;
                 case 42:
-                    Talk(SAY_FINALY, player->GetGUID());
+                    Talk(SAY_FINALY, player);
                     break;
                 case 43:
                     me->SummonCreature(ENTRY_BOAR, 1956.43f, 1596.97f, 81.75f, 1.54f, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 25000);
                     break;
                 case 45:
-                    Talk(SAY_WIN, player->GetGUID());
+                    Talk(SAY_WIN, player);
                     me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_QUESTGIVER);
-                    if (player->GetTypeId() == TYPEID_PLAYER)
-                        CAST_PLR(player)->GroupEventHappens(QUEST_WILLIX_THE_IMPORTER, me);
+                    player->GroupEventHappens(QUEST_WILLIX_THE_IMPORTER, me);
                     break;
                 case 46:
-                    Talk(SAY_END, player->GetGUID());
+                    Talk(SAY_END, player);
                     break;
             }
         }
 
-        void Reset() {}
+        void Reset() override { }
 
-        void EnterCombat(Unit* /*who*/)
+        void JustEngagedWith(Unit* who) override
         {
-            Talk(SAY_AGGRO1);
+            Talk(SAY_AGGRO1, who);
         }
 
-        void JustSummoned(Creature* summoned)
+        void JustSummoned(Creature* summoned) override
         {
             summoned->AI()->AttackStart(me);
         }
 
-        void JustDied(Unit* /*killer*/)
+        void JustDied(Unit* /*killer*/) override
         {
             if (Player* player = GetPlayerForEscort())
-                CAST_PLR(player)->FailQuest(QUEST_WILLIX_THE_IMPORTER);
+                player->FailQuest(QUEST_WILLIX_THE_IMPORTER);
         }
     };
 
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return GetRazorfenKraulAI<npc_willixAI>(creature);
+    }
 };
 
 void AddSC_razorfen_kraul()

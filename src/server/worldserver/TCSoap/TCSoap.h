@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,40 +18,19 @@
 #ifndef _TCSOAP_H
 #define _TCSOAP_H
 
-#include "Common.h"
-#include "World.h"
-#include "AccountMgr.h"
-#include "Log.h"
+#include "Define.h"
+#include <mutex>
+#include <future>
+#include <string>
 
-#include "soapH.h"
-#include "soapStub.h"
-#include "stdsoap2.h"
-
-#include <ace/Semaphore.h>
-#include <ace/Task.h>
-
-class TCSoapRunnable: public ACE_Based::Runnable
-{
-    public:
-        TCSoapRunnable() { }
-        void run();
-        void setListenArguments(std::string host, uint16 port)
-        {
-            m_host = host;
-            m_port = port;
-        }
-    private:
-        void process_message(ACE_Message_Block* mb);
-
-        std::string m_host;
-        uint16 m_port;
-};
+void process_message(struct soap* soap_message);
+void TCSoapThread(const std::string& host, uint16 port);
 
 class SOAPCommand
 {
     public:
         SOAPCommand():
-            pendingCommands(0, USYNC_THREAD, "pendingCommands"), m_success(false)
+            m_success(false)
         {
         }
 
@@ -59,16 +38,15 @@ class SOAPCommand
         {
         }
 
-        void appendToPrintBuffer(const char* msg)
+        void appendToPrintBuffer(char const* msg)
         {
             m_printBuffer += msg;
         }
 
-        ACE_Semaphore pendingCommands;
-
         void setCommandSuccess(bool val)
         {
             m_success = val;
+            finishedPromise.set_value();
         }
 
         bool hasCommandSucceeded() const
@@ -76,7 +54,7 @@ class SOAPCommand
             return m_success;
         }
 
-        static void print(void* callbackArg, const char* msg)
+        static void print(void* callbackArg, char const* msg)
         {
             ((SOAPCommand*)callbackArg)->appendToPrintBuffer(msg);
         }
@@ -85,6 +63,7 @@ class SOAPCommand
 
         bool m_success;
         std::string m_printBuffer;
+        std::promise<void> finishedPromise;
 };
 
 #endif

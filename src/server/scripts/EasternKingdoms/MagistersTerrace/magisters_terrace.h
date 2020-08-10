@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,30 +18,90 @@
 #ifndef DEF_MAGISTERS_TERRACE_H
 #define DEF_MAGISTERS_TERRACE_H
 
-#define ERROR_INST_DATA      "TSCR Error: Instance Data not set properly for Magister's Terrace instance (map 585). Encounters will be buggy."
+#include "CreatureAIImpl.h"
 
-enum Data
+#define MGTScriptName "instance_magisters_terrace"
+#define DataHeader "MT"
+
+uint32 const EncounterCount = 4;
+
+enum MTDataTypes
 {
-    DATA_SELIN_EVENT,
-    DATA_VEXALLUS_EVENT,
-    DATA_DELRISSA_EVENT,
-    DATA_KAELTHAS_EVENT,
+    // Encounter states
+    DATA_SELIN_FIREHEART = 0,
+    DATA_VEXALLUS,
+    DATA_PRIESTESS_DELRISSA,
+    DATA_KAELTHAS_SUNSTRIDER,
 
-    DATA_SELIN,
-    DATA_FEL_CRYSTAL,
-    DATA_FEL_CRYSTAL_SIZE,
-
-    DATA_VEXALLUS_DOOR,
-    DATA_DELRISSA,
-    DATA_DELRISSA_DOOR,
-
-    DATA_KAEL_DOOR,
-    DATA_KAEL_STATUE_LEFT,
-    DATA_KAEL_STATUE_RIGHT,
-
+    // Encounter related
+    DATA_KAELTHAS_INTRO,
     DATA_DELRISSA_DEATH_COUNT,
-    DATA_KAELTHAS_STATUES,
+
+    // Additional data
+    DATA_KALECGOS,
     DATA_ESCAPE_ORB
 };
+
+enum MTCreatureIds
+{
+    // Bosses
+    BOSS_KAELTHAS_SUNSTRIDER    = 24664,
+    BOSS_SELIN_FIREHEART        = 24723,
+    BOSS_VEXALLUS               = 24744,
+    BOSS_PRIESTESS_DELRISSA     = 24560,
+
+    // Encounter related
+    /*Kael'thas Sunstrider*/
+    NPC_ARCANE_SPHERE           = 24708,
+    NPC_FLAME_STRIKE            = 24666,
+    NPC_PHOENIX                 = 24674,
+    NPC_PHOENIX_EGG             = 24675,
+
+    /*Selin Fireheart*/
+    NPC_FEL_CRYSTAL             = 24722,
+
+    // Event related
+    NPC_KALECGOS                = 24844,
+    NPC_HUMAN_KALECGOS          = 24848,
+    NPC_COILSKAR_WITCH          = 24696,
+    NPC_SUNBLADE_WARLOCK        = 24686,
+    NPC_SUNBLADE_MAGE_GUARD     = 24683,
+    NPC_SISTER_OF_TORMENT       = 24697,
+    NPC_ETHEREUM_SMUGGLER       = 24698,
+    NPC_SUNBLADE_BLOOD_KNIGHT   = 24684
+};
+
+enum MTGameObjectIds
+{
+    GO_ASSEMBLY_CHAMBER_DOOR    = 188065,
+    GO_SUNWELL_RAID_GATE_2      = 187979,
+    GO_SUNWELL_RAID_GATE_4      = 187770,
+    GO_SUNWELL_RAID_GATE_5      = 187896,
+    GO_ASYLUM_DOOR              = 188064,
+    GO_ESCAPE_ORB               = 188173
+};
+
+enum MTInstanceEventIds
+{
+    EVENT_SPAWN_KALECGOS    = 16547
+};
+
+enum MTInstanceText
+{
+    SAY_KALECGOS_SPAWN      = 0
+};
+
+enum MTMovementData
+{
+    PATH_KALECGOS_FLIGHT    = 248440
+};
+
+template <class AI, class T>
+inline AI* GetMagistersTerraceAI(T* obj)
+{
+    return GetInstanceAI<AI>(obj, MGTScriptName);
+}
+
+#define RegisterMagistersTerraceCreatureAI(ai_name) RegisterCreatureAIWithFactory(ai_name, GetMagistersTerraceAI)
 
 #endif

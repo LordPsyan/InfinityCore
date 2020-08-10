@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,10 +16,13 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "SpellScript.h"
-#include "SpellAuraEffects.h"
+#include "InstanceScript.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
 #include "oculus.h"
+#include "ScriptedCreature.h"
+#include "SpellInfo.h"
+#include "SpellScript.h"
 
 enum Says
 {
@@ -54,105 +57,122 @@ enum Events
 
 class boss_varos : public CreatureScript
 {
-public:
-    boss_varos() : CreatureScript("boss_varos") { }
+    public:
+        boss_varos() : CreatureScript("boss_varos") { }
 
-    CreatureAI* GetAI(Creature* creature) const
-    {
-        return new boss_varosAI (creature);
-    }
-
-    struct boss_varosAI : public BossAI
-    {
-        boss_varosAI(Creature* creature) : BossAI(creature, DATA_VAROS_EVENT)
+        struct boss_varosAI : public BossAI
         {
-            if (instance->GetBossState(DATA_DRAKOS_EVENT) != DONE)
-                DoCast(me, SPELL_CENTRIFUGE_SHIELD);
-        }
-
-        void Reset()
-        {
-            _Reset();
-
-            events.ScheduleEvent(EVENT_AMPLIFY_MAGIC, urand(20, 25) * IN_MILLISECONDS);
-            events.ScheduleEvent(EVENT_ENERGIZE_CORES_VISUAL, 5000);
-            // not sure if this is handled by a timer or hp percentage
-            events.ScheduleEvent(EVENT_CALL_AZURE, urand(15, 30) * IN_MILLISECONDS);
-
-            firstCoreEnergize = false;
-            coreEnergizeOrientation = 0.0f;
-        }
-
-        void EnterCombat(Unit* /*who*/)
-        {
-            _EnterCombat();
-
-            Talk(SAY_AGGRO);
-        }
-
-        float GetCoreEnergizeOrientation()
-        {
-            return coreEnergizeOrientation;
-        }
-
-        void UpdateAI(const uint32 diff)
-        {
-            //Return since we have no target
-            if (!UpdateVictim())
-                return;
-
-            events.Update(diff);
-
-            if (me->HasUnitState(UNIT_STATE_CASTING))
-                return;
-
-            while (uint32 eventId = events.ExecuteEvent())
+            boss_varosAI(Creature* creature) : BossAI(creature, DATA_VAROS)
             {
-                switch (eventId)
-                {
-                    case EVENT_ENERGIZE_CORES:
-                        DoCast(me, SPELL_ENERGIZE_CORES);
-                        events.CancelEvent(EVENT_ENERGIZE_CORES);
-                        break;
-                    case EVENT_ENERGIZE_CORES_VISUAL:
-                        if (!firstCoreEnergize)
-                        {
-                            coreEnergizeOrientation = me->GetOrientation();
-                            firstCoreEnergize = true;
-                        } else
-                            coreEnergizeOrientation = Position::NormalizeOrientation(coreEnergizeOrientation - 2.0f);
-
-                        DoCast(me, SPELL_ENERGIZE_CORES_VISUAL);
-                        events.ScheduleEvent(EVENT_ENERGIZE_CORES_VISUAL, 5000);
-                        events.ScheduleEvent(EVENT_ENERGIZE_CORES, 4000);
-                        break;
-                    case EVENT_CALL_AZURE:
-                        // not sure how blizz handles this, i cant see any pattern between the differnt spells
-                        DoCast(me, SPELL_CALL_AZURE_RING_CAPTAIN);
-                        Talk(SAY_AZURE);
-                        Talk(SAY_AZURE_EMOTE);
-                        events.ScheduleEvent(EVENT_CALL_AZURE, urand(20, 25) * IN_MILLISECONDS);
-                        break;
-                    case EVENT_AMPLIFY_MAGIC:
-                        DoCastVictim(SPELL_CALL_AMPLIFY_MAGIC);
-                        events.ScheduleEvent(EVENT_AMPLIFY_MAGIC, urand(17, 20) * IN_MILLISECONDS);
-                        break;
-                }
+                Initialize();
             }
 
-            DoMeleeAttackIfReady();
-        }
+            void Initialize()
+            {
+                firstCoreEnergize = false;
+                coreEnergizeOrientation = 0.0f;
+            }
 
-        void JustDied(Unit* /*killer*/)
+            void InitializeAI() override
+            {
+                BossAI::InitializeAI();
+                if (instance->GetBossState(DATA_DRAKOS) != DONE)
+                    DoCast(me, SPELL_CENTRIFUGE_SHIELD);
+            }
+
+            void Reset() override
+            {
+                _Reset();
+
+                events.ScheduleEvent(EVENT_AMPLIFY_MAGIC, 20s, 25s);
+                events.ScheduleEvent(EVENT_ENERGIZE_CORES_VISUAL, 5s);
+                // not sure if this is handled by a timer or hp percentage
+                events.ScheduleEvent(EVENT_CALL_AZURE, 15s, 30s);
+
+                Initialize();
+            }
+
+            void JustEngagedWith(Unit* who) override
+            {
+                BossAI::JustEngagedWith(who);
+
+                Talk(SAY_AGGRO);
+            }
+
+            float GetCoreEnergizeOrientation()
+            {
+                return coreEnergizeOrientation;
+            }
+
+            void UpdateAI(uint32 diff) override
+            {
+                if (!UpdateVictim())
+                    return;
+
+                events.Update(diff);
+
+                if (me->HasUnitState(UNIT_STATE_CASTING))
+                    return;
+
+                while (uint32 eventId = events.ExecuteEvent())
+                {
+                    switch (eventId)
+                    {
+                        case EVENT_ENERGIZE_CORES:
+                            DoCast(me, SPELL_ENERGIZE_CORES);
+                            events.CancelEvent(EVENT_ENERGIZE_CORES);
+                            break;
+                        case EVENT_ENERGIZE_CORES_VISUAL:
+                            if (!firstCoreEnergize)
+                            {
+                                coreEnergizeOrientation = me->GetOrientation();
+                                firstCoreEnergize = true;
+                            }
+                            else
+                                coreEnergizeOrientation = Position::NormalizeOrientation(coreEnergizeOrientation - 2.0f);
+
+                            DoCast(me, SPELL_ENERGIZE_CORES_VISUAL);
+                            events.ScheduleEvent(EVENT_ENERGIZE_CORES_VISUAL, 5s);
+                            events.ScheduleEvent(EVENT_ENERGIZE_CORES, 4s);
+                            break;
+                        case EVENT_CALL_AZURE:
+                            // not sure how blizz handles this, i cant see any pattern between the differnt spells
+                            DoCast(me, SPELL_CALL_AZURE_RING_CAPTAIN);
+                            Talk(SAY_AZURE);
+                            Talk(SAY_AZURE_EMOTE);
+                            events.ScheduleEvent(EVENT_CALL_AZURE, 20s, 25s);
+                            break;
+                        case EVENT_AMPLIFY_MAGIC:
+                            DoCastVictim(SPELL_CALL_AMPLIFY_MAGIC);
+                            events.ScheduleEvent(EVENT_AMPLIFY_MAGIC, 17s, 20s);
+                            break;
+                        default:
+                            break;
+                    }
+
+                    if (me->HasUnitState(UNIT_STATE_CASTING))
+                        return;
+                }
+
+                DoMeleeAttackIfReady();
+            }
+
+            void JustDied(Unit* /*killer*/) override
+            {
+                _JustDied();
+                Talk(SAY_DEATH);
+                DoCast(me, SPELL_DEATH_SPELL, true); // we cast the spell as triggered or the summon effect does not occur
+            }
+
+        private:
+            bool firstCoreEnergize;
+            float coreEnergizeOrientation;
+        };
+
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            _JustDied();
-            Talk(SAY_DEATH);
-            DoCast(me, SPELL_DEATH_SPELL, true); // we cast the spell as triggered or the summon effect does not occur
+            return GetOculusAI<boss_varosAI>(creature);
         }
-    private:
-        bool firstCoreEnergize;
-        float coreEnergizeOrientation;
-    };
 };
 
 class npc_azure_ring_captain : public CreatureScript
@@ -164,12 +184,18 @@ class npc_azure_ring_captain : public CreatureScript
         {
             npc_azure_ring_captainAI(Creature* creature) : ScriptedAI(creature)
             {
+                Initialize();
                 instance = creature->GetInstanceScript();
             }
 
-            void Reset()
+            void Initialize()
             {
-                targetGUID = 0;
+                targetGUID.Clear();
+            }
+
+            void Reset() override
+            {
+                Initialize();
 
                 me->SetWalk(true);
                 //! HACK: Creature's can't have MOVEMENTFLAG_FLYING
@@ -177,16 +203,16 @@ class npc_azure_ring_captain : public CreatureScript
                 me->SetReactState(REACT_AGGRESSIVE);
             }
 
-            void SpellHitTarget(Unit* target, SpellInfo const* spell)
+            void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
             {
-                if (spell->Id == SPELL_ICE_BEAM)
+                if (spellInfo->Id == SPELL_ICE_BEAM)
                 {
                     target->CastSpell(target, SPELL_SUMMON_ARCANE_BEAM, true);
                     me->DespawnOrUnsummon();
                 }
             }
 
-            void UpdateAI(const uint32 /*diff*/)
+            void UpdateAI(uint32 /*diff*/) override
             {
                 if (!UpdateVictim())
                     return;
@@ -194,7 +220,7 @@ class npc_azure_ring_captain : public CreatureScript
                 DoMeleeAttackIfReady();
             }
 
-            void MovementInform(uint32 type, uint32 id)
+            void MovementInform(uint32 type, uint32 id) override
             {
                 if (type != POINT_MOTION_TYPE ||
                     id != ACTION_CALL_DRAGON_EVENT)
@@ -206,22 +232,19 @@ class npc_azure_ring_captain : public CreatureScript
                     DoCast(target, SPELL_ICE_BEAM);
             }
 
-            void DoAction(const int32 action)
+            void DoAction(int32 action) override
             {
                 switch (action)
                 {
-                   case ACTION_CALL_DRAGON_EVENT:
-                        if (instance)
+                    case ACTION_CALL_DRAGON_EVENT:
+                        if (Creature* varos = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_VAROS)))
                         {
-                            if (Creature* varos = ObjectAccessor::GetCreature(*me, instance->GetData64(DATA_VAROS)))
+                            if (Unit* victim = varos->AI()->SelectTarget(SelectTargetMethod::Random, 0))
                             {
-                                if (Unit* victim = varos->AI()->SelectTarget(SELECT_TARGET_RANDOM, 0))
-                                {
-                                    me->SetReactState(REACT_PASSIVE);
-                                    me->SetWalk(false);
-                                    me->GetMotionMaster()->MovePoint(ACTION_CALL_DRAGON_EVENT, victim->GetPositionX(), victim->GetPositionY(), victim->GetPositionZ() + 20.0f);
-                                    targetGUID = victim->GetGUID();
-                                }
+                                me->SetReactState(REACT_PASSIVE);
+                                me->SetWalk(false);
+                                me->GetMotionMaster()->MovePoint(ACTION_CALL_DRAGON_EVENT, victim->GetPositionX(), victim->GetPositionY(), victim->GetPositionZ() + 20.0f);
+                                targetGUID = victim->GetGUID();
                             }
                         }
                         break;
@@ -229,13 +252,13 @@ class npc_azure_ring_captain : public CreatureScript
            }
 
         private:
-            uint64 targetGUID;
+            ObjectGuid targetGUID;
             InstanceScript* instance;
         };
 
-        CreatureAI* GetAI(Creature* creature) const
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            return new npc_azure_ring_captainAI(creature);
+            return GetOculusAI<npc_azure_ring_captainAI>(creature);
         }
 };
 
@@ -248,10 +271,10 @@ class spell_varos_centrifuge_shield : public SpellScriptLoader
         {
             PrepareAuraScript(spell_varos_centrifuge_shield_AuraScript);
 
-            bool Load()
+            bool Load() override
             {
                 Unit* caster = GetCaster();
-                return (caster && caster->ToCreature());
+                return caster && caster->GetTypeId() == TYPEID_UNIT;
             }
 
             void OnApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
@@ -259,11 +282,11 @@ class spell_varos_centrifuge_shield : public SpellScriptLoader
                 if (Unit* caster = GetCaster())
                 {
                     // flags taken from sniffs
-                    // UNIT_FLAG_UNK_9 -> means passive but it is not yet implemented in core
-                    if (caster->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNK_15|UNIT_FLAG_IMMUNE_TO_NPC|UNIT_FLAG_IMMUNE_TO_PC|UNIT_FLAG_UNK_6))
+                    if (caster->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SWIMMING|UNIT_FLAG_IMMUNE_TO_NPC|UNIT_FLAG_IMMUNE_TO_PC|UNIT_FLAG_UNK_6))
                     {
                         caster->ToCreature()->SetReactState(REACT_PASSIVE);
-                        caster->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNK_15|UNIT_FLAG_IMMUNE_TO_NPC|UNIT_FLAG_IMMUNE_TO_PC|UNIT_FLAG_UNK_6);
+                        caster->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SWIMMING|UNIT_FLAG_UNK_6);
+                        caster->SetImmuneToAll(true, true);
                     }
                 }
             }
@@ -273,18 +296,19 @@ class spell_varos_centrifuge_shield : public SpellScriptLoader
                 if (Unit* caster = GetCaster())
                 {
                     caster->ToCreature()->SetReactState(REACT_AGGRESSIVE);
-                    caster->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNK_15|UNIT_FLAG_IMMUNE_TO_NPC|UNIT_FLAG_IMMUNE_TO_PC|UNIT_FLAG_UNK_6);
+                    caster->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SWIMMING|UNIT_FLAG_UNK_6);
+                    caster->SetImmuneToAll(false);
                 }
             }
 
-            void Register()
+            void Register() override
             {
                 OnEffectRemove += AuraEffectRemoveFn(spell_varos_centrifuge_shield_AuraScript::OnRemove, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
                 OnEffectApply += AuraEffectApplyFn(spell_varos_centrifuge_shield_AuraScript::OnApply, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
             }
         };
 
-        AuraScript* GetAuraScript() const
+        AuraScript* GetAuraScript() const override
         {
             return new spell_varos_centrifuge_shield_AuraScript();
         }
@@ -293,11 +317,11 @@ class spell_varos_centrifuge_shield : public SpellScriptLoader
 class spell_varos_energize_core_area_enemy : public SpellScriptLoader
 {
     public:
-        spell_varos_energize_core_area_enemy() : SpellScriptLoader("spell_varos_energize_core_area_enemy") {}
+        spell_varos_energize_core_area_enemy() : SpellScriptLoader("spell_varos_energize_core_area_enemy") { }
 
         class spell_varos_energize_core_area_enemySpellScript : public SpellScript
         {
-            PrepareSpellScript(spell_varos_energize_core_area_enemySpellScript)
+            PrepareSpellScript(spell_varos_energize_core_area_enemySpellScript);
 
             void FilterTargets(std::list<WorldObject*>& targets)
             {
@@ -308,15 +332,12 @@ class spell_varos_energize_core_area_enemy : public SpellScriptLoader
                 if (varos->GetEntry() != NPC_VAROS)
                     return;
 
-                float orientation = CAST_AI(boss_varos::boss_varosAI, varos->AI())->GetCoreEnergizeOrientation();
+                float orientation = ENSURE_AI(boss_varos::boss_varosAI, varos->AI())->GetCoreEnergizeOrientation();
 
                 for (std::list<WorldObject*>::iterator itr = targets.begin(); itr != targets.end();)
                 {
-                    Position pos;
-                    (*itr)->GetPosition(&pos);
-
-                    float angle = varos->GetAngle((*itr)->GetPositionX(), (*itr)->GetPositionY());
-                    float diff = fabs(orientation - angle);
+                    float angle = varos->GetAbsoluteAngle((*itr)->GetPositionX(), (*itr)->GetPositionY());
+                    float diff = std::fabs(orientation - angle);
 
                     if (diff > 1.0f)
                         itr = targets.erase(itr);
@@ -325,13 +346,13 @@ class spell_varos_energize_core_area_enemy : public SpellScriptLoader
                 }
             }
 
-            void Register()
+            void Register() override
             {
                 OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_varos_energize_core_area_enemySpellScript::FilterTargets, EFFECT_0, TARGET_UNIT_SRC_AREA_ENEMY);
             }
         };
 
-        SpellScript* GetSpellScript() const
+        SpellScript* GetSpellScript() const override
         {
             return new spell_varos_energize_core_area_enemySpellScript();
         }
@@ -340,11 +361,11 @@ class spell_varos_energize_core_area_enemy : public SpellScriptLoader
 class spell_varos_energize_core_area_entry : public SpellScriptLoader
 {
     public:
-        spell_varos_energize_core_area_entry() : SpellScriptLoader("spell_varos_energize_core_area_entry") {}
+        spell_varos_energize_core_area_entry() : SpellScriptLoader("spell_varos_energize_core_area_entry") { }
 
         class spell_varos_energize_core_area_entrySpellScript : public SpellScript
         {
-            PrepareSpellScript(spell_varos_energize_core_area_entrySpellScript)
+            PrepareSpellScript(spell_varos_energize_core_area_entrySpellScript);
 
             void FilterTargets(std::list<WorldObject*>& targets)
             {
@@ -355,15 +376,12 @@ class spell_varos_energize_core_area_entry : public SpellScriptLoader
                 if (varos->GetEntry() != NPC_VAROS)
                     return;
 
-                float orientation = CAST_AI(boss_varos::boss_varosAI, varos->AI())->GetCoreEnergizeOrientation();
+                float orientation = ENSURE_AI(boss_varos::boss_varosAI, varos->AI())->GetCoreEnergizeOrientation();
 
                 for (std::list<WorldObject*>::iterator itr = targets.begin(); itr != targets.end();)
                 {
-                    Position pos;
-                    (*itr)->GetPosition(&pos);
-
-                    float angle = varos->GetAngle((*itr)->GetPositionX(), (*itr)->GetPositionY());
-                    float diff = fabs(orientation - angle);
+                    float angle = varos->GetAbsoluteAngle((*itr)->GetPositionX(), (*itr)->GetPositionY());
+                    float diff = std::fabs(orientation - angle);
 
                     if (diff > 1.0f)
                         itr = targets.erase(itr);
@@ -372,13 +390,13 @@ class spell_varos_energize_core_area_entry : public SpellScriptLoader
                 }
             }
 
-            void Register()
+            void Register() override
             {
                 OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_varos_energize_core_area_entrySpellScript::FilterTargets, EFFECT_0, TARGET_UNIT_SRC_AREA_ENTRY);
             }
         };
 
-        SpellScript* GetSpellScript() const
+        SpellScript* GetSpellScript() const override
         {
             return new spell_varos_energize_core_area_entrySpellScript();
         }

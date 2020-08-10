@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,30 +21,26 @@
 #define OUTDOORPVP_OBJECTIVE_UPDATE_INTERVAL 1000
 
 #include "OutdoorPvP.h"
-#include <ace/Singleton.h>
+#include <array>
+#include <unordered_map>
 
 class Player;
 class GameObject;
 class Creature;
 class ZoneScript;
 struct GossipMenuItems;
-
-struct OutdoorPvPData
-{
-    OutdoorPvPTypes TypeId;
-    uint32 ScriptId;
-};
+enum LocaleConstant : uint8;
 
 // class to handle player enter / leave / areatrigger / GO use events
-class OutdoorPvPMgr
+class TC_GAME_API OutdoorPvPMgr
 {
-    friend class ACE_Singleton<OutdoorPvPMgr, ACE_Null_Mutex>;
-
     private:
         OutdoorPvPMgr();
-        ~OutdoorPvPMgr() {};
+        ~OutdoorPvPMgr() { };
 
     public:
+        static OutdoorPvPMgr* instance();
+
         // create outdoor pvp events
         void InitOutdoorPvP();
 
@@ -67,7 +63,7 @@ class OutdoorPvPMgr
         bool HandleCustomSpell(Player* player, uint32 spellId, GameObject* go);
 
         // handle custom go if registered
-        bool HandleOpenGo(Player* player, uint64 guid);
+        bool HandleOpenGo(Player* player, GameObject* go);
 
         ZoneScript* GetZoneScript(uint32 zoneId);
 
@@ -75,32 +71,34 @@ class OutdoorPvPMgr
 
         void Update(uint32 diff);
 
-        void HandleGossipOption(Player* player, uint64 guid, uint32 gossipid);
+        void HandleGossipOption(Player* player, Creature* creature, uint32 gossipid);
 
         bool CanTalkTo(Player* player, Creature* creature, GossipMenuItems const& gso);
 
         void HandleDropFlag(Player* player, uint32 spellId);
 
+        std::string GetDefenseMessage(uint32 zoneId, uint32 id, LocaleConstant locale) const;
+
     private:
         typedef std::vector<OutdoorPvP*> OutdoorPvPSet;
-        typedef std::map<uint32 /* zoneid */, OutdoorPvP*> OutdoorPvPMap;
-        typedef std::map<OutdoorPvPTypes, OutdoorPvPData*> OutdoorPvPDataMap;
+        typedef std::unordered_map<uint32 /*zoneid*/, OutdoorPvP*> OutdoorPvPMap;
+        typedef std::array<uint32, MAX_OUTDOORPVP_TYPES> OutdoorPvPScriptIds;
 
         // contains all initiated outdoor pvp events
         // used when initing / cleaning up
-        OutdoorPvPSet  m_OutdoorPvPSet;
+        OutdoorPvPSet m_OutdoorPvPSet;
 
         // maps the zone ids to an outdoor pvp event
         // used in player event handling
-        OutdoorPvPMap   m_OutdoorPvPMap;
+        OutdoorPvPMap m_OutdoorPvPMap;
 
         // Holds the outdoor PvP templates
-        OutdoorPvPDataMap m_OutdoorPvPDatas;
+        OutdoorPvPScriptIds m_OutdoorPvPDatas;
 
         // update interval
         uint32 m_UpdateTimer;
 };
 
-#define sOutdoorPvPMgr ACE_Singleton<OutdoorPvPMgr, ACE_Null_Mutex>::instance()
+#define sOutdoorPvPMgr OutdoorPvPMgr::instance()
 
 #endif /*OUTDOOR_PVP_MGR_H_*/

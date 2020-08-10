@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,9 +16,11 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "InstanceScript.h"
 #include "drak_tharon_keep.h"
+#include "GameObject.h"
+#include "InstanceScript.h"
+#include "Map.h"
+#include "ScriptedCreature.h"
 
 class instance_drak_tharon_keep : public InstanceMapScript
 {
@@ -29,19 +31,11 @@ class instance_drak_tharon_keep : public InstanceMapScript
         {
             instance_drak_tharon_keep_InstanceScript(Map* map) : InstanceScript(map)
             {
+                SetHeaders(DataHeader);
                 SetBossNumber(EncounterCount);
-
-                TrollgoreGUID       = 0;
-                NovosGUID           = 0;
-                KingDredGUID        = 0;
-                TharonJaGUID        = 0;
-
-                memset(TrollgoreInvaderSummonerGuids, 0, 4 * sizeof(uint64));
-                memset(NovosCrystalGUIDs, 0, 4 * sizeof(uint64));
-                memset(NovosSummonerGUIDs, 0, 4 * sizeof(uint64));
             }
 
-            void OnCreatureCreate(Creature* creature)
+            void OnCreatureCreate(Creature* creature) override
             {
                 switch (creature->GetEntry())
                 {
@@ -68,7 +62,7 @@ class instance_drak_tharon_keep : public InstanceMapScript
                 }
             }
 
-            void OnGameObjectCreate(GameObject* go)
+            void OnGameObjectCreate(GameObject* go) override
             {
                 switch (go->GetEntry())
                 {
@@ -104,7 +98,7 @@ class instance_drak_tharon_keep : public InstanceMapScript
                 else if (y < -675.0f && y > -685.0f)
                     TrollgoreInvaderSummonerGuids[2] = creature->GetGUID();
             }
-            
+
             void InitializeNovosSummoner(Creature* creature)
             {
                 float x = creature->GetPositionX();
@@ -121,7 +115,7 @@ class instance_drak_tharon_keep : public InstanceMapScript
                     NovosSummonerGUIDs[3] = creature->GetGUID();
             }
 
-            uint64 GetData64(uint32 type) const 
+            ObjectGuid GetGuidData(uint32 type) const override
             {
                 switch (type)
                 {
@@ -149,77 +143,34 @@ class instance_drak_tharon_keep : public InstanceMapScript
                         return NovosSummonerGUIDs[type - DATA_NOVOS_SUMMONER_1];
                 }
 
-                return 0;
+                return ObjectGuid::Empty;
             }
 
-            void OnUnitDeath(Unit* unit)
+            void OnUnitDeath(Unit* unit) override
             {
                 if (unit->GetEntry() == NPC_CRYSTAL_HANDLER)
                     if (Creature* novos = instance->GetCreature(NovosGUID))
                         novos->AI()->DoAction(ACTION_CRYSTAL_HANDLER_DIED);
             }
 
-            std::string GetSaveData()
-            {
-                OUT_SAVE_INST_DATA;
-
-                std::ostringstream saveStream;
-                saveStream << "D K " << GetBossSaveData();
-
-                OUT_SAVE_INST_DATA_COMPLETE;
-                return saveStream.str();
-            }
-
-            void Load(char const* str)
-            {
-                if (!str)
-                {
-                    OUT_LOAD_INST_DATA_FAIL;
-                    return;
-                }
-
-                OUT_LOAD_INST_DATA(str);
-
-                char dataHead1, dataHead2;
-
-                std::istringstream loadStream(str);
-                loadStream >> dataHead1 >> dataHead2;
-
-                if (dataHead1 == 'D' && dataHead2 == 'K')
-                {
-                    for (uint32 i = 0; i < EncounterCount; ++i)
-                    {
-                        uint32 tmpState;
-                        loadStream >> tmpState;
-                        if (tmpState == IN_PROGRESS || tmpState > SPECIAL)
-                            tmpState = NOT_STARTED;
-                        SetBossState(i, EncounterState(tmpState));
-                    }
-                }
-                else
-                    OUT_LOAD_INST_DATA_FAIL;
-
-                OUT_LOAD_INST_DATA_COMPLETE;
-            }
-
         protected:
-            uint64 TrollgoreGUID;
-            uint64 NovosGUID;
-            uint64 KingDredGUID;
-            uint64 TharonJaGUID;
+            ObjectGuid TrollgoreGUID;
+            ObjectGuid NovosGUID;
+            ObjectGuid KingDredGUID;
+            ObjectGuid TharonJaGUID;
 
-            uint64 TrollgoreInvaderSummonerGuids[3];
-            uint64 NovosCrystalGUIDs[4];
-            uint64 NovosSummonerGUIDs[4];
+            ObjectGuid TrollgoreInvaderSummonerGuids[3];
+            ObjectGuid NovosCrystalGUIDs[4];
+            ObjectGuid NovosSummonerGUIDs[4];
         };
 
-        InstanceScript* GetInstanceScript(InstanceMap* map) const 
+        InstanceScript* GetInstanceScript(InstanceMap* map) const override
         {
             return new instance_drak_tharon_keep_InstanceScript(map);
         }
 };
 
-void AddSC_instance_drak_tharon()
+void AddSC_instance_drak_tharon_keep()
 {
     new instance_drak_tharon_keep();
 }

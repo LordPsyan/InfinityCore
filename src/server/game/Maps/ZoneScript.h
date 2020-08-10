@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,19 +18,23 @@
 #ifndef ZONE_SCRIPT_H_
 #define ZONE_SCRIPT_H_
 
-#include "Common.h"
-#include "Creature.h"
+#include "Define.h"
+#include "ObjectGuid.h"
 
+class Creature;
 class GameObject;
+class Unit;
+class WorldObject;
+struct CreatureData;
 
-class ZoneScript
+class TC_GAME_API ZoneScript
 {
     public:
-        ZoneScript() {}
-        virtual ~ZoneScript() {}
+        ZoneScript() { }
+        virtual ~ZoneScript() { }
 
-        virtual uint32 GetCreatureEntry(uint32 /*guidlow*/, CreatureData const* data) { return data->id; }
-        virtual uint32 GetGameObjectEntry(uint32 /*guidlow*/, uint32 entry) { return entry; }
+        virtual uint32 GetCreatureEntry(ObjectGuid::LowType /*guidLow*/, CreatureData const* data);
+        virtual uint32 GetGameObjectEntry(ObjectGuid::LowType /*guidLow*/, uint32 entry) { return entry; }
 
         virtual void OnCreatureCreate(Creature* ) { }
         virtual void OnCreatureRemove(Creature* ) { }
@@ -41,14 +45,17 @@ class ZoneScript
         virtual void OnUnitDeath(Unit*) { }
 
         //All-purpose data storage 64 bit
+        virtual ObjectGuid GetGuidData(uint32 /*DataId*/) const { return ObjectGuid::Empty; }
+        virtual void SetGuidData(uint32 /*DataId*/, ObjectGuid /*Value*/) { }
+
         virtual uint64 GetData64(uint32 /*DataId*/) const { return 0; }
-        virtual void SetData64(uint32 /*DataId*/, uint64 /*Value*/) {}
+        virtual void SetData64(uint32 /*DataId*/, uint64 /*Value*/) { }
 
         //All-purpose data storage 32 bit
         virtual uint32 GetData(uint32 /*DataId*/) const { return 0; }
-        virtual void SetData(uint32 /*DataId*/, uint32 /*Value*/) {}
+        virtual void SetData(uint32 /*DataId*/, uint32 /*Value*/) { }
 
-        virtual void ProcessEvent(WorldObject* /*obj*/, uint32 /*eventId*/) {}
+        virtual void ProcessEvent(WorldObject* /*obj*/, uint32 /*eventId*/) { }
 };
 
 #endif

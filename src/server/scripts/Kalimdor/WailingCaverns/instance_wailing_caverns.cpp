@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,7 +23,10 @@ SDCategory: Wailing Caverns
 EndScriptData */
 
 #include "ScriptMgr.h"
+#include "Creature.h"
 #include "InstanceScript.h"
+#include "Log.h"
+#include "Map.h"
 #include "wailing_caverns.h"
 
 #define MAX_ENCOUNTER   9
@@ -32,37 +34,35 @@ EndScriptData */
 class instance_wailing_caverns : public InstanceMapScript
 {
 public:
-    instance_wailing_caverns() : InstanceMapScript("instance_wailing_caverns", 43) { }
+    instance_wailing_caverns() : InstanceMapScript(WCScriptName, 43) { }
 
-    InstanceScript* GetInstanceScript(InstanceMap* map) const
+    InstanceScript* GetInstanceScript(InstanceMap* map) const override
     {
         return new instance_wailing_caverns_InstanceMapScript(map);
     }
 
     struct instance_wailing_caverns_InstanceMapScript : public InstanceScript
     {
-        instance_wailing_caverns_InstanceMapScript(Map* map) : InstanceScript(map) {}
+        instance_wailing_caverns_InstanceMapScript(Map* map) : InstanceScript(map)
+        {
+            SetHeaders(DataHeader);
+            memset(&m_auiEncounter, 0, sizeof(m_auiEncounter));
+
+            yelled = false;
+        }
 
         uint32 m_auiEncounter[MAX_ENCOUNTER];
 
         bool yelled;
-        uint64 NaralexGUID;
+        ObjectGuid NaralexGUID;
 
-        void Initialize()
-        {
-            memset(&m_auiEncounter, 0, sizeof(m_auiEncounter));
-
-            yelled = false;
-            NaralexGUID = 0;
-        }
-
-        void OnCreatureCreate(Creature* creature)
+        void OnCreatureCreate(Creature* creature) override
         {
             if (creature->GetEntry() == DATA_NARALEX)
                 NaralexGUID = creature->GetGUID();
         }
 
-        void SetData(uint32 type, uint32 data)
+        void SetData(uint32 type, uint32 data) override
         {
             switch (type)
             {
@@ -80,7 +80,7 @@ public:
             if (data == DONE)SaveToDB();
         }
 
-        uint32 GetData(uint32 type) const
+        uint32 GetData(uint32 type) const override
         {
             switch (type)
             {
@@ -98,13 +98,13 @@ public:
             return 0;
         }
 
-        uint64 GetData64(uint32 data) const
+        ObjectGuid GetGuidData(uint32 data) const override
         {
             if (data == DATA_NARALEX)return NaralexGUID;
-            return 0;
+            return ObjectGuid::Empty;
         }
 
-        std::string GetSaveData()
+        std::string GetSaveData() override
         {
             OUT_SAVE_INST_DATA;
 
@@ -117,7 +117,7 @@ public:
             return saveStream.str();
         }
 
-        void Load(const char* in)
+        void Load(char const* in) override
         {
             if (!in)
             {

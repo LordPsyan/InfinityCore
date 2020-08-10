@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -51,28 +51,28 @@ class boss_quagmirran : public CreatureScript
         {
             boss_quagmirranAI(Creature* creature) : BossAI(creature, DATA_QUAGMIRRAN) { }
 
-            void Reset() 
+            void Reset() override
             {
                 _Reset();
             }
 
-            void JustDied(Unit* /*killer*/) 
+            void JustDied(Unit* /*killer*/) override
             {
                 _JustDied();
             }
 
-            void EnterCombat(Unit* /*who*/) 
+            void JustEngagedWith(Unit* who) override
             {
-                _EnterCombat();
-                events.ScheduleEvent(EVENT_ACID_SPRAY, 25000);
-                events.ScheduleEvent(EVENT_CLEAVE, 9000);
-                events.ScheduleEvent(EVENT_UPPERCUT, 20000);
-                events.ScheduleEvent(EVENT_POISON_BOLT_VOLLEY, 31000);
+                BossAI::JustEngagedWith(who);
+                events.ScheduleEvent(EVENT_ACID_SPRAY, 25s);
+                events.ScheduleEvent(EVENT_CLEAVE, 9s);
+                events.ScheduleEvent(EVENT_UPPERCUT, 20s);
+                events.ScheduleEvent(EVENT_POISON_BOLT_VOLLEY, 31s);
             }
 
-            void KilledUnit(Unit* /*victim*/)  { }
+            void KilledUnit(Unit* /*victim*/) override { }
 
-            void UpdateAI(const uint32 diff) 
+            void UpdateAI(uint32 diff) override
             {
                 if (!UpdateVictim())
                     return;
@@ -88,33 +88,36 @@ class boss_quagmirran : public CreatureScript
                     {
                         case EVENT_ACID_SPRAY:
                             DoCastAOE(SPELL_ACID_SPRAY);
-                            events.ScheduleEvent(EVENT_ACID_SPRAY, urand(20000, 25000));
+                            events.ScheduleEvent(EVENT_ACID_SPRAY, 20s, 25s);
                             break;
                         case EVENT_CLEAVE:
                             DoCastVictim(SPELL_CLEAVE, true);
-                            events.ScheduleEvent(EVENT_CLEAVE, urand(18000, 34000));
+                            events.ScheduleEvent(EVENT_CLEAVE, 18s, 34s);
                             break;
                         case EVENT_UPPERCUT:
-                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1, 10.0f, true))
+                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 1, 10.0f, true))
                             DoCast(target, SPELL_UPPERCUT);
-                            events.ScheduleEvent(EVENT_UPPERCUT, 22000);
+                            events.ScheduleEvent(EVENT_UPPERCUT, 22s);
                             break;
                         case EVENT_POISON_BOLT_VOLLEY:
                             DoCast(me, SPELL_POISON_BOLT_VOLLEY);
-                            events.ScheduleEvent(EVENT_POISON_BOLT_VOLLEY, 24000);
+                            events.ScheduleEvent(EVENT_POISON_BOLT_VOLLEY, 24s);
                             break;
                         default:
                             break;
                     }
+
+                    if (me->HasUnitState(UNIT_STATE_CASTING))
+                        return;
                 }
 
                 DoMeleeAttackIfReady();
             }
         };
 
-        CreatureAI* GetAI(Creature* creature) const 
+        CreatureAI* GetAI(Creature* creature) const override
         {
-            return new boss_quagmirranAI(creature);
+            return GetSlavePensAI<boss_quagmirranAI>(creature);
         }
 };
 

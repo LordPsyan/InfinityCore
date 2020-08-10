@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,132 +15,21 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "zlib.h"
+#include "WorldSession.h"
 #include "Common.h"
+#include "DatabaseEnv.h"
+#include "GameTime.h"
 #include "Language.h"
+#include "Log.h"
 #include "ObjectMgr.h"
 #include "Opcodes.h"
 #include "Player.h"
+#include "Random.h"
 #include "TicketMgr.h"
 #include "Util.h"
 #include "World.h"
 #include "WorldPacket.h"
-#include "WorldSession.h"
-
-//Todo Database Support
-void WorldSession::HandleSubmitComplainOpcode(WorldPacket & recvData)
-{
-    float posX, posY, posZ, posO;
-    uint32 mapID;
-
-    ObjectGuid guid;
-
-    guid[5] = recvData.ReadBit();
-    guid[0] = recvData.ReadBit();
-    guid[1] = recvData.ReadBit();
-
-    uint32 length = recvData.ReadBits(12);
-
-    guid[3] = recvData.ReadBit();
-    guid[2] = recvData.ReadBit();
-    guid[4] = recvData.ReadBit();
-    guid[7] = recvData.ReadBit();
-     
-    //guid:4 options:0 length :0;posY:648.581055 ,posX:-8851.486328 ,posZ:96.454063 ,MAP:0 ,poso:2.151366 , unk:0 text:           //SPAM
-    //guid:4 options:10 length :0;posY:648.581055 ,posX:-8851.486328 ,posZ:96.454063 ,MAP:0 ,poso:2.151366 , unk:0 text:          //Ausdrucksweise
-
-    uint32 options = recvData.ReadBits(4); // ##
-
-    guid[6] = recvData.ReadBit();
-
-    recvData.ReadByteSeq(guid[3]);
-    recvData.ReadByteSeq(guid[5]);
-    recvData.ReadByteSeq(guid[1]);
-    recvData.ReadByteSeq(guid[2]);
-    recvData.ReadByteSeq(guid[6]);
-    recvData.ReadByteSeq(guid[0]);
-
-    std::string text = recvData.ReadString(length);
-
-    recvData.ReadByteSeq(guid[7]);
-    recvData.ReadByteSeq(guid[4]);
-
-    recvData >> posY;
-    recvData >> posZ;	    
-    recvData >> posX;	
-    recvData >> mapID;
-    recvData >> posO;
-
-    recvData.ReadBit();
-
-    uint32 count = recvData.ReadBits(22);
-    uint32* strLength = new uint32[count];
-
-    // sLog->outInfo(LOG_FILTER_SERVER_LOADING,"CMSG_SUBMIT_COMPLAIN:: count:%u guid:%u option:%u length :%u;posY:%f ,posX:%f ,posZ:%f ,MAP:%u ,poso:%f  text:%s",count,guid,options,length,posY,posX,posZ,mapID,posO,text.c_str());
-
-    switch(options)
-    {    
-        case COMPLAIN_CHEATER:
-        case COMPLAIN_PLAYER_NAME:
-        case COMPLAIN_GUILD_NAME:
-        case COMPLAIN_ARENA_NAME:
-            
-            break;
-        case COMPLAIN_SPAM:
-        case COMPLAIN_BAD_LANG:
-            for (uint32 i = 0; i < count; ++i)
-                strLength[i] = recvData.ReadBits(13);
-
-            for (uint32 i = 0; i < count; ++i)
-            {
-                sLog->outInfo(LOG_FILTER_SERVER_LOADING,"time : %u",recvData.ReadPackedTime());
-                sLog->outInfo(LOG_FILTER_SERVER_LOADING,"Text : %s",recvData.ReadString(strLength[i]).c_str());
-            }
-
-            break;
-        default:
-             sLog->outInfo(LOG_FILTER_SERVER_LOADING,"CMSG_SUBMIT_COMPLAIN::UNKNOW option:%u",options);
-
-    }
-}
-
-//Todo Questlog AuraLog PhaseLog!
-void WorldSession::HandleSubmitBugOpcode(WorldPacket & recvData)
-{
-    float posX, posY, posZ, posO;
-    uint32 mapID;
-
-    uint32 length = recvData.ReadBits(12);
-    std::string bug = recvData.ReadString(length);
-	
-    recvData >> posY;
-    recvData >> posZ;
-    recvData >> posX;
-    recvData >> mapID;
-    recvData >> posO;
-
-    SQLTransaction trans = SQLTransaction(NULL);
-
-    //    0     1      2      3          4      5      6     7     8          
-    // realm, guid, message, createTime, pool, mapId, posX, posY, posZ
-    uint8 index = 0;
-    PreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_BUG_TICKET);
-    stmt->setUInt32(index, realmID);
-    stmt->setUInt32(++index, GUID_LOPART(GetPlayer()->GetGUID()));
-    stmt->setString(++index, bug);
-    stmt->setUInt32(++index, uint32(time(NULL)));
-    stmt->setString(++index, "change Line" /*GetNode()->GetName()*/);
-    stmt->setUInt16(++index, uint16(mapID));
-    stmt->setFloat (++index, (float)posX);
-    stmt->setFloat (++index, (float)posY);
-    stmt->setFloat (++index, (float)posZ);
-
-    LoginDatabase.ExecuteOrAppend(trans, stmt);
-}
-void WorldSession::HandleSubmitSuggestionOpcode(WorldPacket & recvData)
-{
-    HandleSubmitBugOpcode(recvData);  //If you want a separate table for the suggestions. Do it !! Same opcode Structure HandleSubmitBugOpcode
-}
+#include <zlib.h>
 
 void WorldSession::HandleGMTicketCreateOpcode(WorldPacket& recvData)
 {
@@ -149,22 +37,40 @@ void WorldSession::HandleGMTicketCreateOpcode(WorldPacket& recvData)
     if (sTicketMgr->GetStatus() == GMTICKET_QUEUE_STATUS_DISABLED)
         return;
 
-    if (GetPlayer()->getLevel() < sWorld->getIntConfig(CONFIG_TICKET_LEVEL_REQ))
+    if (GetPlayer()->GetLevel() < sWorld->getIntConfig(CONFIG_TICKET_LEVEL_REQ))
     {
         SendNotification(GetTrinityString(LANG_TICKET_REQ), sWorld->getIntConfig(CONFIG_TICKET_LEVEL_REQ));
         return;
     }
 
     GMTicketResponse response = GMTICKET_RESPONSE_CREATE_ERROR;
-    // Player must not have ticket
-    if (!sTicketMgr->GetTicketByPlayer(GetPlayer()->GetGUID()))
-    {
-        GmTicket* ticket = new GmTicket(GetPlayer(), recvData);
+    GmTicket* ticket = sTicketMgr->GetTicketByPlayer(GetPlayer()->GetGUID());
 
+    if (ticket && ticket->IsCompleted())
+        sTicketMgr->CloseTicket(ticket->GetId(), GetPlayer()->GetGUID());
+
+    // Player must not have ticket
+    if (!ticket || ticket->IsClosed())
+    {
+        uint32 mapId;
+        float x, y, z;
+        std::string message;
+        uint32 needResponse;
+        bool needMoreHelp;
         uint32 count;
         std::list<uint32> times;
         uint32 decompressedSize;
         std::string chatLog;
+
+        recvData >> mapId;
+        recvData >> x >> y >> z;
+        recvData >> message;
+
+        if (!ValidateHyperlinksAndMaybeKick(message))
+            return;
+
+        recvData >> needResponse;
+        recvData >> needMoreHelp;
 
         recvData >> count;
 
@@ -187,17 +93,26 @@ void WorldSession::HandleGMTicketCreateOpcode(WorldPacket& recvData)
             if (uncompress(dest.contents(), &realSize, recvData.contents() + pos, recvData.size() - pos) == Z_OK)
             {
                 dest >> chatLog;
-                ticket->SetChatLog(times, chatLog);
             }
             else
             {
-                sLog->outError(LOG_FILTER_NETWORKIO, "CMSG_GMTICKET_CREATE possibly corrupt. Uncompression failed.");
+                TC_LOG_ERROR("network", "CMSG_GMTICKET_CREATE possibly corrupt. Uncompression failed.");
                 recvData.rfinish();
                 return;
             }
 
             recvData.rfinish(); // Will still have compressed data in buffer.
         }
+
+        if (!chatLog.empty() && !ValidateHyperlinksAndMaybeKick(chatLog))
+            return;
+
+        ticket = new GmTicket(GetPlayer());
+        ticket->SetPosition(mapId, x, y, z);
+        ticket->SetMessage(message);
+        ticket->SetGmAction(needResponse, needMoreHelp);
+        if (!chatLog.empty())
+            ticket->SetChatLog(times, chatLog);
 
         sTicketMgr->AddTicket(ticket);
         sTicketMgr->UpdateLastChange();
@@ -217,10 +132,13 @@ void WorldSession::HandleGMTicketUpdateOpcode(WorldPacket& recvData)
     std::string message;
     recvData >> message;
 
+    if (!ValidateHyperlinksAndMaybeKick(message))
+        return;
+
     GMTicketResponse response = GMTICKET_RESPONSE_UPDATE_ERROR;
     if (GmTicket* ticket = sTicketMgr->GetTicketByPlayer(GetPlayer()->GetGUID()))
     {
-        SQLTransaction trans = SQLTransaction(NULL);
+        CharacterDatabaseTransaction trans = CharacterDatabaseTransaction(nullptr);
         ticket->SetMessage(message);
         ticket->SaveToDB(trans);
 
@@ -245,7 +163,7 @@ void WorldSession::HandleGMTicketDeleteOpcode(WorldPacket & /*recvData*/)
         sWorld->SendGMText(LANG_COMMAND_TICKETPLAYERABANDON, GetPlayer()->GetName().c_str(), ticket->GetId());
 
         sTicketMgr->CloseTicket(ticket->GetId(), GetPlayer()->GetGUID());
-        sTicketMgr->SendTicket(this, NULL);
+        sTicketMgr->SendTicket(this, nullptr);
     }
 }
 
@@ -261,7 +179,7 @@ void WorldSession::HandleGMTicketGetTicketOpcode(WorldPacket & /*recvData*/)
             sTicketMgr->SendTicket(this, ticket);
     }
     else
-        sTicketMgr->SendTicket(this, NULL);
+        sTicketMgr->SendTicket(this, nullptr);
 }
 
 void WorldSession::HandleGMTicketSystemStatusOpcode(WorldPacket & /*recvData*/)
@@ -280,8 +198,10 @@ void WorldSession::HandleGMSurveySubmit(WorldPacket& recvData)
     uint32 mainSurvey; // GMSurveyCurrentSurvey.dbc, column 1 (all 9) ref to GMSurveySurveys.dbc
     recvData >> mainSurvey;
 
+    std::unordered_set<uint32> surveyIds;
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
     // sub_survey1, r1, comment1, sub_survey2, r2, comment2, sub_survey3, r3, comment3, sub_survey4, r4, comment4, sub_survey5, r5, comment5, sub_survey6, r6, comment6, sub_survey7, r7, comment7, sub_survey8, r8, comment8, sub_survey9, r9, comment9, sub_survey10, r10, comment10,
-    for (uint8 i = 0; i < 15; i++)
+    for (uint8 i = 0; i < 10; i++)
     {
         uint32 subSurveyId; // ref to i'th GMSurveySurveys.dbc field (all fields in that dbc point to fields in GMSurveyQuestions.dbc)
         recvData >> subSurveyId;
@@ -293,24 +213,36 @@ void WorldSession::HandleGMSurveySubmit(WorldPacket& recvData)
         std::string comment; // comment ("Usage: GMSurveyAnswerSubmit(question, rank, comment)")
         recvData >> comment;
 
-        PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_GM_SUBSURVEY);
+        // make sure the same sub survey is not added to DB twice
+        if (!surveyIds.insert(subSurveyId).second)
+            continue;
+
+        if (!ValidateHyperlinksAndMaybeKick(comment))
+            return;
+
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_GM_SUBSURVEY);
         stmt->setUInt32(0, nextSurveyID);
         stmt->setUInt32(1, subSurveyId);
         stmt->setUInt32(2, rank);
         stmt->setString(3, comment);
-        CharacterDatabase.Execute(stmt);
+        trans->Append(stmt);
     }
 
     std::string comment; // just a guess
     recvData >> comment;
 
-    PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_GM_SURVEY);
-    stmt->setUInt32(0, GUID_LOPART(GetPlayer()->GetGUID()));
+    if (!ValidateHyperlinksAndMaybeKick(comment))
+        return;
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_GM_SURVEY);
+    stmt->setUInt32(0, GetPlayer()->GetGUID().GetCounter());
     stmt->setUInt32(1, nextSurveyID);
     stmt->setUInt32(2, mainSurvey);
     stmt->setString(3, comment);
 
-    CharacterDatabase.Execute(stmt);
+    trans->Append(stmt);
+
+    CharacterDatabase.CommitTransaction(trans);
 }
 
 void WorldSession::HandleReportLag(WorldPacket& recvData)
@@ -325,15 +257,15 @@ void WorldSession::HandleReportLag(WorldPacket& recvData)
     recvData >> y;
     recvData >> z;
 
-    PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_LAG_REPORT);
-    stmt->setUInt32(0, GUID_LOPART(GetPlayer()->GetGUID()));
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_LAG_REPORT);
+    stmt->setUInt32(0, GetPlayer()->GetGUID().GetCounter());
     stmt->setUInt8 (1, lagType);
     stmt->setUInt16(2, mapId);
     stmt->setFloat (3, x);
     stmt->setFloat (4, y);
     stmt->setFloat (5, z);
     stmt->setUInt32(6, GetLatency());
-    stmt->setUInt32(7, time(NULL));
+    stmt->setUInt32(7, GameTime::GetGameTime());
     CharacterDatabase.Execute(stmt);
 }
 
@@ -343,7 +275,7 @@ void WorldSession::HandleGMResponseResolve(WorldPacket& /*recvPacket*/)
     if (GmTicket* ticket = sTicketMgr->GetTicketByPlayer(GetPlayer()->GetGUID()))
     {
         uint8 getSurvey = 0;
-        if (float(rand_chance()) < sWorld->getFloatConfig(CONFIG_CHANCE_OF_GM_SURVEY))
+        if (roll_chance_f(sWorld->getFloatConfig(CONFIG_CHANCE_OF_GM_SURVEY)))
             getSurvey = 1;
 
         WorldPacket data(SMSG_GMRESPONSE_STATUS_UPDATE, 4);
@@ -355,6 +287,6 @@ void WorldSession::HandleGMResponseResolve(WorldPacket& /*recvPacket*/)
         SendPacket(&data2);
 
         sTicketMgr->CloseTicket(ticket->GetId(), GetPlayer()->GetGUID());
-        sTicketMgr->SendTicket(this, NULL);
+        sTicketMgr->SendTicket(this, nullptr);
     }
 }

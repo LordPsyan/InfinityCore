@@ -1,5 +1,4 @@
-# Copyright (C) 2005-2009 MaNGOS project <http://getmangos.com/>
-# Copyright (C) 2013-2015 InfinityCore <http://www.noffearrdeathproject.net/>
+# This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without
@@ -9,31 +8,47 @@
 # WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-file(GLOB_RECURSE sources *.cpp *.h)
-
-include_directories (
-  ${CMAKE_SOURCE_DIR}/src/server/shared
-  ${CMAKE_SOURCE_DIR}/dep/StormLib/src
+CollectSourceFiles(
   ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/loadlib
-)
+  PRIVATE_SOURCES)
 
-include_directories(${include_Dirs})
+if(WIN32)
+  list(APPEND PRIVATE_SOURCES ${sources_windows})
+endif()
 
 add_executable(mapextractor
-  ${sources}
+  ${PRIVATE_SOURCES}
 )
+
+target_include_directories(mapextractor
+  PUBLIC
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/loadlib)
 
 target_link_libraries(mapextractor
-  ${BZIP2_LIBRARIES}
-  ${ZLIB_LIBRARIES}
-  storm
-)
+  PRIVATE
+    trinity-core-interface
+  PUBLIC
+    common
+    mpq)
 
-add_dependencies(mapextractor storm)
+CollectIncludeDirectories(
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  PUBLIC_INCLUDES)
 
-if( UNIX )
+target_include_directories(mapextractor
+  PUBLIC
+    ${PUBLIC_INCLUDES}
+  PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR})
+
+set_target_properties(mapextractor
+    PROPERTIES
+      FOLDER
+        "tools")
+
+if(UNIX)
   install(TARGETS mapextractor DESTINATION bin)
-elseif( WIN32 )
+elseif(WIN32)
   install(TARGETS mapextractor DESTINATION "${CMAKE_INSTALL_PREFIX}")
 endif()
