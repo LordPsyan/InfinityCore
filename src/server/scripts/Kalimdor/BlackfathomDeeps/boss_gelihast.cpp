@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,52 +21,64 @@
 
 enum Spells
 {
-    SPELL_NET         = 6533
+    SPELL_NET = 6533
 };
 
-enum Events
-{
-    EVENT_THROW_NET   = 1
-};
 
 class boss_gelihast : public CreatureScript
 {
 public:
     boss_gelihast() : CreatureScript("boss_gelihast") { }
 
-    struct boss_gelihastAI : public BossAI
+    struct boss_gelihastAI : public ScriptedAI
     {
-        boss_gelihastAI(Creature* creature) : BossAI(creature, DATA_GELIHAST) { }
-
-        void JustEngagedWith(Unit* who) override
+        boss_gelihastAI(Creature* c) : ScriptedAI(c)
         {
-            BossAI::JustEngagedWith(who);
-            events.ScheduleEvent(EVENT_THROW_NET, 2s, 4s);
+            pInstance = (ScriptedInstance*)c->GetInstanceData();
         }
 
-        void UpdateAI(uint32 diff) override
+        uint32 uiNetTimer;
+
+        ScriptedInstance* pInstance;
+
+        void Reset()
+        {
+            uiNetTimer = urand(2000, 4000);
+            if (pInstance)
+                pInstance->SetData(TYPE_GELIHAST, NOT_STARTED);
+        }
+
+        void EnterCombat(Unit* /*who*/)
+        {
+            if (pInstance)
+                pInstance->SetData(TYPE_GELIHAST, IN_PROGRESS);
+        }
+
+        void JustDied(Unit* /*killer*/)
+        {
+            if (pInstance)
+                pInstance->SetData(TYPE_GELIHAST, DONE);
+        }
+
+        void UpdateAI(const uint32 diff)
         {
             if (!UpdateVictim())
                 return;
 
-            events.Update(diff);
-
-            while (uint32 eventId = events.ExecuteEvent())
+            if (uiNetTimer < diff)
             {
-                if (eventId == EVENT_THROW_NET)
-                {
-                    DoCastVictim(SPELL_NET);
-                    events.ScheduleEvent(EVENT_THROW_NET, 4s, 7s);
-                }
+                DoCastVictim(SPELL_NET);
+                uiNetTimer = urand(4000, 7000);
             }
+            else uiNetTimer -= diff;
 
             DoMeleeAttackIfReady();
         }
     };
 
-    CreatureAI* GetAI(Creature* creature) const override
+    CreatureAI* GetAI(Creature* pCreature) const
     {
-        return GetBlackfathomDeepsAI<boss_gelihastAI>(creature);
+        return new boss_gelihastAI(pCreature);
     }
 };
 
@@ -74,3 +86,4 @@ void AddSC_boss_gelihast()
 {
     new boss_gelihast();
 }
+

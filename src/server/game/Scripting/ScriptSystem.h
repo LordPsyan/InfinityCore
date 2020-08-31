@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,42 +18,99 @@
 #ifndef SC_SYSTEM_H
 #define SC_SYSTEM_H
 
-#include "Define.h"
-#include "Hash.h"
-#include "WaypointDefines.h"
-#include <unordered_map>
-#include <vector>
+#include "ScriptMgr.h"
 
-class Creature;
-struct SplineChainLink;
+#define TEXT_SOURCE_RANGE -1000000                          //the amount of entries each text source has available
 
-class TC_GAME_API SystemMgr
+//@todo find better namings and definitions.
+//N=Neutral, A=Alliance, H=Horde.
+//NEUTRAL or FRIEND = Hostility to player surroundings (not a good definition)
+//ACTIVE or PASSIVE = Hostility to environment surroundings.
+enum eEscortFaction
 {
-    public:
-        static SystemMgr* instance();
+    FACTION_ESCORT_A_NEUTRAL_PASSIVE    = 10,
+    FACTION_ESCORT_H_NEUTRAL_PASSIVE    = 33,
+    FACTION_ESCORT_N_NEUTRAL_PASSIVE    = 113,
 
-        // database
-        void LoadScriptWaypoints();
-        void LoadScriptSplineChains();
+    FACTION_ESCORT_A_NEUTRAL_ACTIVE     = 231,
+    FACTION_ESCORT_H_NEUTRAL_ACTIVE     = 232,
+    FACTION_ESCORT_N_NEUTRAL_ACTIVE     = 250,
 
-        WaypointPath const* GetPath(uint32 creatureEntry) const;
+    FACTION_ESCORT_N_FRIEND_PASSIVE     = 290,
+    FACTION_ESCORT_N_FRIEND_ACTIVE      = 495,
 
-        std::vector<SplineChainLink> const* GetSplineChain(uint32 entry, uint16 chainId) const;
-        std::vector<SplineChainLink> const* GetSplineChain(Creature const* who, uint16 id) const;
+    FACTION_ESCORT_A_PASSIVE            = 774,
+    FACTION_ESCORT_H_PASSIVE            = 775,
 
-    private:
-        typedef std::pair<uint32, uint16> ChainKeyType; // creature entry + chain ID
-
-        SystemMgr();
-        ~SystemMgr();
-
-        SystemMgr(SystemMgr const&) = delete;
-        SystemMgr& operator=(SystemMgr const&) = delete;
-
-        std::unordered_map<uint32, WaypointPath> _waypointStore;
-        std::unordered_map<ChainKeyType, std::vector<SplineChainLink>> m_mSplineChainsMap; // spline chains
+    FACTION_ESCORT_N_ACTIVE             = 1986,
+    FACTION_ESCORT_H_ACTIVE             = 2046
 };
 
-#define sScriptSystemMgr SystemMgr::instance()
+struct ScriptPointMove
+{
+    uint32 uiCreatureEntry;
+    uint32 uiPointId;
+    float  fX;
+    float  fY;
+    float  fZ;
+    uint32 uiWaitTime;
+};
+
+struct StringTextData
+{
+    uint32 uiSoundId;
+    uint8  uiType;
+    uint32 uiLanguage;
+    uint32 uiEmote;
+};
+
+#define sScriptSystemMgr SystemMgr::Instance()
+
+class SystemMgr
+{
+    public:
+        SystemMgr();
+        ~SystemMgr() {}
+
+        static SystemMgr& Instance();
+
+        //Maps and lists
+        typedef UNORDERED_MAP<int32, StringTextData> TextDataMap;
+        typedef UNORDERED_MAP<uint32, std::vector<ScriptPointMove> > PointMoveMap;
+
+        //Database
+        void LoadVersion();
+        void LoadScriptTexts();
+        void LoadScriptTextsCustom();
+        void LoadScriptWaypoints();
+
+        //Retrive from storage
+        StringTextData const* GetTextData(int32 uiTextId) const
+        {
+            TextDataMap::const_iterator itr = m_mTextDataMap.find(uiTextId);
+
+            if (itr == m_mTextDataMap.end())
+                return NULL;
+
+            return &itr->second;
+        }
+
+        std::vector<ScriptPointMove> const& GetPointMoveList(uint32 uiCreatureEntry) const
+        {
+            static std::vector<ScriptPointMove> vEmpty;
+
+            PointMoveMap::const_iterator itr = m_mPointMoveMap.find(uiCreatureEntry);
+
+            if (itr == m_mPointMoveMap.end())
+                return vEmpty;
+
+            return itr->second;
+        }
+
+    protected:
+        TextDataMap     m_mTextDataMap;                     //additional data for text strings
+        PointMoveMap    m_mPointMoveMap;                    //coordinates for waypoints
+};
 
 #endif
+

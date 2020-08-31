@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,10 +15,6 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/// \addtogroup world
-/// @{
-/// \file
-
 #ifndef __WEATHER_H
 #define __WEATHER_H
 
@@ -28,25 +24,9 @@
 
 class Player;
 
-#define WEATHER_SEASONS 4
-struct WeatherSeasonChances
-{
-    uint32 rainChance;
-    uint32 snowChance;
-    uint32 stormChance;
-};
-
-struct WeatherData
-{
-    WeatherSeasonChances data[WEATHER_SEASONS];
-    uint32 ScriptId;
-};
-
-enum WeatherState : uint32
+enum WeatherState
 {
     WEATHER_STATE_FINE              = 0,
-    WEATHER_STATE_FOG               = 1,
-    WEATHER_STATE_DRIZZLE           = 2,
     WEATHER_STATE_LIGHT_RAIN        = 3,
     WEATHER_STATE_MEDIUM_RAIN       = 4,
     WEATHER_STATE_HEAVY_RAIN        = 5,
@@ -57,37 +37,35 @@ enum WeatherState : uint32
     WEATHER_STATE_MEDIUM_SANDSTORM  = 41,
     WEATHER_STATE_HEAVY_SANDSTORM   = 42,
     WEATHER_STATE_THUNDERS          = 86,
-    WEATHER_STATE_BLACKRAIN         = 90,
-    WEATHER_STATE_BLACKSNOW         = 106
+    WEATHER_STATE_BLACKRAIN         = 90
 };
 
-/// Weather for one zone
-class TC_GAME_API Weather
+struct WeatherZoneChances;
+
+// Weather for one zone
+class Weather
 {
     public:
-
-        Weather(uint32 zoneId, WeatherData const* weatherChances);
+        Weather(uint32 zone, WeatherZoneChances const* weatherChances);
         ~Weather() { };
-
-        bool Update(uint32 diff);
         bool ReGenerate();
         bool UpdateWeather();
-
         void SendWeatherUpdateToPlayer(Player* player);
         static void SendFineWeatherUpdateToPlayer(Player* player);
-        void SetWeather(WeatherType type, float intensity);
-
-        /// For which zone is this weather?
-        uint32 GetZone() const { return m_zone; };
-        uint32 GetScriptId() const { return m_weatherChances->ScriptId; }
-
+        void SetWeather(WeatherType type, float grade);
+        // For which zone is this weather?
+        uint32 GetZone()
+        {
+            return m_zone;
+        };
+        bool Update(time_t diff);
     private:
-
         WeatherState GetWeatherState() const;
         uint32 m_zone;
         WeatherType m_type;
-        float m_intensity;
+        float m_grade;
         IntervalTimer m_timer;
-        WeatherData const* m_weatherChances;
+        WeatherZoneChances const* m_weatherChances;
 };
 #endif
+

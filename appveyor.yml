@@ -1,31 +1,63 @@
-version: 1.0.{build}
-image: Visual Studio 2019
-clone_depth: 1
+
+
+# Notes:
+#   - Minimal appveyor.yml file is an empty file. All sections are optional.
+#   - Indent each level of configuration with 2 spaces. Do not use tabs!
+#   - All section names are case-sensitive.
+#   - Section names should be unique on each level.
+
+#---------------------------------#
+#      general configuration      #
+#---------------------------------#
+
+version: 0.0.{build}-{branch}
+
+#---------------------------------#
+#    environment configuration    #
+#---------------------------------#
+
+# Build worker image (VM template)
+image: Visual Studio 2015
+
+# scripts that are called at very beginning, before repo cloning
 init:
-- ps: ''
-environment:
-  BOOST_ROOT: C:\Libraries\boost_1_71_0
-  OPENSSL_ROOT_DIR: C:\OpenSSL-Win64
-build_script:
-- cmd: >-
-    git config user.email "appveyor@build.bot" && git config user.name "AppVeyor"
+  - git config --global core.autocrlf input
 
-    git tag -a -m "AppVeyor build" init
+# clone directory
+clone_folder: c:\projects\OregonCore
 
-    md build && cd build
+# set clone depth
+clone_depth: 1
 
-    cmake -G"Visual Studio 16 2019" -A x64 -DSCRIPTS=dynamic -DTOOLS=True -DCMAKE_CXX_FLAGS=" /DWIN32 /D_WINDOWS /W3 /GR /EHsc /WX" -DCMAKE_C_FLAGS="/DWIN32 /D_WINDOWS /W3 /WX" ..
+#---------------------------------#
+#       build configuration       #
+#---------------------------------#
 
-    "%programfiles(x86)%\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\amd64\MsBuild.exe" /nologo /m:2 /p:Configuration=RelWithDebInfo /p:Platform="X64" /verbosity:minimal /logger:"C:\Program Files\AppVeyor\BuildAgent\Appveyor.MSBuildLogger.dll" "TrinityCore.sln"
+# build platform, i.e. x86, x64, Any CPU. This setting is optional.
+platform: x64
 
-    cd bin\RelWithDebInfo\
+# build Configuration, i.e. Debug, Release, etc.
+configuration: Release
 
-    copy "C:\Program Files\MySQL\MySQL Server 5.7\lib\libmysql.dll" libmysql.dll
+build:
+  parallel: true                  # enable MSBuild parallel builds
+  project: build/OregonCore.sln   # path to Visual Studio solution or project
+  publish_wap: false              # package Web Application Projects (WAP) for Web Deploy
+  publish_wap_xcopy: false        # package Web Application Projects (WAP) for XCopy deployment
+  publish_azure: false            # package Azure Cloud Service projects and push to artifacts
+  publish_nuget: false            # package projects with .nuspec files and push to artifacts
+  publish_nuget_symbols: false    # generate and publish NuGet symbol packages
+  include_nuget_references: false # add -IncludeReferencedProjects option while packaging NuGet artifacts
 
-    copy "%OPENSSL_ROOT_DIR%\ssleay32.dll" ssleay32.dll
+  # MSBuild verbosity level
+  verbosity: normal
 
-    copy "%OPENSSL_ROOT_DIR%\libeay32.dll" libeay32.dll
-test: off
-artifacts:
-- path: build\bin\RelWithDebInfo\
-  name: TrinityCoreWin64VS2019
+# scripts to run before build
+before_build:
+    - mkdir build
+    - cd build
+    - cmake .. -G "Visual Studio 14 2015 Win64"
+        -DSERVERS=1
+        -DSCRIPTS=1
+        -DTOOLS=1
+

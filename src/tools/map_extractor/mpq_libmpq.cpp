@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,7 +21,7 @@
 
 ArchiveSet gOpenArchives;
 
-MPQArchive::MPQArchive(char const* filename)
+MPQArchive::MPQArchive(const char* filename)
 {
     int result = libmpq__archive_open(&mpq_a, filename, -1);
     printf("Opening %s\n", filename);
@@ -29,22 +29,22 @@ MPQArchive::MPQArchive(char const* filename)
         switch(result) {
             case LIBMPQ_ERROR_OPEN :
                 printf("Error opening archive '%s': Does file really exist?\n", filename);
-                break;
+            break;
             case LIBMPQ_ERROR_FORMAT :            /* bad file format */
-                printf("Error opening archive '%s': Bad file format\n", filename);
-                break;
+            printf("Error opening archive '%s': Bad file format\n", filename);
+            break;
             case LIBMPQ_ERROR_SEEK :         /* seeking in file failed */
                 printf("Error opening archive '%s': Seeking in file failed\n", filename);
-                break;
+            break;
             case LIBMPQ_ERROR_READ :              /* Read error in archive */
-                printf("Error opening archive '%s': Read error in archive\n", filename);
-                break;
+            printf("Error opening archive '%s': Read error in archive\n", filename);
+            break;
             case LIBMPQ_ERROR_MALLOC :               /* maybe not enough memory? :) */
-                printf("Error opening archive '%s': Maybe not enough memory\n", filename);
-                break;
-            default:
-                printf("Error opening archive '%s': Unknown error\n", filename);
-                break;
+            printf("Error opening archive '%s': Maybe not enough memory\n", filename);
+            break;
+        default:
+            printf("Error opening archive '%s': Unknown error\n", filename);
+            break;
         }
         return;
     }
@@ -57,13 +57,13 @@ void MPQArchive::close()
     libmpq__archive_close(mpq_a);
 }
 
-MPQFile::MPQFile(char const* filename):
+MPQFile::MPQFile(const char* filename):
     eof(false),
     buffer(0),
     pointer(0),
     size(0)
 {
-    for(ArchiveSet::iterator i=gOpenArchives.begin(); i!=gOpenArchives.end();++i)
+    for (ArchiveSet::iterator i = gOpenArchives.begin(); i != gOpenArchives.end(); ++i)
     {
         mpq_archive *mpq_a = (*i)->mpq_a;
 
@@ -122,7 +122,7 @@ void MPQFile::seekRelative(int offset)
 
 void MPQFile::close()
 {
-    delete[] buffer;
+    if (buffer) delete[] buffer;
     buffer = 0;
     eof = true;
 }

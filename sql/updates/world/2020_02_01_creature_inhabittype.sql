@@ -1,0 +1,2 @@
+-- change inhabittype from 1 to 3
+UPDATE `creature_template` SET `InhabitType`='3' WHERE `entry` IN ('24553', '24554', '24555', '24557', '24558', '24559','24560', '24561', '24686', '24687', '24683', '24684', '24685', '24696', '24697', '24698');

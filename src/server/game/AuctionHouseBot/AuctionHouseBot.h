@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,301 +18,1244 @@
 #ifndef AUCTION_HOUSE_BOT_H
 #define AUCTION_HOUSE_BOT_H
 
-#include "Define.h"
-#include "SharedDefines.h"
-#include <string>
-#include <vector>
+#include "World.h"
+#include "ObjectMgr.h"
+#include "Configuration/Config.h"
+#include "ItemPrototype.h"
+#include "Utilities/Util.h"
 
-class AuctionBotSeller;
-class AuctionBotBuyer;
+#define AHB_GREY        0
+#define AHB_WHITE       1
+#define AHB_GREEN       2
+#define AHB_BLUE        3
+#define AHB_PURPLE      4
+#define AHB_ORANGE      5
+#define AHB_YELLOW      6
+#define AHB_MAX_QUALITY 6
+#define AHB_GREY_TG     0
+#define AHB_WHITE_TG    1
+#define AHB_GREEN_TG    2
+#define AHB_BLUE_TG     3
+#define AHB_PURPLE_TG   4
+#define AHB_ORANGE_TG   5
+#define AHB_YELLOW_TG   6
+#define AHB_GREY_I      7
+#define AHB_WHITE_I     8
+#define AHB_GREEN_I     9
+#define AHB_BLUE_I      10
+#define AHB_PURPLE_I    11
+#define AHB_ORANGE_I    12
+#define AHB_YELLOW_I    13
 
-// shadow of ItemQualities with skipped ITEM_QUALITY_HEIRLOOM, anything after ITEM_QUALITY_ARTIFACT(6) in fact
-enum AuctionQuality
+class AHBConfig
 {
-    AUCTION_QUALITY_GRAY    = ITEM_QUALITY_POOR,
-    AUCTION_QUALITY_WHITE   = ITEM_QUALITY_NORMAL,
-    AUCTION_QUALITY_GREEN   = ITEM_QUALITY_UNCOMMON,
-    AUCTION_QUALITY_BLUE    = ITEM_QUALITY_RARE,
-    AUCTION_QUALITY_PURPLE  = ITEM_QUALITY_EPIC,
-    AUCTION_QUALITY_ORANGE  = ITEM_QUALITY_LEGENDARY,
-    AUCTION_QUALITY_YELLOW  = ITEM_QUALITY_ARTIFACT,
+    private:
+        uint32 AHID;
+        uint32 AHFID;
+        uint32 minItems;
+        uint32 maxItems;
+        uint32 percentGreyTradeGoods;
+        uint32 percentWhiteTradeGoods;
+        uint32 percentGreenTradeGoods;
+        uint32 percentBlueTradeGoods;
+        uint32 percentPurpleTradeGoods;
+        uint32 percentOrangeTradeGoods;
+        uint32 percentYellowTradeGoods;
+        uint32 percentGreyItems;
+        uint32 percentWhiteItems;
+        uint32 percentGreenItems;
+        uint32 percentBlueItems;
+        uint32 percentPurpleItems;
+        uint32 percentOrangeItems;
+        uint32 percentYellowItems;
+        uint32 minPriceGrey;
+        uint32 maxPriceGrey;
+        uint32 minBidPriceGrey;
+        uint32 maxBidPriceGrey;
+        uint32 maxStackGrey;
+        uint32 minPriceWhite;
+        uint32 maxPriceWhite;
+        uint32 minBidPriceWhite;
+        uint32 maxBidPriceWhite;
+        uint32 maxStackWhite;
+        uint32 minPriceGreen;
+        uint32 maxPriceGreen;
+        uint32 minBidPriceGreen;
+        uint32 maxBidPriceGreen;
+        uint32 maxStackGreen;
+        uint32 minPriceBlue;
+        uint32 maxPriceBlue;
+        uint32 minBidPriceBlue;
+        uint32 maxBidPriceBlue;
+        uint32 maxStackBlue;
+        uint32 minPricePurple;
+        uint32 maxPricePurple;
+        uint32 minBidPricePurple;
+        uint32 maxBidPricePurple;
+        uint32 maxStackPurple;
+        uint32 minPriceOrange;
+        uint32 maxPriceOrange;
+        uint32 minBidPriceOrange;
+        uint32 maxBidPriceOrange;
+        uint32 maxStackOrange;
+        uint32 minPriceYellow;
+        uint32 maxPriceYellow;
+        uint32 minBidPriceYellow;
+        uint32 maxBidPriceYellow;
+        uint32 maxStackYellow;
+
+        uint32 buyerPriceGrey;
+        uint32 buyerPriceWhite;
+        uint32 buyerPriceGreen;
+        uint32 buyerPriceBlue;
+        uint32 buyerPricePurple;
+        uint32 buyerPriceOrange;
+        uint32 buyerPriceYellow;
+        uint32 buyerBiddingInterval;
+        uint32 buyerBidsPerInterval;
+
+        uint32 greytgp;
+        uint32 whitetgp;
+        uint32 greentgp;
+        uint32 bluetgp;
+        uint32 purpletgp;
+        uint32 orangetgp;
+        uint32 yellowtgp;
+        uint32 greyip;
+        uint32 whiteip;
+        uint32 greenip;
+        uint32 blueip;
+        uint32 purpleip;
+        uint32 orangeip;
+        uint32 yellowip;
+
+        uint32 greyTGoods;
+        uint32 whiteTGoods;
+        uint32 greenTGoods;
+        uint32 blueTGoods;
+        uint32 purpleTGoods;
+        uint32 orangeTGoods;
+        uint32 yellowTGoods;
+
+        uint32 greyItems;
+        uint32 whiteItems;
+        uint32 greenItems;
+        uint32 blueItems;
+        uint32 purpleItems;
+        uint32 orangeItems;
+        uint32 yellowItems;
+
+        std::set<uint32> ignoreItemsIds;
+
+    public:
+        AHBConfig(uint32 ahid)
+        {
+            AHID = ahid;
+            switch (ahid)
+            {
+            case 2:
+                AHFID = 55;
+                break;
+            case 6:
+                AHFID = 29;
+                break;
+            case 7:
+                AHFID = 120;
+                break;
+            default:
+                AHFID = 120;
+                break;
+            }
+        }
+        AHBConfig()
+        {
+        }
+        uint32 GetAHID()
+        {
+            return AHID;
+        }
+        uint32 GetAHFID()
+        {
+            return AHFID;
+        }
+        void SetMinItems(uint32 value)
+        {
+            minItems = value;
+        }
+        uint32 GetMinItems()
+        {
+            if ((minItems == 0) && (maxItems))
+                return maxItems;
+            else if ((maxItems) && (minItems > maxItems))
+                return maxItems;
+            else
+                return minItems;
+        }
+        void SetMaxItems(uint32 value)
+        {
+            maxItems = value;
+        }
+        uint32 GetMaxItems()
+        {
+            return maxItems;
+        }
+        void SetPercentages(uint32 greytg, uint32 whitetg, uint32 greentg, uint32 bluetg, uint32 purpletg, uint32 orangetg, uint32 yellowtg, uint32 greyi, uint32 whitei, uint32 greeni, uint32 bluei, uint32 purplei, uint32 orangei, uint32 yellowi)
+        {
+            uint32 totalPercent = greytg + whitetg + greentg + bluetg + purpletg + orangetg + yellowtg + greyi + whitei + greeni + bluei + purplei + orangei + yellowi;
+
+            if (totalPercent == 0)
+                maxItems = 0;
+            else if (totalPercent != 100)
+            {
+                greytg = 0;
+                whitetg = 27;
+                greentg = 12;
+                bluetg = 10;
+                purpletg = 1;
+                orangetg = 0;
+                yellowtg = 0;
+                greyi = 0;
+                whitei = 10;
+                greeni = 30;
+                bluei = 8;
+                purplei = 2;
+                orangei = 0;
+                yellowi = 0;
+            }
+            percentGreyTradeGoods = greytg;
+            percentWhiteTradeGoods = whitetg;
+            percentGreenTradeGoods = greentg;
+            percentBlueTradeGoods = bluetg;
+            percentPurpleTradeGoods = purpletg;
+            percentOrangeTradeGoods = orangetg;
+            percentYellowTradeGoods = yellowtg;
+            percentGreyItems = greyi;
+            percentWhiteItems = whitei;
+            percentGreenItems = greeni;
+            percentBlueItems = bluei;
+            percentPurpleItems = purplei;
+            percentOrangeItems = orangei;
+            percentYellowItems = yellowi;
+            CalculatePercents();
+        }
+        uint32 GetPercentages(uint32 color)
+        {
+            switch (color)
+            {
+            case AHB_GREY_TG:
+                return percentGreyTradeGoods;
+                break;
+            case AHB_WHITE_TG:
+                return percentWhiteTradeGoods;
+                break;
+            case AHB_GREEN_TG:
+                return percentGreenTradeGoods;
+                break;
+            case AHB_BLUE_TG:
+                return percentBlueTradeGoods;
+                break;
+            case AHB_PURPLE_TG:
+                return percentPurpleTradeGoods;
+                break;
+            case AHB_ORANGE_TG:
+                return percentOrangeTradeGoods;
+                break;
+            case AHB_YELLOW_TG:
+                return percentYellowTradeGoods;
+                break;
+            case AHB_GREY_I:
+                return percentGreyItems;
+                break;
+            case AHB_WHITE_I:
+                return percentWhiteItems;
+                break;
+            case AHB_GREEN_I:
+                return percentGreenItems;
+                break;
+            case AHB_BLUE_I:
+                return percentBlueItems;
+                break;
+            case AHB_PURPLE_I:
+                return percentPurpleItems;
+                break;
+            case AHB_ORANGE_I:
+                return percentOrangeItems;
+                break;
+            case AHB_YELLOW_I:
+                return percentYellowItems;
+                break;
+            default:
+                return 0;
+                break;
+            }
+        }
+        void SetMinPrice(uint32 color, uint32 value)
+        {
+            switch (color)
+            {
+            case AHB_GREY:
+                minPriceGrey = value;
+                break;
+            case AHB_WHITE:
+                minPriceWhite = value;
+                break;
+            case AHB_GREEN:
+                minPriceGreen = value;
+                break;
+            case AHB_BLUE:
+                minPriceBlue = value;
+                break;
+            case AHB_PURPLE:
+                minPricePurple = value;
+                break;
+            case AHB_ORANGE:
+                minPriceOrange = value;
+                break;
+            case AHB_YELLOW:
+                minPriceYellow = value;
+                break;
+            default:
+                break;
+            }
+        }
+        uint32 GetMinPrice(uint32 color)
+        {
+            switch (color)
+            {
+            case AHB_GREY:
+                {
+                    if (minPriceGrey == 0)
+                        return 100;
+                    else if (minPriceGrey > maxPriceGrey)
+                        return maxPriceGrey;
+                    else
+                        return minPriceGrey;
+                    break;
+                }
+            case AHB_WHITE:
+                {
+                    if (minPriceWhite == 0)
+                        return 150;
+                    else if (minPriceWhite > maxPriceWhite)
+                        return maxPriceWhite;
+                    else
+                        return minPriceWhite;
+                    break;
+                }
+            case AHB_GREEN:
+                {
+                    if (minPriceGreen == 0)
+                        return 200;
+                    else if (minPriceGreen > maxPriceGreen)
+                        return maxPriceGreen;
+                    else
+                        return minPriceGreen;
+                    break;
+                }
+            case AHB_BLUE:
+                {
+                    if (minPriceBlue == 0)
+                        return 250;
+                    else if (minPriceBlue > maxPriceBlue)
+                        return maxPriceBlue;
+                    else
+                        return minPriceBlue;
+                    break;
+                }
+            case AHB_PURPLE:
+                {
+                    if (minPricePurple == 0)
+                        return 300;
+                    else if (minPricePurple > maxPricePurple)
+                        return maxPricePurple;
+                    else
+                        return minPricePurple;
+                    break;
+                }
+            case AHB_ORANGE:
+                {
+                    if (minPriceOrange == 0)
+                        return 400;
+                    else if (minPriceOrange > maxPriceOrange)
+                        return maxPriceOrange;
+                    else
+                        return minPriceOrange;
+                    break;
+                }
+            case AHB_YELLOW:
+                {
+                    if (minPriceYellow == 0)
+                        return 500;
+                    else if (minPriceYellow > maxPriceYellow)
+                        return maxPriceYellow;
+                    else
+                        return minPriceYellow;
+                    break;
+                }
+            default:
+                {
+                    return 0;
+                    break;
+                }
+            }
+        }
+        void SetMaxPrice(uint32 color, uint32 value)
+        {
+            switch (color)
+            {
+            case AHB_GREY:
+                maxPriceGrey = value;
+                break;
+            case AHB_WHITE:
+                maxPriceWhite = value;
+                break;
+            case AHB_GREEN:
+                maxPriceGreen = value;
+                break;
+            case AHB_BLUE:
+                maxPriceBlue = value;
+                break;
+            case AHB_PURPLE:
+                maxPricePurple = value;
+                break;
+            case AHB_ORANGE:
+                maxPriceOrange = value;
+                break;
+            case AHB_YELLOW:
+                maxPriceYellow = value;
+                break;
+            default:
+                break;
+            }
+        }
+        uint32 GetMaxPrice(uint32 color)
+        {
+            switch (color)
+            {
+            case AHB_GREY:
+                {
+                    if (maxPriceGrey == 0)
+                        return 150;
+                    else
+                        return maxPriceGrey;
+                    break;
+                }
+            case AHB_WHITE:
+                {
+                    if (maxPriceWhite == 0)
+                        return 250;
+                    else
+                        return maxPriceWhite;
+                    break;
+                }
+            case AHB_GREEN:
+                {
+                    if (maxPriceGreen == 0)
+                        return 300;
+                    else
+                        return maxPriceGreen;
+                    break;
+                }
+            case AHB_BLUE:
+                {
+                    if (maxPriceBlue == 0)
+                        return 350;
+                    else
+                        return maxPriceBlue;
+                    break;
+                }
+            case AHB_PURPLE:
+                {
+                    if (maxPricePurple == 0)
+                        return 450;
+                    else
+                        return maxPricePurple;
+                    break;
+                }
+            case AHB_ORANGE:
+                {
+                    if (maxPriceOrange == 0)
+                        return 550;
+                    else
+                        return maxPriceOrange;
+                    break;
+                }
+            case AHB_YELLOW:
+                {
+                    if (maxPriceYellow == 0)
+                        return 650;
+                    else
+                        return maxPriceYellow;
+                    break;
+                }
+            default:
+                {
+                    return 0;
+                    break;
+                }
+            }
+        }
+        void SetMinBidPrice(uint32 color, uint32 value)
+        {
+            switch (color)
+            {
+            case AHB_GREY:
+                minBidPriceGrey = value;
+                break;
+            case AHB_WHITE:
+                minBidPriceWhite = value;
+                break;
+            case AHB_GREEN:
+                minBidPriceGreen = value;
+                break;
+            case AHB_BLUE:
+                minBidPriceBlue = value;
+                break;
+            case AHB_PURPLE:
+                minBidPricePurple = value;
+                break;
+            case AHB_ORANGE:
+                minBidPriceOrange = value;
+                break;
+            case AHB_YELLOW:
+                minBidPriceYellow = value;
+                break;
+            default:
+                break;
+            }
+        }
+        uint32 GetMinBidPrice(uint32 color)
+        {
+            switch (color)
+            {
+            case AHB_GREY:
+                {
+                    if (minBidPriceGrey > 100)
+                        return 100;
+                    else
+                        return minBidPriceGrey;
+                    break;
+                }
+            case AHB_WHITE:
+                {
+                    if (minBidPriceWhite > 100)
+                        return 100;
+                    else
+                        return minBidPriceWhite;
+                    break;
+                }
+            case AHB_GREEN:
+                {
+                    if (minBidPriceGreen > 100)
+                        return 100;
+                    else
+                        return minBidPriceGreen;
+                    break;
+                }
+            case AHB_BLUE:
+                {
+                    if (minBidPriceBlue > 100)
+                        return 100;
+                    else
+                        return minBidPriceBlue;
+                    break;
+                }
+            case AHB_PURPLE:
+                {
+                    if (minBidPricePurple > 100)
+                        return 100;
+                    else
+                        return minBidPricePurple;
+                    break;
+                }
+            case AHB_ORANGE:
+                {
+                    if (minBidPriceOrange > 100)
+                        return 100;
+                    else
+                        return minBidPriceOrange;
+                    break;
+                }
+            case AHB_YELLOW:
+                {
+                    if (minBidPriceYellow > 100)
+                        return 100;
+                    else
+                        return minBidPriceYellow;
+                    break;
+                }
+            default:
+                {
+                    return 0;
+                    break;
+                }
+            }
+        }
+        void SetMaxBidPrice(uint32 color, uint32 value)
+        {
+            switch (color)
+            {
+            case AHB_GREY:
+                maxBidPriceGrey = value;
+                break;
+            case AHB_WHITE:
+                maxBidPriceWhite = value;
+                break;
+            case AHB_GREEN:
+                maxBidPriceGreen = value;
+                break;
+            case AHB_BLUE:
+                maxBidPriceBlue = value;
+                break;
+            case AHB_PURPLE:
+                maxBidPricePurple = value;
+                break;
+            case AHB_ORANGE:
+                maxBidPriceOrange = value;
+                break;
+            case AHB_YELLOW:
+                maxBidPriceYellow = value;
+                break;
+            default:
+                break;
+            }
+        }
+        uint32 GetMaxBidPrice(uint32 color)
+        {
+            switch (color)
+            {
+            case AHB_GREY:
+                {
+                    if (maxBidPriceGrey > 100)
+                        return 100;
+                    else
+                        return maxBidPriceGrey;
+                    break;
+                }
+            case AHB_WHITE:
+                {
+                    if (maxBidPriceWhite > 100)
+                        return 100;
+                    else
+                        return maxBidPriceWhite;
+                    break;
+                }
+            case AHB_GREEN:
+                {
+                    if (maxBidPriceGreen > 100)
+                        return 100;
+                    else
+                        return maxBidPriceGreen;
+                    break;
+                }
+            case AHB_BLUE:
+                {
+                    if (maxBidPriceBlue > 100)
+                        return 100;
+                    else
+                        return maxBidPriceBlue;
+                    break;
+                }
+            case AHB_PURPLE:
+                {
+                    if (maxBidPricePurple > 100)
+                        return 100;
+                    else
+                        return maxBidPricePurple;
+                    break;
+                }
+            case AHB_ORANGE:
+                {
+                    if (maxBidPriceOrange > 100)
+                        return 100;
+                    else
+                        return maxBidPriceOrange;
+                    break;
+                }
+            case AHB_YELLOW:
+                {
+                    if (maxBidPriceYellow > 100)
+                        return 100;
+                    else
+                        return maxBidPriceYellow;
+                    break;
+                }
+            default:
+                {
+                    return 0;
+                    break;
+                }
+            }
+        }
+        void SetMaxStack(uint32 color, uint32 value)
+        {
+            switch (color)
+            {
+            case AHB_GREY:
+                maxStackGrey = value;
+                break;
+            case AHB_WHITE:
+                maxStackWhite = value;
+                break;
+            case AHB_GREEN:
+                maxStackGreen = value;
+                break;
+            case AHB_BLUE:
+                maxStackBlue = value;
+                break;
+            case AHB_PURPLE:
+                maxStackPurple = value;
+                break;
+            case AHB_ORANGE:
+                maxStackOrange = value;
+                break;
+            case AHB_YELLOW:
+                maxStackYellow = value;
+                break;
+            default:
+                break;
+            }
+        }
+        uint32 GetMaxStack(uint32 color)
+        {
+            switch (color)
+            {
+            case AHB_GREY:
+                {
+                    return maxStackGrey;
+                    break;
+                }
+            case AHB_WHITE:
+                {
+                    return maxStackWhite;
+                    break;
+                }
+            case AHB_GREEN:
+                {
+                    return maxStackGreen;
+                    break;
+                }
+            case AHB_BLUE:
+                {
+                    return maxStackBlue;
+                    break;
+                }
+            case AHB_PURPLE:
+                {
+                    return maxStackPurple;
+                    break;
+                }
+            case AHB_ORANGE:
+                {
+                    return maxStackOrange;
+                    break;
+                }
+            case AHB_YELLOW:
+                {
+                    return maxStackYellow;
+                    break;
+                }
+            default:
+                {
+                    return 0;
+                    break;
+                }
+            }
+        }
+        void SetBuyerPrice(uint32 color, uint32 value)
+        {
+            switch (color)
+            {
+            case AHB_GREY:
+                buyerPriceGrey = value;
+                break;
+            case AHB_WHITE:
+                buyerPriceWhite = value;
+                break;
+            case AHB_GREEN:
+                buyerPriceGreen = value;
+                break;
+            case AHB_BLUE:
+                buyerPriceBlue = value;
+                break;
+            case AHB_PURPLE:
+                buyerPricePurple = value;
+                break;
+            case AHB_ORANGE:
+                buyerPriceOrange = value;
+                break;
+            case AHB_YELLOW:
+                buyerPriceYellow = value;
+                break;
+            default:
+                break;
+            }
+        }
+        uint32 GetBuyerPrice(uint32 color)
+        {
+            switch (color)
+            {
+            case AHB_GREY:
+                return buyerPriceGrey;
+                break;
+            case AHB_WHITE:
+                return buyerPriceWhite;
+                break;
+            case AHB_GREEN:
+                return buyerPriceGreen;
+                break;
+            case AHB_BLUE:
+                return buyerPriceBlue;
+                break;
+            case AHB_PURPLE:
+                return buyerPricePurple;
+                break;
+            case AHB_ORANGE:
+                return buyerPriceOrange;
+                break;
+            case AHB_YELLOW:
+                return buyerPriceYellow;
+                break;
+            default:
+                return 0;
+                break;
+            }
+        }
+        void SetBiddingInterval(uint32 value)
+        {
+            buyerBiddingInterval = value;
+        }
+        uint32 GetBiddingInterval()
+        {
+            return buyerBiddingInterval;
+        }
+        void CalculatePercents()
+        {
+            greytgp = (uint32) (((double)percentGreyTradeGoods / 100.0) * maxItems);
+            whitetgp = (uint32) (((double)percentWhiteTradeGoods / 100.0) * maxItems);
+            greentgp = (uint32) (((double)percentGreenTradeGoods / 100.0) * maxItems);
+            bluetgp = (uint32) (((double)percentBlueTradeGoods / 100.0) * maxItems);
+            purpletgp = (uint32) (((double)percentPurpleTradeGoods / 100.0) * maxItems);
+            orangetgp = (uint32) (((double)percentOrangeTradeGoods / 100.0) * maxItems);
+            yellowtgp = (uint32) (((double)percentYellowTradeGoods / 100.0) * maxItems);
+            greyip = (uint32) (((double)percentGreyItems / 100.0) * maxItems);
+            whiteip = (uint32) (((double)percentWhiteItems / 100.0) * maxItems);
+            greenip = (uint32) (((double)percentGreenItems / 100.0) * maxItems);
+            blueip = (uint32) (((double)percentBlueItems / 100.0) * maxItems);
+            purpleip = (uint32) (((double)percentPurpleItems / 100.0) * maxItems);
+            orangeip = (uint32) (((double)percentOrangeItems / 100.0) * maxItems);
+            yellowip = (uint32) (((double)percentYellowItems / 100.0) * maxItems);
+            uint32 total = greytgp + whitetgp + greentgp + bluetgp + purpletgp + orangetgp + yellowtgp + greyip + whiteip + greenip + blueip + purpleip + orangeip + yellowip;
+            int32 diff = (maxItems - total);
+            if (diff < 0)
+            {
+                if ((whiteip - diff) > 0)
+                    whiteip -= diff;
+                else if ((greenip - diff) > 0)
+                    greenip -= diff;
+            }
+            else if (diff > 0)
+                whiteip += diff;
+        }
+        uint32 GetPercents(uint32 color)
+        {
+            switch (color)
+            {
+            case AHB_GREY_TG:
+                return greytgp;
+                break;
+            case AHB_WHITE_TG:
+                return whitetgp;
+                break;
+            case AHB_GREEN_TG:
+                return greentgp;
+                break;
+            case AHB_BLUE_TG:
+                return bluetgp;
+                break;
+            case AHB_PURPLE_TG:
+                return purpletgp;
+                break;
+            case AHB_ORANGE_TG:
+                return orangetgp;
+                break;
+            case AHB_YELLOW_TG:
+                return yellowtgp;
+                break;
+            case AHB_GREY_I:
+                return greyip;
+                break;
+            case AHB_WHITE_I:
+                return whiteip;
+                break;
+            case AHB_GREEN_I:
+                return greenip;
+                break;
+            case AHB_BLUE_I:
+                return blueip;
+                break;
+            case AHB_PURPLE_I:
+                return purpleip;
+                break;
+            case AHB_ORANGE_I:
+                return orangeip;
+                break;
+            case AHB_YELLOW_I:
+                return yellowip;
+                break;
+            default:
+                return 0;
+                break;
+            }
+        }
+
+        void DecItemCounts(uint32 Class, uint32 Quality)
+        {
+            switch (Class)
+            {
+            case ITEM_CLASS_TRADE_GOODS:
+                DecItemCounts(Quality);
+                break;
+            default:
+                DecItemCounts(Quality + 7);
+                break;
+            }
+        }
+
+        void DecItemCounts(uint32 color)
+        {
+            switch (color)
+            {
+            case AHB_GREY_TG:
+                --greyTGoods;
+                break;
+            case AHB_WHITE_TG:
+                --whiteTGoods;
+                break;
+            case AHB_GREEN_TG:
+                --greenTGoods;
+                break;
+            case AHB_BLUE_TG:
+                --blueTGoods;
+                break;
+            case AHB_PURPLE_TG:
+                --purpleTGoods;
+                break;
+            case AHB_ORANGE_TG:
+                --orangeTGoods;
+                break;
+            case AHB_YELLOW_TG:
+                --yellowTGoods;
+                break;
+            case AHB_GREY_I:
+                --greyItems;
+                break;
+            case AHB_WHITE_I:
+                --whiteItems;
+                break;
+            case AHB_GREEN_I:
+                --greenItems;
+                break;
+            case AHB_BLUE_I:
+                --blueItems;
+                break;
+            case AHB_PURPLE_I:
+                --purpleItems;
+                break;
+            case AHB_ORANGE_I:
+                --orangeItems;
+                break;
+            case AHB_YELLOW_I:
+                --yellowItems;
+                break;
+            default:
+                break;
+            }
+        }
+
+        void IncItemCounts(uint32 Class, uint32 Quality)
+        {
+            switch (Class)
+            {
+            case ITEM_CLASS_TRADE_GOODS:
+                IncItemCounts(Quality);
+                break;
+            default:
+                IncItemCounts(Quality + 7);
+                break;
+            }
+        }
+
+        void IncItemCounts(uint32 color)
+        {
+            switch (color)
+            {
+            case AHB_GREY_TG:
+                ++greyTGoods;
+                break;
+            case AHB_WHITE_TG:
+                ++whiteTGoods;
+                break;
+            case AHB_GREEN_TG:
+                ++greenTGoods;
+                break;
+            case AHB_BLUE_TG:
+                ++blueTGoods;
+                break;
+            case AHB_PURPLE_TG:
+                ++purpleTGoods;
+                break;
+            case AHB_ORANGE_TG:
+                ++orangeTGoods;
+                break;
+            case AHB_YELLOW_TG:
+                ++yellowTGoods;
+                break;
+            case AHB_GREY_I:
+                ++greyItems;
+                break;
+            case AHB_WHITE_I:
+                ++whiteItems;
+                break;
+            case AHB_GREEN_I:
+                ++greenItems;
+                break;
+            case AHB_BLUE_I:
+                ++blueItems;
+                break;
+            case AHB_PURPLE_I:
+                ++purpleItems;
+                break;
+            case AHB_ORANGE_I:
+                ++orangeItems;
+                break;
+            case AHB_YELLOW_I:
+                ++yellowItems;
+                break;
+            default:
+                break;
+            }
+        }
+
+        void ResetItemCounts()
+        {
+            greyTGoods = 0;
+            whiteTGoods = 0;
+            greenTGoods = 0;
+            blueTGoods = 0;
+            purpleTGoods = 0;
+            orangeTGoods = 0;
+            yellowTGoods = 0;
+
+            greyItems = 0;
+            whiteItems = 0;
+            greenItems = 0;
+            blueItems = 0;
+            purpleItems = 0;
+            orangeItems = 0;
+            yellowItems = 0;
+        }
+
+        uint32 TotalItemCounts()
+        {
+            return (
+                       greyTGoods +
+                       whiteTGoods +
+                       greenTGoods +
+                       blueTGoods +
+                       purpleTGoods +
+                       orangeTGoods +
+                       yellowTGoods +
+
+                       greyItems +
+                       whiteItems +
+                       greenItems +
+                       blueItems +
+                       purpleItems +
+                       orangeItems +
+                       yellowItems);
+        }
+
+        uint32 GetItemCounts(uint32 color)
+        {
+            switch (color)
+            {
+            case AHB_GREY_TG:
+                return greyTGoods;
+                break;
+            case AHB_WHITE_TG:
+                return whiteTGoods;
+                break;
+            case AHB_GREEN_TG:
+                return greenTGoods;
+                break;
+            case AHB_BLUE_TG:
+                return blueTGoods;
+                break;
+            case AHB_PURPLE_TG:
+                return purpleTGoods;
+                break;
+            case AHB_ORANGE_TG:
+                return orangeTGoods;
+                break;
+            case AHB_YELLOW_TG:
+                return yellowTGoods;
+                break;
+            case AHB_GREY_I:
+                return greyItems;
+                break;
+            case AHB_WHITE_I:
+                return whiteItems;
+                break;
+            case AHB_GREEN_I:
+                return greenItems;
+                break;
+            case AHB_BLUE_I:
+                return blueItems;
+                break;
+            case AHB_PURPLE_I:
+                return purpleItems;
+                break;
+            case AHB_ORANGE_I:
+                return orangeItems;
+                break;
+            case AHB_YELLOW_I:
+                return yellowItems;
+                break;
+            default:
+                return 0;
+                break;
+            }
+        }
+        void SetBidsPerInterval(uint32 value)
+        {
+            buyerBidsPerInterval = value;
+        }
+        uint32 GetBidsPerInterval()
+        {
+            return buyerBidsPerInterval;
+        }
+        void IgnoreItemsIds(const std::string& idsString)
+        {
+            const Tokens& ids = StrSplit(idsString, " ,");
+            ignoreItemsIds.clear();
+
+            for (Tokens::const_iterator it = ids.begin(); it != ids.end(); it++)
+                if (uint32 id = atoi(it->c_str()))
+                    if (sObjectMgr.GetItemTemplate(id))
+                        ignoreItemsIds.insert(id);
+        }
+        bool IsIgnoringItem(uint32 id) const
+        {
+            return ignoreItemsIds.find(id) != ignoreItemsIds.end();
+        }
+        ~AHBConfig()
+        {
+        }
+};
+class AuctionHouseBot
+{
+    private:
+
+        bool debug_Out;
+        bool debug_Out_Filters;
+
+        bool AHBSeller;
+        bool AHBBuyer;
+        bool BuyMethod;
+        bool SellMethod;
+
+        uint32 AHBplayerAccount;
+        uint32 AHBplayerGUID;
+        uint32 ItemsPerCycle;
+
+        //Begin Filters
+
+        bool Vendor_Items;
+        bool Loot_Items;
+        bool Other_Items;
+        bool Vendor_TGs;
+        bool Loot_TGs;
+        bool Other_TGs;
+
+        bool No_Bind;
+        bool Bind_When_Picked_Up;
+        bool Bind_When_Equipped;
+        bool Bind_When_Use;
+        bool Bind_Quest_Item;
+
+        bool DisableBeta_PTR_Unused;
+        bool DisablePermEnchant;
+        bool DisableGems;
+        bool DisableMoney;
+        bool DisableMoneyLoot;
+        bool DisableLootable;
+        bool DisableKeys;
+        bool DisableDuration;
+        bool DisableBOP_Or_Quest_NoReqLevel;
+
+        bool DisableWarriorItems;
+        bool DisablePaladinItems;
+        bool DisableHunterItems;
+        bool DisableRogueItems;
+        bool DisablePriestItems;
+        bool DisableDKItems;
+        bool DisableShamanItems;
+        bool DisableMageItems;
+        bool DisableWarlockItems;
+        bool DisableUnusedClassItems;
+        bool DisableDruidItems;
+
+        uint32 DisableItemsBelowLevel;
+        uint32 DisableItemsAboveLevel;
+        uint32 DisableTGsBelowLevel;
+        uint32 DisableTGsAboveLevel;
+        uint32 DisableItemsBelowGUID;
+        uint32 DisableItemsAboveGUID;
+        uint32 DisableTGsBelowGUID;
+        uint32 DisableTGsAboveGUID;
+        uint32 DisableItemsBelowReqLevel;
+        uint32 DisableItemsAboveReqLevel;
+        uint32 DisableTGsBelowReqLevel;
+        uint32 DisableTGsAboveReqLevel;
+        uint32 DisableItemsBelowReqSkillRank;
+        uint32 DisableItemsAboveReqSkillRank;
+        uint32 DisableTGsBelowReqSkillRank;
+        uint32 DisableTGsAboveReqSkillRank;
+
+        //End Filters
+
+        AHBConfig AllianceConfig;
+        AHBConfig HordeConfig;
+        AHBConfig NeutralConfig;
+
+        time_t _lastrun_a;
+        time_t _lastrun_h;
+        time_t _lastrun_n;
+
+        inline uint32 minValue(uint32 a, uint32 b)
+        {
+            return a <= b ? a : b;
+        };
+        void addNewAuctions(Player* AHBplayer, AHBConfig* config);
+        void addNewAuctionBuyerBotBid(Player* AHBplayer, AHBConfig* config, WorldSession* session);
+
+    public:
+        AuctionHouseBot();
+        ~AuctionHouseBot();
+        void Update();
+        void Initialize();
+        void LoadValues(AHBConfig*);
+        void DecrementItemCounts(AuctionEntry* ah, uint32 item_template);
+        void IncrementItemCounts(AuctionEntry* ah);
+        void Commands(uint32, uint32, uint32, char*);
+        uint32 GetAHBplayerGUID()
+        {
+            return AHBplayerGUID;
+        };
 };
 
-#define MAX_AUCTION_QUALITY 7
-
-enum AuctionHouseType
-{
-    AUCTION_HOUSE_NEUTRAL   = 0,
-    AUCTION_HOUSE_ALLIANCE  = 1,
-    AUCTION_HOUSE_HORDE     = 2
-};
-
-#define MAX_AUCTION_HOUSE_TYPE 3
-
-enum AuctionBotConfigUInt32Values
-{
-    CONFIG_AHBOT_MAXTIME,
-    CONFIG_AHBOT_MINTIME,
-    CONFIG_AHBOT_ITEMS_PER_CYCLE_BOOST,
-    CONFIG_AHBOT_ITEMS_PER_CYCLE_NORMAL,
-    CONFIG_AHBOT_ALLIANCE_ITEM_AMOUNT_RATIO,
-    CONFIG_AHBOT_HORDE_ITEM_AMOUNT_RATIO,
-    CONFIG_AHBOT_NEUTRAL_ITEM_AMOUNT_RATIO,
-    CONFIG_AHBOT_ITEM_MIN_ITEM_LEVEL,
-    CONFIG_AHBOT_ITEM_MAX_ITEM_LEVEL,
-    CONFIG_AHBOT_ITEM_MIN_REQ_LEVEL,
-    CONFIG_AHBOT_ITEM_MAX_REQ_LEVEL,
-    CONFIG_AHBOT_ITEM_MIN_SKILL_RANK,
-    CONFIG_AHBOT_ITEM_MAX_SKILL_RANK,
-    CONFIG_AHBOT_ITEM_GRAY_AMOUNT,
-    CONFIG_AHBOT_ITEM_WHITE_AMOUNT,
-    CONFIG_AHBOT_ITEM_GREEN_AMOUNT,
-    CONFIG_AHBOT_ITEM_BLUE_AMOUNT,
-    CONFIG_AHBOT_ITEM_PURPLE_AMOUNT,
-    CONFIG_AHBOT_ITEM_ORANGE_AMOUNT,
-    CONFIG_AHBOT_ITEM_YELLOW_AMOUNT,
-    CONFIG_AHBOT_CLASS_CONSUMABLE_PRIORITY,
-    CONFIG_AHBOT_CLASS_CONTAINER_PRIORITY,
-    CONFIG_AHBOT_CLASS_WEAPON_PRIORITY,
-    CONFIG_AHBOT_CLASS_GEM_PRIORITY,
-    CONFIG_AHBOT_CLASS_ARMOR_PRIORITY,
-    CONFIG_AHBOT_CLASS_REAGENT_PRIORITY,
-    CONFIG_AHBOT_CLASS_PROJECTILE_PRIORITY,
-    CONFIG_AHBOT_CLASS_TRADEGOOD_PRIORITY,
-    CONFIG_AHBOT_CLASS_GENERIC_PRIORITY,
-    CONFIG_AHBOT_CLASS_RECIPE_PRIORITY,
-    CONFIG_AHBOT_CLASS_QUIVER_PRIORITY,
-    CONFIG_AHBOT_CLASS_QUEST_PRIORITY,
-    CONFIG_AHBOT_CLASS_KEY_PRIORITY,
-    CONFIG_AHBOT_CLASS_MISC_PRIORITY,
-    CONFIG_AHBOT_CLASS_GLYPH_PRIORITY,
-    CONFIG_AHBOT_ALLIANCE_PRICE_RATIO,
-    CONFIG_AHBOT_HORDE_PRICE_RATIO,
-    CONFIG_AHBOT_NEUTRAL_PRICE_RATIO,
-    CONFIG_AHBOT_ITEM_GRAY_PRICE_RATIO,
-    CONFIG_AHBOT_ITEM_WHITE_PRICE_RATIO,
-    CONFIG_AHBOT_ITEM_GREEN_PRICE_RATIO,
-    CONFIG_AHBOT_ITEM_BLUE_PRICE_RATIO,
-    CONFIG_AHBOT_ITEM_PURPLE_PRICE_RATIO,
-    CONFIG_AHBOT_ITEM_ORANGE_PRICE_RATIO,
-    CONFIG_AHBOT_ITEM_YELLOW_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_CONSUMABLE_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_CONTAINER_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_WEAPON_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_GEM_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_ARMOR_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_REAGENT_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_PROJECTILE_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_TRADEGOOD_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_GENERIC_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_RECIPE_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_MONEY_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_QUIVER_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_QUEST_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_KEY_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_PERMANENT_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_MISC_PRICE_RATIO,
-    CONFIG_AHBOT_CLASS_GLYPH_PRICE_RATIO,
-    CONFIG_AHBOT_BUYER_RECHECK_INTERVAL,
-    CONFIG_AHBOT_BUYER_BASEPRICE_GRAY,
-    CONFIG_AHBOT_BUYER_BASEPRICE_WHITE,
-    CONFIG_AHBOT_BUYER_BASEPRICE_GREEN,
-    CONFIG_AHBOT_BUYER_BASEPRICE_BLUE,
-    CONFIG_AHBOT_BUYER_BASEPRICE_PURPLE,
-    CONFIG_AHBOT_BUYER_BASEPRICE_ORANGE,
-    CONFIG_AHBOT_BUYER_BASEPRICE_YELLOW,
-    CONFIG_AHBOT_BUYER_CHANCEMULTIPLIER_GRAY,
-    CONFIG_AHBOT_BUYER_CHANCEMULTIPLIER_WHITE,
-    CONFIG_AHBOT_BUYER_CHANCEMULTIPLIER_GREEN,
-    CONFIG_AHBOT_BUYER_CHANCEMULTIPLIER_BLUE,
-    CONFIG_AHBOT_BUYER_CHANCEMULTIPLIER_PURPLE,
-    CONFIG_AHBOT_BUYER_CHANCEMULTIPLIER_ORANGE,
-    CONFIG_AHBOT_BUYER_CHANCEMULTIPLIER_YELLOW,
-    CONFIG_AHBOT_CLASS_MISC_MOUNT_MIN_REQ_LEVEL,
-    CONFIG_AHBOT_CLASS_MISC_MOUNT_MAX_REQ_LEVEL,
-    CONFIG_AHBOT_CLASS_MISC_MOUNT_MIN_SKILL_RANK,
-    CONFIG_AHBOT_CLASS_MISC_MOUNT_MAX_SKILL_RANK,
-    CONFIG_AHBOT_CLASS_GLYPH_MIN_REQ_LEVEL,
-    CONFIG_AHBOT_CLASS_GLYPH_MAX_REQ_LEVEL,
-    CONFIG_AHBOT_CLASS_GLYPH_MIN_ITEM_LEVEL,
-    CONFIG_AHBOT_CLASS_GLYPH_MAX_ITEM_LEVEL,
-    CONFIG_AHBOT_CLASS_TRADEGOOD_MIN_ITEM_LEVEL,
-    CONFIG_AHBOT_CLASS_TRADEGOOD_MAX_ITEM_LEVEL,
-    CONFIG_AHBOT_CLASS_CONTAINER_MIN_ITEM_LEVEL,
-    CONFIG_AHBOT_CLASS_CONTAINER_MAX_ITEM_LEVEL,
-    CONFIG_AHBOT_CLASS_RANDOMSTACKRATIO_CONSUMABLE,
-    CONFIG_AHBOT_CLASS_RANDOMSTACKRATIO_CONTAINER,
-    CONFIG_AHBOT_CLASS_RANDOMSTACKRATIO_WEAPON,
-    CONFIG_AHBOT_CLASS_RANDOMSTACKRATIO_GEM,
-    CONFIG_AHBOT_CLASS_RANDOMSTACKRATIO_ARMOR,
-    CONFIG_AHBOT_CLASS_RANDOMSTACKRATIO_REAGENT,
-    CONFIG_AHBOT_CLASS_RANDOMSTACKRATIO_PROJECTILE,
-    CONFIG_AHBOT_CLASS_RANDOMSTACKRATIO_TRADEGOOD,
-    CONFIG_AHBOT_CLASS_RANDOMSTACKRATIO_GENERIC,
-    CONFIG_AHBOT_CLASS_RANDOMSTACKRATIO_RECIPE,
-    CONFIG_AHBOT_CLASS_RANDOMSTACKRATIO_QUIVER,
-    CONFIG_AHBOT_CLASS_RANDOMSTACKRATIO_QUEST,
-    CONFIG_AHBOT_CLASS_RANDOMSTACKRATIO_KEY,
-    CONFIG_AHBOT_CLASS_RANDOMSTACKRATIO_MISC,
-    CONFIG_AHBOT_CLASS_RANDOMSTACKRATIO_GLYPH,
-    CONFIG_AHBOT_ACCOUNT_ID,
-    CONFIG_UINT32_AHBOT_UINT32_COUNT
-};
-
-enum AuctionBotConfigBoolValues
-{
-    CONFIG_AHBOT_BUYER_ALLIANCE_ENABLED,
-    CONFIG_AHBOT_BUYER_HORDE_ENABLED,
-    CONFIG_AHBOT_BUYER_NEUTRAL_ENABLED,
-    CONFIG_AHBOT_ITEMS_VENDOR,
-    CONFIG_AHBOT_ITEMS_LOOT,
-    CONFIG_AHBOT_ITEMS_MISC,
-    CONFIG_AHBOT_BIND_NO,
-    CONFIG_AHBOT_BIND_PICKUP,
-    CONFIG_AHBOT_BIND_EQUIP,
-    CONFIG_AHBOT_BIND_USE,
-    CONFIG_AHBOT_BIND_QUEST,
-    CONFIG_AHBOT_BUYPRICE_SELLER,
-    CONFIG_AHBOT_SELLER_ENABLED,
-    CONFIG_AHBOT_BUYER_ENABLED,
-    CONFIG_AHBOT_LOCKBOX_ENABLED,
-    CONFIG_AHBOT_CLASS_CONSUMABLE_ALLOW_ZERO,
-    CONFIG_AHBOT_CLASS_CONTAINER_ALLOW_ZERO,
-    CONFIG_AHBOT_CLASS_WEAPON_ALLOW_ZERO,
-    CONFIG_AHBOT_CLASS_GEM_ALLOW_ZERO,
-    CONFIG_AHBOT_CLASS_ARMOR_ALLOW_ZERO,
-    CONFIG_AHBOT_CLASS_REAGENT_ALLOW_ZERO,
-    CONFIG_AHBOT_CLASS_PROJECTILE_ALLOW_ZERO,
-    CONFIG_AHBOT_CLASS_TRADEGOOD_ALLOW_ZERO,
-    CONFIG_AHBOT_CLASS_RECIPE_ALLOW_ZERO,
-    CONFIG_AHBOT_CLASS_QUIVER_ALLOW_ZERO,
-    CONFIG_AHBOT_CLASS_QUEST_ALLOW_ZERO,
-    CONFIG_AHBOT_CLASS_KEY_ALLOW_ZERO,
-    CONFIG_AHBOT_CLASS_MISC_ALLOW_ZERO,
-    CONFIG_AHBOT_CLASS_GLYPH_ALLOW_ZERO,
-    CONFIG_UINT32_AHBOT_BOOL_COUNT
-};
-
-enum AuctionBotConfigFloatValues
-{
-    CONFIG_AHBOT_BUYER_CHANCE_FACTOR,
-    CONFIG_AHBOT_BIDPRICE_MIN,
-    CONFIG_AHBOT_BIDPRICE_MAX,
-    CONFIG_AHBOT_FLOAT_COUNT
-};
-
-// All basic config data used by other AHBot classes for self-configure.
-class TC_GAME_API AuctionBotConfig
-{
-private:
-    AuctionBotConfig(): _itemsPerCycleBoost(1000), _itemsPerCycleNormal(20) {}
-    ~AuctionBotConfig() {}
-    AuctionBotConfig(AuctionBotConfig const&) = delete;
-    AuctionBotConfig& operator=(AuctionBotConfig const&) = delete;
-
-public:
-    static AuctionBotConfig* instance();
-
-    bool Initialize();
-    std::string const& GetAHBotIncludes() const { return _AHBotIncludes; }
-    std::string const& GetAHBotExcludes() const { return _AHBotExcludes; }
-
-    uint32 GetConfig(AuctionBotConfigUInt32Values index) const { return _configUint32Values[index]; }
-    bool GetConfig(AuctionBotConfigBoolValues index) const { return _configBoolValues[index]; }
-    float GetConfig(AuctionBotConfigFloatValues index) const { return _configFloatValues[index]; }
-    void SetConfig(AuctionBotConfigBoolValues index, bool value) { _configBoolValues[index] = value; }
-    void SetConfig(AuctionBotConfigUInt32Values index, uint32 value) { _configUint32Values[index] = value; }
-    void SetConfig(AuctionBotConfigFloatValues index, float value) { _configFloatValues[index] = value; }
-
-    uint32 GetConfigItemAmountRatio(AuctionHouseType houseType) const;
-    uint32 GetConfigPriceRatio(AuctionHouseType houseType) const;
-    bool GetConfigBuyerEnabled(AuctionHouseType houseType) const;
-    uint32 GetConfigItemQualityAmount(AuctionQuality quality) const;
-
-    uint32 GetItemPerCycleBoost() const { return _itemsPerCycleBoost; }
-    uint32 GetItemPerCycleNormal() const { return _itemsPerCycleNormal; }
-    uint32 GetRandChar() const;
-    uint32 GetRandCharExclude(uint32 exclude) const;
-    bool IsBotChar(uint32 characterID) const;
-    void Reload() { GetConfigFromFile(); }
-
-    static char const* GetHouseTypeName(AuctionHouseType houseType);
-
-private:
-    std::string _AHBotIncludes;
-    std::string _AHBotExcludes;
-    std::vector<uint32> _AHBotCharacters;
-    uint32 _itemsPerCycleBoost;
-    uint32 _itemsPerCycleNormal;
-
-    uint32 _configUint32Values[CONFIG_UINT32_AHBOT_UINT32_COUNT];
-    bool _configBoolValues[CONFIG_UINT32_AHBOT_BOOL_COUNT];
-    float _configFloatValues[CONFIG_AHBOT_FLOAT_COUNT];
-
-    void SetAHBotIncludes(const std::string& AHBotIncludes) { _AHBotIncludes = AHBotIncludes; }
-    void SetAHBotExcludes(const std::string& AHBotExcludes) { _AHBotExcludes = AHBotExcludes; }
-
-    void SetConfig(AuctionBotConfigUInt32Values index, char const* fieldname, uint32 defvalue);
-    void SetConfigMax(AuctionBotConfigUInt32Values index, char const* fieldname, uint32 defvalue, uint32 maxvalue);
-    void SetConfigMinMax(AuctionBotConfigUInt32Values index, char const* fieldname, uint32 defvalue, uint32 minvalue, uint32 maxvalue);
-    void SetConfig(AuctionBotConfigBoolValues index, char const* fieldname, bool defvalue);
-    void SetConfig(AuctionBotConfigFloatValues index, char const* fieldname, float defvalue);
-    void GetConfigFromFile();
-};
-
-#define sAuctionBotConfig AuctionBotConfig::instance()
-
-class AuctionBotAgent
-{
-public:
-    AuctionBotAgent() {}
-    virtual ~AuctionBotAgent() {}
-    virtual bool Initialize() = 0;
-    virtual bool Update(AuctionHouseType houseType) = 0;
-};
-
-struct AuctionHouseBotStatusInfoPerType
-{
-    uint32 ItemsCount;
-    uint32 QualityInfo[MAX_AUCTION_QUALITY];
-};
-
-typedef AuctionHouseBotStatusInfoPerType AuctionHouseBotStatusInfo[MAX_AUCTION_HOUSE_TYPE];
-
-// This class handle both Selling and Buying method
-// (holder of AuctionBotBuyer and AuctionBotSeller objects)
-class TC_GAME_API AuctionHouseBot
-{
-private:
-    AuctionHouseBot();
-    ~AuctionHouseBot();
-    AuctionHouseBot(AuctionHouseBot const&) = delete;
-    AuctionHouseBot& operator=(AuctionHouseBot const&) = delete;
-
-public:
-    static AuctionHouseBot* instance();
-
-    void Update();
-    void Initialize();
-
-    // Followed method is mainly used by cs_ahbot.cpp for in-game/console command
-    void SetItemsRatio(uint32 al, uint32 ho, uint32 ne);
-    void SetItemsRatioForHouse(AuctionHouseType house, uint32 val);
-    void SetItemsAmount(uint32(&vals)[MAX_AUCTION_QUALITY]);
-    void SetItemsAmountForQuality(AuctionQuality quality, uint32 val);
-    void ReloadAllConfig();
-    void Rebuild(bool all);
-
-    void PrepareStatusInfos(AuctionHouseBotStatusInfo& statusInfo);
-private:
-    void InitializeAgents();
-
-    AuctionBotBuyer* _buyer;
-    AuctionBotSeller* _seller;
-
-    uint32 _operationSelector; // 0..2*MAX_AUCTION_HOUSE_TYPE-1
-};
-
-#define sAuctionBot AuctionHouseBot::instance()
+#define auctionbot Oregon::Singleton<AuctionHouseBot>::Instance()
 
 #endif
+

@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -14,11 +14,11 @@
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+
 #ifndef __BATTLEGROUNDRL_H
 #define __BATTLEGROUNDRL_H
 
-#include "Arena.h"
-#include "EventMap.h"
+class Battleground;
 
 enum BattlegroundRLObjectTypes
 {
@@ -29,7 +29,7 @@ enum BattlegroundRLObjectTypes
     BG_RL_OBJECT_MAX            = 4
 };
 
-enum BattlegroundRLGameObjects
+enum BattlegroundRLObjects
 {
     BG_RL_OBJECT_TYPE_DOOR_1    = 185918,
     BG_RL_OBJECT_TYPE_DOOR_2    = 185917,
@@ -37,29 +37,34 @@ enum BattlegroundRLGameObjects
     BG_RL_OBJECT_TYPE_BUFF_2    = 184664
 };
 
-constexpr Seconds BG_RL_REMOVE_DOORS_TIMER    = 5s;
-
-enum BattlegroundRLEvents
-{
-    BG_RL_EVENT_REMOVE_DOORS    = 1
-};
-
-class BattlegroundRL : public Arena
+class BattlegroundRLScore : public BattlegroundScore
 {
     public:
+        BattlegroundRLScore() {};
+        virtual ~BattlegroundRLScore() {};
+        //TODO fix me
+};
+
+class BattlegroundRL : public Battleground
+{
+        friend class BattlegroundMgr;
+
+    public:
         BattlegroundRL();
+        ~BattlegroundRL();
+        void Update(uint32 diff);
 
         /* inherited from BattlegroundClass */
-        void FillInitialWorldStates(WorldPackets::WorldState::InitWorldStates& packet) override;
-        void StartingEventCloseDoors() override;
-        void StartingEventOpenDoors() override;
+        virtual void AddPlayer(Player* plr);
+        virtual void StartingEventCloseDoors();
+        virtual void StartingEventOpenDoors();
 
-        void HandleAreaTrigger(Player* Source, uint32 Trigger) override;
-        bool SetupBattleground() override;
-
-    private:
-        void PostUpdateImpl(uint32 diff) override;
-
-        EventMap _events;
+        void RemovePlayer(Player* plr, uint64 guid);
+        void HandleAreaTrigger(Player* Source, uint32 Trigger);
+        bool SetupBattleground();
+        virtual void ResetBGSubclass();
+        virtual void FillInitialWorldStates(WorldPacket& d);
+        void HandleKillPlayer(Player* player, Player* killer);
 };
 #endif
+

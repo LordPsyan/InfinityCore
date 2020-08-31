@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,42 +15,45 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_GRIDSTATES_H
-#define TRINITY_GRIDSTATES_H
+#ifndef OREGON_GRIDSTATES_H
+#define OREGON_GRIDSTATES_H
 
-#include "GridDefines.h"
-#include "NGrid.h"
+#include "Map.h"
+#include "Object.h"
 
-class Map;
-
-class TC_GAME_API GridState
+class GridState
 {
     public:
         virtual ~GridState() { };
-        virtual void Update(Map &, NGridType&, GridInfo &, uint32 t_diff) const = 0;
+        virtual void Update(Map &, NGridType&, GridInfo &, const uint32 t_diff) const = 0;
 };
 
-class TC_GAME_API InvalidState : public GridState
+class InvalidState : public GridState
 {
     public:
-        void Update(Map &, NGridType &, GridInfo &, uint32 t_diff) const override;
+
+        void Update(Map &, NGridType &, GridInfo &, const uint32 t_diff) const override;
 };
 
-class TC_GAME_API ActiveState : public GridState
+class ActiveState : public GridState
 {
     public:
-        void Update(Map &, NGridType &, GridInfo &, uint32 t_diff) const override;
+
+        void Update(Map &, NGridType &, GridInfo &, const uint32 t_diff) const override;
 };
 
-class TC_GAME_API IdleState : public GridState
+class IdleState : public GridState
 {
     public:
-        void Update(Map &, NGridType &, GridInfo &, uint32 t_diff) const override;
+
+        void Update(Map &, NGridType &, GridInfo &, const uint32 t_diff) const override;
 };
 
-class TC_GAME_API RemovalState : public GridState
+class RemovalState : public GridState
 {
     public:
-        void Update(Map &, NGridType &, GridInfo &, uint32 t_diff) const override;
+
+        void Update(Map &, NGridType &, GridInfo &, const uint32 t_diff) const override;
 };
 #endif
+

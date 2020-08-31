@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,43 +18,39 @@
 #include "mpq_libmpq04.h"
 #include <deque>
 #include <cstdio>
-#include <algorithm>
 
 ArchiveSet gOpenArchives;
 
-MPQArchive::MPQArchive(char const* filename)
+MPQArchive::MPQArchive(const char* filename)
 {
     int result = libmpq__archive_open(&mpq_a, filename, -1);
     printf("Opening %s\n", filename);
-    if(result) {
-        switch(result) {
-            case LIBMPQ_ERROR_OPEN :
-                printf("Error opening archive '%s': Does file really exist?\n", filename);
-                break;
-            case LIBMPQ_ERROR_FORMAT :            /* bad file format */
-                printf("Error opening archive '%s': Bad file format\n", filename);
-                break;
-            case LIBMPQ_ERROR_SEEK :         /* seeking in file failed */
-                printf("Error opening archive '%s': Seeking in file failed\n", filename);
-                break;
-            case LIBMPQ_ERROR_READ :              /* Read error in archive */
-                printf("Error opening archive '%s': Read error in archive\n", filename);
-                break;
-            case LIBMPQ_ERROR_MALLOC :               /* maybe not enough memory? :) */
-                printf("Error opening archive '%s': Maybe not enough memory\n", filename);
-                break;
-            default:
-                printf("Error opening archive '%s': Unknown error\n", filename);
-                break;
+    if (result)
+    {
+        switch (result)
+        {
+        case LIBMPQ_ERROR_OPEN :
+            printf("Error opening archive '%s': Does file really exist?\n", filename);
+            break;
+        case LIBMPQ_ERROR_FORMAT :            /* bad file format */
+            printf("Error opening archive '%s': Bad file format\n", filename);
+            break;
+        case LIBMPQ_ERROR_SEEK :         /* seeking in file failed */
+            printf("Error opening archive '%s': Seeking in file failed\n", filename);
+            break;
+        case LIBMPQ_ERROR_READ :              /* Read error in archive */
+            printf("Error opening archive '%s': Read error in archive\n", filename);
+            break;
+        case LIBMPQ_ERROR_MALLOC :               /* maybe not enough memory? :) */
+            printf("Error opening archive '%s': Maybe not enough memory\n", filename);
+            break;
+        default:
+            printf("Error opening archive '%s': Unknown error\n", filename);
+            break;
         }
         return;
     }
     gOpenArchives.push_front(this);
-}
-
-bool MPQArchive::isOpened() const
-{
-    return std::find(gOpenArchives.begin(), gOpenArchives.end(), this) != gOpenArchives.end();
 }
 
 void MPQArchive::close()
@@ -63,24 +59,24 @@ void MPQArchive::close()
     libmpq__archive_close(mpq_a);
 }
 
-MPQFile::MPQFile(char const* filename):
+MPQFile::MPQFile(const char* filename):
     eof(false),
     buffer(0),
     pointer(0),
     size(0)
 {
-    for(ArchiveSet::iterator i=gOpenArchives.begin(); i!=gOpenArchives.end();++i)
+    for (ArchiveSet::iterator i = gOpenArchives.begin(); i != gOpenArchives.end(); ++i)
     {
-        mpq_archive *mpq_a = (*i)->mpq_a;
+        mpq_archive* mpq_a = (*i)->mpq_a;
 
-        uint32 filenum;
-        if(libmpq__file_number(mpq_a, filename, &filenum)) continue;
+        uint32_t filenum;
+        if (libmpq__file_number(mpq_a, filename, &filenum)) continue;
         libmpq__off_t transferred;
         libmpq__file_size_unpacked(mpq_a, filenum, &size);
 
         // HACK: in patch.mpq some files don't want to open and give 1 for filesize
         if (size<=1) {
-            // printf("info: file %s has size %d; considered dummy file.\n", filename, size);
+//            printf("warning: file %s has size %d; cannot read.\n", filename, size);
             eof = true;
             buffer = 0;
             return;
@@ -128,7 +124,7 @@ void MPQFile::seekRelative(int offset)
 
 void MPQFile::close()
 {
-    delete[] buffer;
+    if (buffer) delete[] buffer;
     buffer = 0;
     eof = true;
 }

@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,27 +15,41 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_HOMEMOVEMENTGENERATOR_H
-#define TRINITY_HOMEMOVEMENTGENERATOR_H
+#ifndef OREGON_HOMEMOVEMENTGENERATOR_H
+#define OREGON_HOMEMOVEMENTGENERATOR_H
 
 #include "MovementGenerator.h"
+#include "PathFinder.h"
 
-template <class T>
-class HomeMovementGenerator : public MovementGeneratorMedium< T, HomeMovementGenerator<T> >
+class Creature;
+
+template < class T >
+class HomeMovementGenerator;
+
+template <>
+class HomeMovementGenerator<Creature>
+    : public MovementGeneratorMedium< Creature, HomeMovementGenerator<Creature> >
 {
     public:
-        explicit HomeMovementGenerator();
 
-        MovementGeneratorType GetMovementGeneratorType() const override;
+        HomeMovementGenerator() : skipToHome(false) {}
+        ~HomeMovementGenerator() {}
 
-        void DoInitialize(T*);
-        void DoReset(T*);
-        bool DoUpdate(T*, uint32);
-        void DoDeactivate(T*);
-        void DoFinalize(T*, bool, bool);
+        void Initialize(Creature&);
+        void Finalize(Creature &);
+        void Reset(Creature&);
+        bool Update(Creature&, const uint32&);
+        MovementGeneratorType GetMovementGeneratorType()
+        {
+            return HOME_MOTION_TYPE;
+        }
 
     private:
-        void SetTargetLocation(T*);
-};
+        void _setTargetLocation(Creature&);
 
+        float ori;
+        bool arrived;
+        bool skipToHome;
+};
 #endif
+

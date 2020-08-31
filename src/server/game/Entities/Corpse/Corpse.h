@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,13 +15,13 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITYCORE_CORPSE_H
-#define TRINITYCORE_CORPSE_H
+#ifndef OREGONCORE_CORPSE_H
+#define OREGONCORE_CORPSE_H
 
 #include "Object.h"
-#include "DatabaseEnvFwd.h"
+#include "Database/DatabaseEnv.h"
 #include "GridDefines.h"
-#include "Loot.h"
+#include "LootMgr.h"
 
 enum CorpseType
 {
@@ -45,42 +45,94 @@ enum CorpseFlags
     CORPSE_FLAG_LOOTABLE    = 0x20
 };
 
-class TC_GAME_API Corpse : public WorldObject, public GridObject<Corpse>
+class Corpse : public WorldObject, public GridObject<Corpse>
 {
     public:
         explicit Corpse(CorpseType type = CORPSE_BONES);
-        ~Corpse();
+        ~Corpse() override;
 
         void AddToWorld() override;
         void RemoveFromWorld() override;
 
-        bool Create(ObjectGuid::LowType guidlow);
-        bool Create(ObjectGuid::LowType guidlow, Player* owner);
+        bool Create(uint32 guidlow, Map* map);
+        bool Create(uint32 guidlow, Player* owner, uint32 mapid, float x, float y, float z, float ang);
 
         void SaveToDB();
-        bool LoadCorpseFromDB(ObjectGuid::LowType guid, Field* fields);
+        bool LoadCorpseFromDB(uint32 guid, Field* fields);
 
-        void DeleteFromDB(CharacterDatabaseTransaction& trans);
-        static void DeleteFromDB(ObjectGuid const& ownerGuid, CharacterDatabaseTransaction& trans);
+        void DeleteBonesFromWorld();
+        void DeleteFromDB();
 
-        ObjectGuid GetOwnerGUID() const override { return GetGuidValue(CORPSE_FIELD_OWNER); }
-        uint32 GetFaction() const override;
+        uint64 const& GetOwnerGUID() const
+        {
+            return GetUInt64Value(CORPSE_FIELD_OWNER);
+        }
 
-        time_t const& GetGhostTime() const { return m_time; }
-        void ResetGhostTime();
-        CorpseType GetType() const { return m_type; }
+        time_t const& GetGhostTime() const
+        {
+            return m_time;
+        }
+        void ResetGhostTime()
+        {
+            m_time = time(NULL);
+        }
+        CorpseType GetType() const
+        {
+            return m_type;
+        }
 
-        CellCoord const& GetCellCoord() const { return _cellCoord; }
-        void SetCellCoord(CellCoord const& cellCoord) { _cellCoord = cellCoord; }
+        GridCoord const& GetGridCoord() const
+        {
+            return _gridCoord;
+        }
+        void SetGridCoord(GridCoord const& grid)
+        {
+            _gridCoord = grid;
+        }
 
         Loot loot;                                          // remove insignia ONLY at BG
         Player* lootRecipient;
+        bool lootForBody;
+
+        void Say(const char* text, uint32 language, uint64 TargetGuid)
+        {
+            MonsterSay(text, language, TargetGuid);
+        }
+        void Yell(const char* text, uint32 language, uint64 TargetGuid)
+        {
+            MonsterYell(text, language, TargetGuid);
+        }
+        void TextEmote(const char* text, uint64 TargetGuid)
+        {
+            MonsterTextEmote(text, TargetGuid);
+        }
+        void Whisper(const char* text, uint64 receiver)
+        {
+            MonsterWhisper(text, receiver);
+        }
+        void Say(int32 textId, uint32 language, uint64 TargetGuid)
+        {
+            MonsterSay(textId, language, TargetGuid);
+        }
+        void Yell(int32 textId, uint32 language, uint64 TargetGuid)
+        {
+            MonsterYell(textId, language, TargetGuid);
+        }
+        void TextEmote(int32 textId, uint64 TargetGuid)
+        {
+            MonsterTextEmote(textId, TargetGuid);
+        }
+        void Whisper(int32 textId, uint64 receiver)
+        {
+            MonsterWhisper(textId, receiver);
+        }
 
         bool IsExpired(time_t t) const;
 
     private:
         CorpseType m_type;
         time_t m_time;
-        CellCoord _cellCoord;
+        GridCoord _gridCoord;                                    // gride for corpse position for fast search
 };
 #endif
+

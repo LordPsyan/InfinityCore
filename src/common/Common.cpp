@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,24 +17,25 @@
 
 #include "Common.h"
 
-char const* localeNames[TOTAL_LOCALES] =
+char const* localeNames[MAX_LOCALE] =
 {
-  "enUS",
-  "koKR",
-  "frFR",
-  "deDE",
-  "zhCN",
-  "zhTW",
-  "esES",
-  "esMX",
-  "ruRU"
+    "enUS",
+    "koKR",
+    "frFR",
+    "deDE",
+    "zhCN",
+    "zhTW",
+    "esES",
+    "esMX",
+    "ruRU"
 };
 
 LocaleConstant GetLocaleByName(const std::string& name)
 {
-    for (uint32 i = 0; i < TOTAL_LOCALES; ++i)
+    for (uint32 i = 0; i < MAX_LOCALE; ++i)
         if (name == localeNames[i])
             return LocaleConstant(i);
 
     return LOCALE_enUS;                                     // including enGB case
 }
+

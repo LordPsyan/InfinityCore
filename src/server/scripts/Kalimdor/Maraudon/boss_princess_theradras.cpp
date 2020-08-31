@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,111 +15,105 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: Boss_Princess_Theradras
-SD%Complete: 100
-SDComment:
-SDCategory: Maraudon
-EndScriptData */
+ /* ScriptData
+ SDName: Boss_Princess_Theradras
+ SD%Complete: 100
+ SDComment:
+ SDCategory: Maraudon
+ EndScriptData */
 
 #include "ScriptMgr.h"
-#include "maraudon.h"
 #include "ScriptedCreature.h"
 
-enum Spells
-{
-    SPELL_DUSTFIELD             = 21909,
-    SPELL_BOULDER               = 21832,
-    SPELL_THRASH                = 3391,
-    SPELL_REPULSIVEGAZE         = 21869
-};
+#define SPELL_DUSTFIELD             21909
+#define SPELL_BOULDER               21832
+#define SPELL_THRASH                3391
+#define SPELL_REPULSIVEGAZE         21869
 
 class boss_princess_theradras : public CreatureScript
 {
 public:
     boss_princess_theradras() : CreatureScript("boss_princess_theradras") { }
 
-    CreatureAI* GetAI(Creature* creature) const override
+    struct boss_princess_theradrasAI : public ScriptedAI
     {
-        return GetMaraudonAI<boss_ptheradrasAI>(creature);
-    }
+        boss_princess_theradrasAI(Creature* c) : ScriptedAI(c) {}
 
-    struct boss_ptheradrasAI : public ScriptedAI
-    {
-        boss_ptheradrasAI(Creature* creature) : ScriptedAI(creature)
+        uint32 Dustfield_Timer;
+        uint32 Boulder_Timer;
+        uint32 Thrash_Timer;
+        uint32 RepulsiveGaze_Timer;
+
+        void Reset()
         {
-            Initialize();
+            Dustfield_Timer = 8000;
+            Boulder_Timer = 2000;
+            Thrash_Timer = 5000;
+            RepulsiveGaze_Timer = 23000;
         }
 
-        void Initialize()
+        void EnterCombat(Unit* /*who*/)
         {
-            DustfieldTimer = 8000;
-            BoulderTimer = 2000;
-            ThrashTimer = 5000;
-            RepulsiveGazeTimer = 23000;
         }
 
-        uint32 DustfieldTimer;
-        uint32 BoulderTimer;
-        uint32 ThrashTimer;
-        uint32 RepulsiveGazeTimer;
-
-        void Reset() override
-        {
-            Initialize();
-        }
-
-        void JustEngagedWith(Unit* /*who*/) override { }
-
-        void JustDied(Unit* /*killer*/) override
+        void JustDied(Unit* /*killer*/)
         {
             me->SummonCreature(12238, 28.067f, 61.875f, -123.405f, 4.67f, TEMPSUMMON_TIMED_DESPAWN, 600000);
         }
 
-        void UpdateAI(uint32 diff) override
+        void UpdateAI(const uint32 diff)
         {
             if (!UpdateVictim())
                 return;
 
-            //DustfieldTimer
-            if (DustfieldTimer <= diff)
+            //Dustfield_Timer
+            if (Dustfield_Timer <= diff)
             {
                 DoCast(me, SPELL_DUSTFIELD);
-                DustfieldTimer = 14000;
+                Dustfield_Timer = 14000;
             }
-            else DustfieldTimer -= diff;
+            else Dustfield_Timer -= diff;
 
-            //BoulderTimer
-            if (BoulderTimer <= diff)
+            //Boulder_Timer
+            if (Boulder_Timer <= diff)
             {
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-                    DoCast(target, SPELL_BOULDER);
-                BoulderTimer = 10000;
+                Unit* pTarget = NULL;
+                pTarget = SelectUnit(SELECT_TARGET_RANDOM, 0);
+                if (pTarget)
+                    DoCast(pTarget, SPELL_BOULDER);
+                Boulder_Timer = 10000;
             }
-            else BoulderTimer -= diff;
+            else Boulder_Timer -= diff;
 
-            //RepulsiveGazeTimer
-            if (RepulsiveGazeTimer <= diff)
+            //RepulsiveGaze_Timer
+            if (RepulsiveGaze_Timer <= diff)
             {
                 DoCastVictim(SPELL_REPULSIVEGAZE);
-                RepulsiveGazeTimer = 20000;
+                RepulsiveGaze_Timer = 20000;
             }
-            else RepulsiveGazeTimer -= diff;
+            else RepulsiveGaze_Timer -= diff;
 
-            //ThrashTimer
-            if (ThrashTimer <= diff)
+            //Thrash_Timer
+            if (Thrash_Timer <= diff)
             {
                 DoCast(me, SPELL_THRASH);
-                ThrashTimer = 18000;
+                Thrash_Timer = 18000;
             }
-            else ThrashTimer -= diff;
+            else Thrash_Timer -= diff;
 
             DoMeleeAttackIfReady();
         }
     };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return new boss_princess_theradrasAI(pCreature);
+    }
+
 };
 
 void AddSC_boss_ptheradras()
 {
     new boss_princess_theradras();
 }
+

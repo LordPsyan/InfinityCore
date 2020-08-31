@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,27 +16,35 @@
  */
 
 #include "Common.h"
-#include "Log.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
+#include "World.h"
+#include "Log.h"
 
-void WorldSession::HandleVoiceSessionEnableOpcode(WorldPacket& recvData)
+void WorldSession::HandleVoiceSettingsOpcode(WorldPacket& recv_data)
 {
-    TC_LOG_DEBUG("network", "WORLD: CMSG_VOICE_SESSION_ENABLE");
+    sLog.outDebug("WORLD: CMSG_VOICE_SETTINGS");
     // uint8 isVoiceEnabled, uint8 isMicrophoneEnabled
-    recvData.read_skip<uint8>();
-    recvData.read_skip<uint8>();
+    recv_data.read_skip<uint8>();
+    recv_data.read_skip<uint8>();
+    if (sLog.IsOutDebug())
+        recv_data.hexlike();
 }
 
-void WorldSession::HandleChannelVoiceOnOpcode(WorldPacket& /*recvData*/)
+void WorldSession::HandleChannelEnableVoiceOpcode(WorldPacket& recv_data)
 {
-    TC_LOG_DEBUG("network", "WORLD: CMSG_CHANNEL_VOICE_ON");
+    sLog.outDebug("WORLD: CMSG_CHANNEL_ENABLE_VOICE");
     // Enable Voice button in channel context menu
+    if (sLog.IsOutDebug())
+        recv_data.hexlike();
 }
 
-void WorldSession::HandleSetActiveVoiceChannel(WorldPacket& recvData)
+void WorldSession::HandleChannelVoiceChatQuery(WorldPacket& recv_data)
 {
-    TC_LOG_DEBUG("network", "WORLD: CMSG_SET_ACTIVE_VOICE_CHANNEL");
-    recvData.read_skip<uint32>();
-    recvData.read_skip<char*>();
+    sLog.outDebug("WORLD: CMSG_CHANNEL_VOICE_CHAT_QUERY");
+    recv_data.read_skip<uint32>();
+    recv_data.read_skip<char*>();
+    if (sLog.IsOutDebug())
+        recv_data.hexlike();
 }
+

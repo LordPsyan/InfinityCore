@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,278 +15,240 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "WorldSession.h"
-#include "Common.h"
-#include "DatabaseEnv.h"
-#include "GameTime.h"
 #include "Language.h"
-#include "Log.h"
-#include "ObjectMgr.h"
-#include "Opcodes.h"
-#include "Player.h"
-#include "Random.h"
-#include "TicketMgr.h"
-#include "Util.h"
-#include "World.h"
+#include "ObjectAccessor.h"
 #include "WorldPacket.h"
-#include <zlib.h>
+#include "Common.h"
+#include "Log.h"
+#include "ObjectAccessor.h"
+#include "Player.h"
+#include "Chat.h"
+#include "TicketMgr.h"
+#include "World.h"
 
-void WorldSession::HandleGMTicketCreateOpcode(WorldPacket& recvData)
+void WorldSession::HandleGMTicketCreateOpcode(WorldPacket& recv_data)
 {
-    // Don't accept tickets if the ticket queue is disabled. (Ticket UI is greyed out but not fully dependable)
-    if (sTicketMgr->GetStatus() == GMTICKET_QUEUE_STATUS_DISABLED)
-        return;
-
-    if (GetPlayer()->GetLevel() < sWorld->getIntConfig(CONFIG_TICKET_LEVEL_REQ))
+    // Let's see if we have a ticket already, if so don't create a new one
+    if (ticketmgr.GetGMTicketByPlayer(GetPlayer()->GetGUID()))
     {
-        SendNotification(GetTrinityString(LANG_TICKET_REQ), sWorld->getIntConfig(CONFIG_TICKET_LEVEL_REQ));
+        WorldPacket data(SMSG_GMTICKET_CREATE, 4);
+        data << uint32(1); // You already have an open ticket.
+        SendPacket (&data);
         return;
     }
 
-    GMTicketResponse response = GMTICKET_RESPONSE_CREATE_ERROR;
-    GmTicket* ticket = sTicketMgr->GetTicketByPlayer(GetPlayer()->GetGUID());
-
-    if (ticket && ticket->IsCompleted())
-        sTicketMgr->CloseTicket(ticket->GetId(), GetPlayer()->GetGUID());
-
-    // Player must not have ticket
-    if (!ticket || ticket->IsClosed())
-    {
-        uint32 mapId;
-        float x, y, z;
-        std::string message;
-        uint32 needResponse;
-        bool needMoreHelp;
-        uint32 count;
-        std::list<uint32> times;
-        uint32 decompressedSize;
-        std::string chatLog;
-
-        recvData >> mapId;
-        recvData >> x >> y >> z;
-        recvData >> message;
-
-        if (!ValidateHyperlinksAndMaybeKick(message))
-            return;
-
-        recvData >> needResponse;
-        recvData >> needMoreHelp;
-
-        recvData >> count;
-
-        for (uint32 i = 0; i < count; i++)
-        {
-            uint32 time;
-            recvData >> time;
-            times.push_back(time);
-        }
-
-        recvData >> decompressedSize;
-
-        if (count && decompressedSize && decompressedSize < 0xFFFF)
-        {
-            uint32 pos = recvData.rpos();
-            ByteBuffer dest;
-            dest.resize(decompressedSize);
-
-            uLongf realSize = decompressedSize;
-            if (uncompress(dest.contents(), &realSize, recvData.contents() + pos, recvData.size() - pos) == Z_OK)
-            {
-                dest >> chatLog;
-            }
-            else
-            {
-                TC_LOG_ERROR("network", "CMSG_GMTICKET_CREATE possibly corrupt. Uncompression failed.");
-                recvData.rfinish();
-                return;
-            }
-
-            recvData.rfinish(); // Will still have compressed data in buffer.
-        }
-
-        if (!chatLog.empty() && !ValidateHyperlinksAndMaybeKick(chatLog))
-            return;
-
-        ticket = new GmTicket(GetPlayer());
-        ticket->SetPosition(mapId, x, y, z);
-        ticket->SetMessage(message);
-        ticket->SetGmAction(needResponse, needMoreHelp);
-        if (!chatLog.empty())
-            ticket->SetChatLog(times, chatLog);
-
-        sTicketMgr->AddTicket(ticket);
-        sTicketMgr->UpdateLastChange();
-
-        sWorld->SendGMText(LANG_COMMAND_TICKETNEW, GetPlayer()->GetName().c_str(), ticket->GetId());
-
-        response = GMTICKET_RESPONSE_CREATE_SUCCESS;
-    }
+    uint32 map;
+    float x, y, z;
+    std::string ticketText = "";
+    std::string ticketText2 = "";
+    GM_Ticket* ticket = new GM_Ticket;
 
     WorldPacket data(SMSG_GMTICKET_CREATE, 4);
-    data << uint32(response);
+
+    // recv Data
+    //@todo Add map coordinates to tickets.
+    recv_data >> map;
+    recv_data >> x;
+    recv_data >> y;
+    recv_data >> z;
+    recv_data >> ticketText;
+
+    // get additional data, rarely used
+    recv_data >> ticketText2;
+
+    // assign values
+    ticket->name = GetPlayer()->GetName();
+    ticket->guid = ticketmgr.GenerateTicketID();
+    ticket->playerGuid = GetPlayer()->GetGUID();
+    ticket->message = ticketText;
+    ticket->createtime = time(NULL);
+    ticket->map = map;
+    ticket->pos_x = x;
+    ticket->pos_y = y;
+    ticket->pos_z = z;
+    ticket->timestamp = time(NULL);
+    ticket->closed = 0;
+    ticket->assignedToGM = 0;
+    ticket->comment = "";
+    ticket->escalated = false;
+    ticket->viewed = false;
+
+    // remove ticket by player, shouldn't happen
+    ticketmgr.RemoveGMTicketByPlayer(GetPlayer()->GetGUID(), GetPlayer()->GetGUID());
+
+    // add ticket
+    ticketmgr.AddGMTicket(ticket, false);
+
+    // Response - no errors
+    data << uint32(2);
+
+    // Send ticket creation
     SendPacket(&data);
+
+    sWorld.SendGMText(LANG_COMMAND_TICKETNEW, ticket->name.c_str(), ticket->guid);
+
 }
 
-void WorldSession::HandleGMTicketUpdateOpcode(WorldPacket& recvData)
+void WorldSession::HandleGMTicketUpdateOpcode(WorldPacket& recv_data)
 {
-    std::string message;
-    recvData >> message;
-
-    if (!ValidateHyperlinksAndMaybeKick(message))
-        return;
-
-    GMTicketResponse response = GMTICKET_RESPONSE_UPDATE_ERROR;
-    if (GmTicket* ticket = sTicketMgr->GetTicketByPlayer(GetPlayer()->GetGUID()))
-    {
-        CharacterDatabaseTransaction trans = CharacterDatabaseTransaction(nullptr);
-        ticket->SetMessage(message);
-        ticket->SaveToDB(trans);
-
-        sWorld->SendGMText(LANG_COMMAND_TICKETUPDATED, GetPlayer()->GetName().c_str(), ticket->GetId());
-
-        response = GMTICKET_RESPONSE_UPDATE_SUCCESS;
-    }
+    std::string message = "";
+    time_t t = time(NULL);
 
     WorldPacket data(SMSG_GMTICKET_UPDATETEXT, 4);
-    data << uint32(response);
+
+    // recv Data
+    recv_data >> message;
+
+    // Update Ticket
+    GM_Ticket* ticket = ticketmgr.GetGMTicketByPlayer(GetPlayer()->GetGUID());
+
+    // Check if player has a GM Ticket yet
+    if (!ticket)
+    {
+        // Response - error couldnt find existing Ticket
+        data << uint32(1);
+
+        // Send packet
+        SendPacket(&data);
+        return;
+    }
+
+    ticket->message = message;
+    ticket->timestamp = (uint32)t;
+
+    ticketmgr.UpdateGMTicket(ticket);
+
+    // Response - no errors
+    data << uint32(2);
+
+    // Send packet
     SendPacket(&data);
+
+    sWorld.SendGMText(LANG_COMMAND_TICKETUPDATED, GetPlayer()->GetName(), ticket->guid);
+
 }
 
-void WorldSession::HandleGMTicketDeleteOpcode(WorldPacket & /*recvData*/)
+void WorldSession::HandleGMTicketDeleteOpcode(WorldPacket& /*recv_data*/)
 {
-    if (GmTicket* ticket = sTicketMgr->GetTicketByPlayer(GetPlayer()->GetGUID()))
+    // NO recv_data, NO packet check size
+
+    GM_Ticket* ticket = ticketmgr.GetGMTicketByPlayer(GetPlayer()->GetGUID());
+
+    // CHeck for Ticket
+    if (ticket)
     {
+        // Remove Tickets from Player
+
+        // Response - no errors
         WorldPacket data(SMSG_GMTICKET_DELETETICKET, 4);
-        data << uint32(GMTICKET_RESPONSE_TICKET_DELETED);
+        data << uint32(9);
+        // Send Packet
         SendPacket(&data);
 
-        sWorld->SendGMText(LANG_COMMAND_TICKETPLAYERABANDON, GetPlayer()->GetName().c_str(), ticket->GetId());
-
-        sTicketMgr->CloseTicket(ticket->GetId(), GetPlayer()->GetGUID());
-        sTicketMgr->SendTicket(this, nullptr);
+        sWorld.SendGMText(LANG_COMMAND_TICKETPLAYERABANDON, GetPlayer()->GetName(), ticket->guid);
+        ticketmgr.RemoveGMTicketByPlayer(GetPlayer()->GetGUID(), GetPlayer()->GetGUID());
     }
 }
 
-void WorldSession::HandleGMTicketGetTicketOpcode(WorldPacket & /*recvData*/)
+void WorldSession::HandleGMTicketGetTicketOpcode(WorldPacket& /*recv_data*/)
 {
-    SendQueryTimeResponse();
+    // NO recv_data NO packet size check
 
-    if (GmTicket* ticket = sTicketMgr->GetTicketByPlayer(GetPlayer()->GetGUID()))
+    WorldPacket data(SMSG_GMTICKET_GETTICKET, 400);
+
+    // get Current Ticket
+    GM_Ticket* ticket = ticketmgr.GetGMTicketByPlayer(GetPlayer()->GetGUID());
+
+    // check for existing ticket
+    if (!ticket)
     {
-        if (ticket->IsCompleted())
-            ticket->SendResponse(this);
-        else
-            sTicketMgr->SendTicket(this, ticket);
+        data << uint32(10);
+        // send packet
+        SendPacket(&data);
+        return;
+    }
+
+    // Send current Ticket
+    data << uint32(6); // unk ?
+    data << ticket->message.c_str();
+    data << uint8(0x7); // ticket category
+    data << float(0); // tickets in queue?
+    data << float(0); // if > "tickets in queue" then "We are currently experiencing a high volume of petitions."
+    data << float(ticket->viewed ? GMTICKET_OPENEDBYGM_STATUS_NOT_OPENED : GMTICKET_OPENEDBYGM_STATUS_OPENED); // 0 - "Your ticket will be serviced soon", 1 - "Wait time currently unavailable"
+    if (ticket->escalated)
+    {
+        data << uint8(2); // if == 2 and next field == 1 then "Your ticket has been escalated"
+        data << uint8(1); // const
     }
     else
-        sTicketMgr->SendTicket(this, nullptr);
+    {
+        data << uint8(0); // ticket is not assigned
+        data << uint8(0);
+    }
+
+    SendPacket(&data);
+
 }
 
-void WorldSession::HandleGMTicketSystemStatusOpcode(WorldPacket & /*recvData*/)
+void WorldSession::HandleGMSurveySubmit(WorldPacket& recv_data)
 {
-    // Note: This only disables the ticket UI at client side and is not fully reliable
-    // are we sure this is a uint32? Should ask Zor
+    uint64 nextSurveyID = ticketmgr.GetNextSurveyID();
+    uint32 x;
+    recv_data >> x; // answer range? (6 = 0-5?)
+
+    // @todo columns for "playerguid" "playername" and possibly "gm" after `surveyid` but how do we retrieve after ticket deletion?
+    // first we must get in basic template so each answer can be inserted to the same field since they are not handled all at once
+    CharacterDatabase.PExecute("INSERT INTO gm_surveys (surveyid) VALUES ('" UI64FMTD "')", nextSurveyID);
+
+    uint8 result[10];
+    memset(result, 0, sizeof(result));
+    for (int i = 0; i < 10; ++i)
+    {
+        uint32 questionID;
+        recv_data >> questionID; // GMSurveyQuestions.dbc
+        if (!questionID)
+            break;
+
+        uint8 value;
+        std::string unk_text;
+        recv_data >> value; // answer
+        recv_data >> unk_text; // always empty
+
+        result[i] = value;
+        // if anyone has a better programming method be my guest. this is the only way I see to prevent multiple rows
+        if (questionID == 28)
+            CharacterDatabase.PExecute("UPDATE gm_surveys SET AppropriateAnswer = '%u' WHERE surveyid = " UI64FMTD ";", value, nextSurveyID);
+        if (questionID == 29)
+            CharacterDatabase.PExecute("UPDATE gm_surveys SET Understandability = '%u' WHERE surveyid = " UI64FMTD ";", value, nextSurveyID);
+        if (questionID == 30)
+            CharacterDatabase.PExecute("UPDATE gm_surveys SET GMRating = '%u' WHERE surveyid = " UI64FMTD ";", value, nextSurveyID);
+        if (questionID == 31)
+            CharacterDatabase.PExecute("UPDATE gm_surveys SET ResponseTime = '%u' WHERE surveyid = " UI64FMTD ";", value, nextSurveyID);
+        if (questionID == 32)
+            CharacterDatabase.PExecute("UPDATE gm_surveys SET OverallGMExperience = '%u' WHERE surveyid = " UI64FMTD ";", value, nextSurveyID);
+    }
+
+    std::string comment;
+    recv_data >> comment; // additional comment
+    CharacterDatabase.escape_string(comment);
+    CharacterDatabase.PExecute("UPDATE gm_surveys SET comment = '%s' WHERE surveyid = " UI64FMTD ";", comment.c_str(), nextSurveyID);
+}
+
+void WorldSession::HandleGMTicketSystemStatusOpcode(WorldPacket& /*recv_data*/)
+{
+    // NO recv_data NO packet size check
+
     WorldPacket data(SMSG_GMTICKET_SYSTEMSTATUS, 4);
-    data << uint32(sTicketMgr->GetStatus() ? GMTICKET_QUEUE_STATUS_ENABLED : GMTICKET_QUEUE_STATUS_DISABLED);
+
+    // Response - System is working Fine
+
+    // No need for checks, ticket system is active
+    // in case of disactivity, this should be set to (0)
+
+    data << uint32(1);
+
+
+    // Send Packet
     SendPacket(&data);
 }
 
-void WorldSession::HandleGMSurveySubmit(WorldPacket& recvData)
-{
-    uint32 nextSurveyID = sTicketMgr->GetNextSurveyID();
-    // just put the survey into the database
-    uint32 mainSurvey; // GMSurveyCurrentSurvey.dbc, column 1 (all 9) ref to GMSurveySurveys.dbc
-    recvData >> mainSurvey;
-
-    std::unordered_set<uint32> surveyIds;
-    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
-    // sub_survey1, r1, comment1, sub_survey2, r2, comment2, sub_survey3, r3, comment3, sub_survey4, r4, comment4, sub_survey5, r5, comment5, sub_survey6, r6, comment6, sub_survey7, r7, comment7, sub_survey8, r8, comment8, sub_survey9, r9, comment9, sub_survey10, r10, comment10,
-    for (uint8 i = 0; i < 10; i++)
-    {
-        uint32 subSurveyId; // ref to i'th GMSurveySurveys.dbc field (all fields in that dbc point to fields in GMSurveyQuestions.dbc)
-        recvData >> subSurveyId;
-        if (!subSurveyId)
-            break;
-
-        uint8 rank; // probably some sort of ref to GMSurveyAnswers.dbc
-        recvData >> rank;
-        std::string comment; // comment ("Usage: GMSurveyAnswerSubmit(question, rank, comment)")
-        recvData >> comment;
-
-        // make sure the same sub survey is not added to DB twice
-        if (!surveyIds.insert(subSurveyId).second)
-            continue;
-
-        if (!ValidateHyperlinksAndMaybeKick(comment))
-            return;
-
-        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_GM_SUBSURVEY);
-        stmt->setUInt32(0, nextSurveyID);
-        stmt->setUInt32(1, subSurveyId);
-        stmt->setUInt32(2, rank);
-        stmt->setString(3, comment);
-        trans->Append(stmt);
-    }
-
-    std::string comment; // just a guess
-    recvData >> comment;
-
-    if (!ValidateHyperlinksAndMaybeKick(comment))
-        return;
-
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_GM_SURVEY);
-    stmt->setUInt32(0, GetPlayer()->GetGUID().GetCounter());
-    stmt->setUInt32(1, nextSurveyID);
-    stmt->setUInt32(2, mainSurvey);
-    stmt->setString(3, comment);
-
-    trans->Append(stmt);
-
-    CharacterDatabase.CommitTransaction(trans);
-}
-
-void WorldSession::HandleReportLag(WorldPacket& recvData)
-{
-    // just put the lag report into the database...
-    // can't think of anything else to do with it
-    uint32 lagType, mapId;
-    recvData >> lagType;
-    recvData >> mapId;
-    float x, y, z;
-    recvData >> x;
-    recvData >> y;
-    recvData >> z;
-
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_LAG_REPORT);
-    stmt->setUInt32(0, GetPlayer()->GetGUID().GetCounter());
-    stmt->setUInt8 (1, lagType);
-    stmt->setUInt16(2, mapId);
-    stmt->setFloat (3, x);
-    stmt->setFloat (4, y);
-    stmt->setFloat (5, z);
-    stmt->setUInt32(6, GetLatency());
-    stmt->setUInt32(7, GameTime::GetGameTime());
-    CharacterDatabase.Execute(stmt);
-}
-
-void WorldSession::HandleGMResponseResolve(WorldPacket& /*recvPacket*/)
-{
-    // empty packet
-    if (GmTicket* ticket = sTicketMgr->GetTicketByPlayer(GetPlayer()->GetGUID()))
-    {
-        uint8 getSurvey = 0;
-        if (roll_chance_f(sWorld->getFloatConfig(CONFIG_CHANCE_OF_GM_SURVEY)))
-            getSurvey = 1;
-
-        WorldPacket data(SMSG_GMRESPONSE_STATUS_UPDATE, 4);
-        data << uint8(getSurvey);
-        SendPacket(&data);
-
-        WorldPacket data2(SMSG_GMTICKET_DELETETICKET, 4);
-        data2 << uint32(GMTICKET_RESPONSE_TICKET_DELETED);
-        SendPacket(&data2);
-
-        sTicketMgr->CloseTicket(ticket->GetId(), GetPlayer()->GetGUID());
-        sTicketMgr->SendTicket(this, nullptr);
-    }
-}

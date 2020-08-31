@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,7 +15,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifdef _WIN32
+#ifdef WIN32
 #ifndef _WIN32_SERVICE_
 #define _WIN32_SERVICE_
 
@@ -24,4 +24,5 @@ bool WinServiceUninstall();
 bool WinServiceRun();
 
 #endif                                                      // _WIN32_SERVICE_
-#endif                                                      // _WIN32
+#endif                                                      // WIN32
+

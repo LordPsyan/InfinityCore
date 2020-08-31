@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,103 +16,121 @@
  */
 
 #include "MapUpdater.h"
+#include "DelayExecutor.h"
 #include "Map.h"
-#include "Metric.h"
+#include "Database/DatabaseEnv.h"
 
-#include <mutex>
+#include <ace/Guard_T.h>
+#include <ace/Method_Request.h>
 
+class WDBThreadStartReq1 : public ACE_Method_Request
+{
+    public:
 
-class MapUpdateRequest
+        WDBThreadStartReq1()
+        {
+        }
+
+        virtual int call()
+        {
+            WorldDatabase.ThreadStart();
+            return 0;
+        }
+};
+
+class WDBThreadEndReq1 : public ACE_Method_Request
+{
+    public:
+
+        WDBThreadEndReq1()
+        {
+        }
+
+        virtual int call()
+        {
+            WorldDatabase.ThreadEnd();
+            return 0;
+        }
+};
+
+class MapUpdateRequest : public ACE_Method_Request
 {
     private:
 
         Map& m_map;
         MapUpdater& m_updater;
-        uint32 m_diff;
+        ACE_UINT32 m_diff;
 
     public:
 
-        MapUpdateRequest(Map& m, MapUpdater& u, uint32 d)
+        MapUpdateRequest(Map& m, MapUpdater& u, ACE_UINT32 d)
             : m_map(m), m_updater(u), m_diff(d)
         {
         }
 
-        void call()
+        virtual int call()
         {
-            TC_METRIC_TIMER("map_update_time_diff", TC_METRIC_TAG("map_id", std::to_string(m_map.GetId())));
             m_map.Update (m_diff);
             m_updater.update_finished();
+            return 0;
         }
 };
 
-void MapUpdater::activate(size_t num_threads)
+int MapUpdater::activate(size_t num_threads)
 {
-    for (size_t i = 0; i < num_threads; ++i)
-    {
-        _workerThreads.push_back(std::thread(&MapUpdater::WorkerThread, this));
-    }
+    return m_executor.activate((int)num_threads, new WDBThreadStartReq1, new WDBThreadEndReq1);
 }
 
-void MapUpdater::deactivate()
+int MapUpdater::deactivate()
 {
-    _cancelationToken = true;
-
     wait();
 
-    _queue.Cancel();
-
-    for (auto& thread : _workerThreads)
-    {
-        thread.join();
-    }
+    return m_executor.deactivate();
 }
 
-void MapUpdater::wait()
+int MapUpdater::wait()
 {
-    std::unique_lock<std::mutex> lock(_lock);
+    ACE_GUARD_RETURN(ACE_Thread_Mutex, guard, m_mutex, -1);
 
     while (pending_requests > 0)
-        _condition.wait(lock);
+        m_condition.wait();
 
-    lock.unlock();
+    return 0;
 }
 
-void MapUpdater::schedule_update(Map& map, uint32 diff)
+int MapUpdater::schedule_update(Map& map, ACE_UINT32 diff)
 {
-    std::lock_guard<std::mutex> lock(_lock);
+    ACE_GUARD_RETURN(ACE_Thread_Mutex, guard, m_mutex, -1);
 
     ++pending_requests;
 
-    _queue.Push(new MapUpdateRequest(map, *this, diff));
+    if (m_executor.execute(new MapUpdateRequest(map, *this, diff)) == -1)
+    {
+        ACE_DEBUG((LM_ERROR, ACE_TEXT("(%t) \n"), ACE_TEXT("Failed to schedule Map Update")));
+
+        --pending_requests;
+        return -1;
+    }
+
+    return 0;
 }
 
 bool MapUpdater::activated()
 {
-    return _workerThreads.size() > 0;
+    return m_executor.activated();
 }
 
 void MapUpdater::update_finished()
 {
-    std::lock_guard<std::mutex> lock(_lock);
+    ACE_GUARD(ACE_Thread_Mutex, guard, m_mutex);
+
+    if (pending_requests == 0)
+    {
+        ACE_ERROR((LM_ERROR, ACE_TEXT("(%t)\n"), ACE_TEXT("MapUpdater::update_finished BUG, report to devs")));
+        return;
+    }
 
     --pending_requests;
 
-    _condition.notify_all();
-}
-
-void MapUpdater::WorkerThread()
-{
-    while (1)
-    {
-        MapUpdateRequest* request = nullptr;
-
-        _queue.WaitAndPop(request);
-
-        if (_cancelationToken)
-            return;
-
-        request->call();
-
-        delete request;
-    }
+    m_condition.broadcast();
 }

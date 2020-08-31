@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,74 +15,59 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: Boss_Noxxion
-SD%Complete: 100
-SDComment:
-SDCategory: Maraudon
-EndScriptData */
+ /* ScriptData
+ SDName: Boss_Noxxion
+ SD%Complete: 100
+ SDComment:
+ SDCategory: Maraudon
+ EndScriptData */
 
 #include "ScriptMgr.h"
-#include "maraudon.h"
 #include "ScriptedCreature.h"
 
-enum Spells
-{
-    SPELL_TOXICVOLLEY           = 21687,
-    SPELL_UPPERCUT              = 22916
-};
+#define SPELL_TOXICVOLLEY           21687
+#define SPELL_UPPERCUT              22916
 
 class boss_noxxion : public CreatureScript
 {
 public:
     boss_noxxion() : CreatureScript("boss_noxxion") { }
 
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return GetMaraudonAI<boss_noxxionAI>(creature);
-    }
-
     struct boss_noxxionAI : public ScriptedAI
     {
-        boss_noxxionAI(Creature* creature) : ScriptedAI(creature)
-        {
-            Initialize();
-        }
+        boss_noxxionAI(Creature* c) : ScriptedAI(c) {}
 
-        void Initialize()
+        uint32 ToxicVolley_Timer;
+        uint32 Uppercut_Timer;
+        uint32 Adds_Timer;
+        uint32 Invisible_Timer;
+        bool Invisible;
+
+        void Reset()
         {
-            ToxicVolleyTimer = 7000;
-            UppercutTimer = 16000;
-            AddsTimer = 19000;
-            InvisibleTimer = 15000;                            //Too much too low?
+            ToxicVolley_Timer = 7000;
+            Uppercut_Timer = 16000;
+            Adds_Timer = 19000;
+            Invisible_Timer = 15000;                            //Too much too low?
             Invisible = false;
         }
 
-        uint32 ToxicVolleyTimer;
-        uint32 UppercutTimer;
-        uint32 AddsTimer;
-        uint32 InvisibleTimer;
-        bool Invisible;
-
-        void Reset() override
+        void EnterCombat(Unit* /*who*/)
         {
-            Initialize();
         }
 
-        void JustEngagedWith(Unit* /*who*/) override { }
-
-        void SummonAdds(Unit* victim)
+        void SummonAdds(Unit* pVictim)
         {
-            if (Creature* Add = DoSpawnCreature(13456, float(irand(-7, 7)), float(irand(-7, 7)), 0, 0, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, 90000))
-                Add->AI()->AttackStart(victim);
+            if (Creature* Add = DoSpawnCreature(13456, irand(-7, 7), irand(-7, 7), 0, 0, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, 90000))
+                Add->AI()->AttackStart(pVictim);
         }
 
-        void UpdateAI(uint32 diff) override
+        void UpdateAI(const uint32 diff)
         {
-            if (Invisible && InvisibleTimer <= diff)
+            if (Invisible && Invisible_Timer <= diff)
             {
                 //Become visible again
-                me->SetFaction(FACTION_MONSTER);
+                me->SetFaction(14);
                 me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
                 //Noxxion model
                 me->SetDisplayId(11172);
@@ -91,7 +76,7 @@ public:
             }
             else if (Invisible)
             {
-                InvisibleTimer -= diff;
+                Invisible_Timer -= diff;
                 //Do nothing while invisible
                 return;
             }
@@ -100,29 +85,29 @@ public:
             if (!UpdateVictim())
                 return;
 
-            //ToxicVolleyTimer
-            if (ToxicVolleyTimer <= diff)
+            //ToxicVolley_Timer
+            if (ToxicVolley_Timer <= diff)
             {
                 DoCastVictim(SPELL_TOXICVOLLEY);
-                ToxicVolleyTimer = 9000;
+                ToxicVolley_Timer = 9000;
             }
-            else ToxicVolleyTimer -= diff;
+            else ToxicVolley_Timer -= diff;
 
-            //UppercutTimer
-            if (UppercutTimer <= diff)
+            //Uppercut_Timer
+            if (Uppercut_Timer <= diff)
             {
                 DoCastVictim(SPELL_UPPERCUT);
-                UppercutTimer = 12000;
+                Uppercut_Timer = 12000;
             }
-            else UppercutTimer -= diff;
+            else Uppercut_Timer -= diff;
 
-            //AddsTimer
-            if (!Invisible && AddsTimer <= diff)
+            //Adds_Timer
+            if (!Invisible && Adds_Timer <= diff)
             {
-                //Interrupt any spell casting
+                //Inturrupt any spell casting
                 //me->m_canMove = true;
                 me->InterruptNonMeleeSpells(false);
-                me->SetFaction(FACTION_FRIENDLY);
+                me->SetFaction(35);
                 me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
                 // Invisible Model
                 me->SetDisplayId(11686);
@@ -132,18 +117,24 @@ public:
                 SummonAdds(me->GetVictim());
                 SummonAdds(me->GetVictim());
                 Invisible = true;
-                InvisibleTimer = 15000;
+                Invisible_Timer = 15000;
 
-                AddsTimer = 40000;
+                Adds_Timer = 40000;
             }
-            else AddsTimer -= diff;
+            else Adds_Timer -= diff;
 
             DoMeleeAttackIfReady();
         }
     };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return new boss_noxxionAI(pCreature);
+    }
 };
 
 void AddSC_boss_noxxion()
 {
     new boss_noxxion();
 }
+

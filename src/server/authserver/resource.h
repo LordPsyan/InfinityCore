@@ -1,6 +1,6 @@
 //{{NO_DEPENDENCIES}}
 // Microsoft Visual C++ generated include file.
-// Used by TrinityCore.rc
+// Used by OregonRealm.rc
 //
 
 // Next default values for new objects
@@ -13,3 +13,4 @@
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif
+

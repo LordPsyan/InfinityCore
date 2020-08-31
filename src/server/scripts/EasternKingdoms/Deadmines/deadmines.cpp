@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -23,14 +23,9 @@ SDCategory: Deadmines
 EndScriptData */
 
 #include "ScriptMgr.h"
-#include "deadmines.h"
-#include "GameObject.h"
-#include "InstanceScript.h"
-#include "Item.h"
-#include "Player.h"
 #include "ScriptedCreature.h"
+#include "deadmines.h"
 #include "Spell.h"
-#include "WorldSession.h"
 
 /*#####
 # item_Defias_Gunpowder
@@ -41,24 +36,23 @@ class item_defias_gunpowder : public ItemScript
 public:
     item_defias_gunpowder() : ItemScript("item_defias_gunpowder") { }
 
-    bool OnUse(Player* player, Item* item, SpellCastTargets const& targets) override
+    bool OnUse(Player* pPlayer, Item* pItem, SpellCastTargets const& targets) override
     {
-        InstanceScript* instance = player->GetInstanceScript();
+        ScriptedInstance* pInstance = (ScriptedInstance*)pPlayer->GetInstanceData();
 
-        if (!instance)
+        if (!pInstance)
         {
-            player->GetSession()->SendNotification("Instance script not initialized");
+            pPlayer->GetSession()->SendNotification("Instance script not initialized");
             return true;
         }
-
-        if (instance->GetData(EVENT_STATE) != CANNON_NOT_USED)
+        if (pInstance->GetData(EVENT_CANNON) != CANNON_NOT_USED)
             return false;
+        if (targets.getGOTarget() && targets.getGOTarget()->GetTypeId() == TYPEID_GAMEOBJECT && targets.getGOTarget()->GetEntry() == GO_DEFIAS_CANNON)
+            pInstance->SetData(EVENT_CANNON, CANNON_GUNPOWDER_USED);
 
-        if (targets.GetGOTarget() && targets.GetGOTarget()->GetEntry() == GO_DEFIAS_CANNON)
-            instance->SetData(EVENT_STATE, CANNON_GUNPOWDER_USED);
-
-        player->DestroyItemCount(item->GetEntry(), 1, true);
+        pPlayer->DestroyItemCount(pItem->GetEntry(), 1, true);
         return true;
+
     }
 };
 

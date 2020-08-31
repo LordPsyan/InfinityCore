@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,178 +15,195 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITYCORE_LOG_H
-#define TRINITYCORE_LOG_H
+#ifndef OREGONCORE_LOG_H
+#define OREGONCORE_LOG_H
 
-#include "Define.h"
-#include "AsioHacksFwd.h"
-#include "LogCommon.h"
-#include "StringFormat.h"
+#include "Common.h"
+#include "Policies/Singleton.h"
+#include "Database/DatabaseEnv.h"
+#include <string>
 
-#include <memory>
-#include <unordered_map>
-#include <vector>
+class Config;
 
-class Appender;
-class Logger;
-struct LogMessage;
-
-namespace Trinity
+/// LogTypes, each value is bit position in logmask
+enum LogTypes
 {
-    namespace Asio
-    {
-        class IoContext;
-    }
-}
+    LOG_TYPE_STRING = 0,
+    LOG_TYPE_BASIC,
+    LOG_TYPE_DETAIL,
+    LOG_TYPE_DEBUG,
 
-#define LOGGER_ROOT "root"
+    LOG_TYPE_ERROR,
+    LOG_TYPE_ERROR_DB,
+    LOG_TYPE_SQL,
 
-typedef Appender*(*AppenderCreatorFn)(uint8 id, std::string const& name, LogLevel level, AppenderFlags flags, std::vector<char const*>&& extraArgs);
+    LOG_TYPE_ARENA,
+    LOG_TYPE_WARDEN,
+    LOG_TYPE_CHAT,
+    LOG_TYPE_COMMAND,
 
-template <class AppenderImpl>
-Appender* CreateAppender(uint8 id, std::string const& name, LogLevel level, AppenderFlags flags, std::vector<char const*>&& extraArgs)
-{
-    return new AppenderImpl(id, name, level, flags, std::forward<std::vector<char const*>>(extraArgs));
-}
+    LOG_TYPE_CHAR,
+    LOG_TYPE_REMOTE,
 
-class TC_COMMON_API Log
-{
-    typedef std::unordered_map<std::string, Logger> LoggerMap;
+    LOG_TYPE_MAP,
+    LOG_TYPE_VMAP,
+    LOG_TYPE_MMAP,
 
-    private:
-        Log();
-        ~Log();
-        Log(Log const&) = delete;
-        Log(Log&&) = delete;
-        Log& operator=(Log const&) = delete;
-        Log& operator=(Log&&) = delete;
+    LOG_TYPE_NETWORK,
 
-    public:
-        static Log* instance();
-
-        void Initialize(Trinity::Asio::IoContext* ioContext);
-        void SetSynchronous();  // Not threadsafe - should only be called from main() after all threads are joined
-        void LoadFromConfig();
-        void Close();
-        bool ShouldLog(std::string const& type, LogLevel level) const;
-        bool SetLogLevel(std::string const& name, char const* level, bool isLogger = true);
-
-        template<typename Format, typename... Args>
-        inline void outMessage(std::string const& filter, LogLevel const level, Format&& fmt, Args&&... args)
-        {
-            outMessage(filter, level, Trinity::StringFormat(std::forward<Format>(fmt), std::forward<Args>(args)...));
-        }
-
-        template<typename Format, typename... Args>
-        void outCommand(uint32 account, Format&& fmt, Args&&... args)
-        {
-            if (!ShouldLog("commands.gm", LOG_LEVEL_INFO))
-                return;
-
-            outCommand(Trinity::StringFormat(std::forward<Format>(fmt), std::forward<Args>(args)...), std::to_string(account));
-        }
-
-        void outCharDump(char const* str, uint32 account_id, uint64 guid, char const* name);
-
-        void SetRealmId(uint32 id);
-
-        template<class AppenderImpl>
-        void RegisterAppender()
-        {
-            using Index = typename AppenderImpl::TypeIndex;
-            RegisterAppender(Index::value, &CreateAppender<AppenderImpl>);
-        }
-
-        std::string const& GetLogsDir() const { return m_logsDir; }
-        std::string const& GetLogsTimestamp() const { return m_logsTimestamp; }
-
-    private:
-        static std::string GetTimestampStr();
-        void write(std::unique_ptr<LogMessage>&& msg) const;
-
-        Logger const* GetLoggerByType(std::string const& type) const;
-        Appender* GetAppenderByName(std::string const& name);
-        uint8 NextAppenderId();
-        void CreateAppenderFromConfig(std::string const& name);
-        void CreateLoggerFromConfig(std::string const& name);
-        void ReadAppendersFromConfig();
-        void ReadLoggersFromConfig();
-        void RegisterAppender(uint8 index, AppenderCreatorFn appenderCreateFn);
-        void outMessage(std::string const& filter, LogLevel level, std::string&& message);
-        void outCommand(std::string&& message, std::string&& param1);
-
-        std::unordered_map<uint8, AppenderCreatorFn> appenderFactory;
-        std::unordered_map<uint8, std::unique_ptr<Appender>> appenders;
-        std::unordered_map<std::string, std::unique_ptr<Logger>> loggers;
-        uint8 AppenderId;
-        LogLevel lowestLogLevel;
-
-        std::string m_logsDir;
-        std::string m_logsTimestamp;
-
-        Trinity::Asio::IoContext* _ioContext;
-        Trinity::Asio::Strand* _strand;
+    MAX_LOG_TYPES
 };
 
-#define sLog Log::instance()
+/// Presets of bitmasks, exists for backward compatibility
+enum LogLevel
+{
+    LOGL_MINIMAL = 0,
+    LOGL_BASIC,
+    LOGL_DETAIL,
+    LOGL_DEBUG
+};
 
-#define LOG_EXCEPTION_FREE(filterType__, level__, ...) \
-    { \
-        try \
-        { \
-            sLog->outMessage(filterType__, level__, __VA_ARGS__); \
-        } \
-        catch (std::exception& e) \
-        { \
-            sLog->outMessage("server", LOG_LEVEL_ERROR, "Wrong format occurred (%s) at %s:%u.", \
-                e.what(), __FILE__, __LINE__); \
-        } \
-    }
+/// Colors - 16 possible values, upper 8 are bold and sometimes different in tone
+/// User chooses from lower 8, upper 8 are used for category "[CATEGORY] message"
+enum ColorTypes
+{
+    BLACK = 0,
+    RED,
+    GREEN,
+    BROWN,
+    BLUE,
+    MAGENTA,
+    CYAN,
+    LGREY,
+    GREY,
+    LRED,
+    LGREEN,
+    YELLOW,
+    LBLUE,
+    LMAGENTA,
+    LCYAN,
+    WHITE,
 
-#ifdef PERFORMANCE_PROFILING
-#define TC_LOG_MESSAGE_BODY(filterType__, level__, ...) ((void)0)
-#elif TRINITY_PLATFORM != TRINITY_PLATFORM_WINDOWS
-void check_args(char const*, ...) ATTR_PRINTF(1, 2);
-void check_args(std::string const&, ...);
+    MAX_COLORS
+};
 
-// This will catch format errors on build time
-#define TC_LOG_MESSAGE_BODY(filterType__, level__, ...)                 \
-        do {                                                            \
-            if (sLog->ShouldLog(filterType__, level__))                 \
-            {                                                           \
-                if (false)                                              \
-                    check_args(__VA_ARGS__);                            \
-                                                                        \
-                LOG_EXCEPTION_FREE(filterType__, level__, __VA_ARGS__); \
-            }                                                           \
-        } while (0)
+/// Main logging class
+class Log : public Oregon::Singleton<Log, Oregon::ClassLevelLockable<Log, ACE_Thread_Mutex> >
+{
+        friend class Oregon::OperatorNew<Log>;
+        Log();
+        ~Log();
+
+    public:
+        void Initialize();
+
+        void InitColors(const std::string& init_str);
+        void SetColor(ColorTypes color);
+        void ResetColor();
+
+        void outString(const char* fmt, ...)   ATTR_PRINTF(2, 3);
+        void outBasic(const char* fmt, ...)    ATTR_PRINTF(2, 3);
+        void outDetail(const char* fmt, ...)   ATTR_PRINTF(2, 3);
+        void outDebug(const char* fmt, ...)    ATTR_PRINTF(2, 3);
+
+
+        void outError(const char* fmt, ...)    ATTR_PRINTF(2, 3);
+        void outErrorDb(const char* fmt, ...)  ATTR_PRINTF(2, 3);
+		void outSQL(const char* fmt, ...)      ATTR_PRINTF(2, 3);
+
+        void outArena(const char* fmt, ...)    ATTR_PRINTF(2, 3);
+        void outWarden(const char* fmt, ...)   ATTR_PRINTF(2, 3);
+        void outChat(const char* fmt, ...)     ATTR_PRINTF(2, 3);
+        void outCommand(const char* fmt, ...)  ATTR_PRINTF(2, 3);
+        
+        void outChar(const char* fmt, ...)     ATTR_PRINTF(2, 3);
+        void outRemote(const char* fmt, ...)   ATTR_PRINTF(2, 3);
+        
+        void outMap(const char* fmt, ...)      ATTR_PRINTF(2, 3);
+        void outVMap(const char* fmt, ...)     ATTR_PRINTF(2, 3);
+        void outMMap(const char* fmt, ...)     ATTR_PRINTF(2, 3);
+
+        void outNetwork(const char* fmt, ...)  ATTR_PRINTF(2, 3);
+
+        void outDB( LogTypes type, const char* str );
+        void outString()
+        {
+            outString("");
+        }
+        void outDebugInLine(const char* fmt, ...) ATTR_PRINTF(2, 3);
+        void outFatal( const char* err, ... )                  ATTR_PRINTF(2, 3) ATTR_NORETURN;
+        void outCharDump( const char* str, uint32 account_id, uint32 guid, const char* name );
+        void outCommand(uint64 account, const char* fmt, ...) ATTR_PRINTF(3, 4);
+        void CreateUpdateFile(const char* str);
+
+        static void outTimestamp(FILE* file);
+        static std::string GetTimestampStr();
+
+        void SetLogMask(unsigned long mask);
+        void SetDBLogMask(unsigned long mask);
+
+        unsigned long GetLogMask() const
+        {
+            return m_logMask;
+        }
+
+        unsigned long GetDBLogMask() const
+        {
+            return m_logMaskDatabase;
+        }
+
+        /// Checks whether outDebug works
+        bool IsOutDebug() const
+        {
+            return (m_logMask | m_logMaskDatabase) & LOG_TYPE_DEBUG;
+        }
+
+        bool IsLogTypeEnabled(LogTypes type) const
+        {
+            return (m_logMask | m_logMaskDatabase) & (1 << type); 
+        }
+
+    private:
+        /// Performs logging
+        void DoLog(LogTypes type, bool newline, const char* prefix, const char* fmt, va_list ap, FILE* file = NULL);
+
+        FILE* openLogFile(char const* configFileName, char const* configTimeStampFlag, char const* mode);
+
+        /// opens specific file for account
+        FILE* openGmlogPerAccount(uint64 account);
+
+        FILE* m_logFiles[MAX_LOG_TYPES]; //!< files for each message type
+
+        std::string m_logsDir;       //!< directory to put log files in
+        std::string m_logsTimestamp;
+
+        bool m_gmlog_per_account;   //!< flag: create separate log for every GM account?
+        std::string m_gmlog_filename_format; //!< format for GM log filename
+
+        ColorTypes m_colors[MAX_LOG_TYPES]; //!< colors assigned to individual message types
+
+        unsigned long m_logMask;          //!< mask to filter messages sent to console and files
+        unsigned long m_logMaskDatabase;  //!< mask to filter messages sent to db
+};
+
+/// Log class singleton
+#define sLog Oregon::Singleton<Log>::Instance()
+
+#ifndef DEBUG_LOG
+#ifdef OREGON_DEBUG
+/// Works only in debug mode
+#define DEBUG_LOG Oregon::Singleton<Log>::Instance().outDebug
 #else
-#define TC_LOG_MESSAGE_BODY(filterType__, level__, ...)                 \
-        __pragma(warning(push))                                         \
-        __pragma(warning(disable:4127))                                 \
-        do {                                                            \
-            if (sLog->ShouldLog(filterType__, level__))                 \
-                LOG_EXCEPTION_FREE(filterType__, level__, __VA_ARGS__); \
-        } while (0)                                                     \
-        __pragma(warning(pop))
-#endif
+#define DEBUG_LOG(...)
+# endif // OREGON_DEBUG
+#endif // DEBUG_LOG
 
-#define TC_LOG_TRACE(filterType__, ...) \
-    TC_LOG_MESSAGE_BODY(filterType__, LOG_LEVEL_TRACE, __VA_ARGS__)
-
-#define TC_LOG_DEBUG(filterType__, ...) \
-    TC_LOG_MESSAGE_BODY(filterType__, LOG_LEVEL_DEBUG, __VA_ARGS__)
-
-#define TC_LOG_INFO(filterType__, ...)  \
-    TC_LOG_MESSAGE_BODY(filterType__, LOG_LEVEL_INFO, __VA_ARGS__)
-
-#define TC_LOG_WARN(filterType__, ...)  \
-    TC_LOG_MESSAGE_BODY(filterType__, LOG_LEVEL_WARN, __VA_ARGS__)
-
-#define TC_LOG_ERROR(filterType__, ...) \
-    TC_LOG_MESSAGE_BODY(filterType__, LOG_LEVEL_ERROR, __VA_ARGS__)
-
-#define TC_LOG_FATAL(filterType__, ...) \
-    TC_LOG_MESSAGE_BODY(filterType__, LOG_LEVEL_FATAL, __VA_ARGS__)
+/// Macros meant to be used by scripts
+#define outstring_log Oregon::Singleton<Log>::Instance().outString
+#define detail_log Oregon::Singleton<Log>::Instance().outDetail
+#define debug_log Oregon::Singleton<Log>::Instance().outDebug
+#define error_log Oregon::Singleton<Log>::Instance().outError
+#define error_db_log Oregon::Singleton<Log>::Instance().outErrorDb
 
 #endif
+

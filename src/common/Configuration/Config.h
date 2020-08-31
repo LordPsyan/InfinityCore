@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,39 +18,38 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#include "Define.h"
-#include <string>
-#include <vector>
+#include "Common.h"
+#include <Policies/Singleton.h>
+#include "Platform/Define.h"
 
-class TC_COMMON_API ConfigMgr
+class ACE_Configuration_Heap;
+
+class Config
 {
-    ConfigMgr() = default;
-    ConfigMgr(ConfigMgr const&) = delete;
-    ConfigMgr& operator=(ConfigMgr const&) = delete;
-    ~ConfigMgr() = default;
+    public:
+        Config();
+        ~Config();
 
-public:
-    /// Method used only for loading main configuration files (authserver.conf and worldserver.conf)
-    bool LoadInitial(std::string const& file, std::vector<std::string> args, std::string& error);
+        bool SetSource(const char* file);
+        bool Reload();
 
-    static ConfigMgr* instance();
+        std::string GetStringDefault(const char* name, const char* def);
+        bool GetBoolDefault(const char* name, const bool def = false);
+        int32 GetIntDefault(const char* name, const int32 def);
+        float GetFloatDefault(const char* name, const float def);
 
-    bool Reload(std::string& error);
+        std::string GetFilename() const
+        {
+            return mFilename;
+        }
 
-    std::string GetStringDefault(std::string const& name, const std::string& def) const;
-    bool GetBoolDefault(std::string const& name, bool def) const;
-    int GetIntDefault(std::string const& name, int def) const;
-    float GetFloatDefault(std::string const& name, float def) const;
+    private:
 
-    std::string const& GetFilename();
-    std::vector<std::string> const& GetArguments() const;
-    std::vector<std::string> GetKeysByString(std::string const& name);
-
-private:
-    template<class T>
-    T GetValueDefault(std::string const& name, T def) const;
+        std::string mFilename;
+        ACE_Configuration_Heap* mConf;
 };
 
-#define sConfigMgr ConfigMgr::instance()
+#define sConfig Oregon::Singleton<Config>::Instance()
 
 #endif
+

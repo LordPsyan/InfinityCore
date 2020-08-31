@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,133 +15,147 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+ /* ScriptData
+ SDName: Boss_Kurinnaxx
+ SD%Complete: 95
+ SDComment: maybe wrong Timer
+ SDCategory: Ruins of Ahn'Qiraj
+ EndScriptData */
+
 #include "ScriptMgr.h"
-#include "CreatureTextMgr.h"
-#include "InstanceScript.h"
-#include "ObjectAccessor.h"
-#include "ruins_of_ahnqiraj.h"
 #include "ScriptedCreature.h"
 
-enum Spells
-{
-    SPELL_MORTALWOUND       = 25646,
-    SPELL_SANDTRAP          = 25648,
-    SPELL_ENRAGE            = 26527,
-    SPELL_SUMMON_PLAYER     = 26446,
-    SPELL_TRASH             =  3391, // Should perhaps be triggered by an aura? Couldn't find any though
-    SPELL_WIDE_SLASH        = 25814
-};
+#define SPELL_MORTALWOUND       25646
+#define SPELL_SANDTRAP          25648
+#define SPELL_ENRAGE            26527
 
-enum Events
-{
-    EVENT_MORTAL_WOUND      = 1,
-    EVENT_SANDTRAP          = 2,
-    EVENT_TRASH             = 3,
-    EVENT_WIDE_SLASH        = 4
-};
+#define SPELL_THRASH            3391
+#define SPELL_SUMMON            26446
+#define SPELL_SLASH             25814
 
-enum Texts
-{
-    SAY_KURINAXX_DEATH      = 5, // Yelled by Ossirian the Unscarred
-};
 
 class boss_kurinnaxx : public CreatureScript
 {
-    public:
-        boss_kurinnaxx() : CreatureScript("boss_kurinnaxx") { }
+public:
+    boss_kurinnaxx() : CreatureScript("boss_kurinnaxx") { }
 
-        struct boss_kurinnaxxAI : public BossAI
+    struct boss_kurinnaxxAI : public ScriptedAI
+    {
+        boss_kurinnaxxAI(Creature* c) : ScriptedAI(c) {}
+
+        uint32 MORTALWOUND_Timer;
+        uint32 SANDTRAP_Timer;
+        uint32 THRASH_Timer;
+        uint32 SUMMON_Timer;
+        uint32 SLASH_Timer;
+
+        bool enraged;
+        bool sandtrap;
+
+        void Reset()
         {
-            boss_kurinnaxxAI(Creature* creature) : BossAI(creature, DATA_KURINNAXX)
-            {
-                Initialize();
-            }
+            MORTALWOUND_Timer = 5000;
+            SANDTRAP_Timer = 10000;
+            THRASH_Timer = 7000;
+            SLASH_Timer = 8500;
+            SUMMON_Timer = 12000;
 
-            void Initialize()
-            {
-                _enraged = false;
-            }
-
-            void Reset() override
-            {
-                _Reset();
-                Initialize();
-                events.ScheduleEvent(EVENT_MORTAL_WOUND, 8s);
-                events.ScheduleEvent(EVENT_SANDTRAP, 5s, 15s);
-                events.ScheduleEvent(EVENT_TRASH, 1s);
-                events.ScheduleEvent(EVENT_WIDE_SLASH, 11s);
-            }
-
-            void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
-            {
-                if (!_enraged && HealthBelowPct(30))
-                {
-                    DoCast(me, SPELL_ENRAGE);
-                    _enraged = true;
-                }
-            }
-
-            void JustDied(Unit* /*killer*/) override
-            {
-                _JustDied();
-                if (Creature* Ossirian = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_OSSIRIAN)))
-                    sCreatureTextMgr->SendChat(Ossirian, SAY_KURINAXX_DEATH, nullptr, CHAT_MSG_ADDON, LANG_ADDON, TEXT_RANGE_ZONE);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_MORTAL_WOUND:
-                            DoCastVictim(SPELL_MORTALWOUND);
-                            events.ScheduleEvent(EVENT_MORTAL_WOUND, 8s);
-                            break;
-                        case EVENT_SANDTRAP:
-                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100, true))
-                                target->CastSpell(target, SPELL_SANDTRAP, true);
-                            else if (Unit* victim = me->GetVictim())
-                                victim->CastSpell(victim, SPELL_SANDTRAP, true);
-                            events.ScheduleEvent(EVENT_SANDTRAP, 5s, 15s);
-                            break;
-                        case EVENT_WIDE_SLASH:
-                            DoCast(me, SPELL_WIDE_SLASH);
-                            events.ScheduleEvent(EVENT_WIDE_SLASH, 11s);
-                            break;
-                        case EVENT_TRASH:
-                            DoCast(me, SPELL_TRASH);
-                            events.ScheduleEvent(EVENT_WIDE_SLASH, 15s);
-                            break;
-                        default:
-                            break;
-                    }
-
-                    if (me->HasUnitState(UNIT_STATE_CASTING))
-                        return;
-                }
-
-                DoMeleeAttackIfReady();
-            }
-            private:
-                bool _enraged;
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetAQ20AI<boss_kurinnaxxAI>(creature);
+            sandtrap = false;
+            enraged = false;
         }
+
+        void UpdateAI(const uint32 diff)
+        {
+            if (!UpdateVictim())
+                return;
+
+            //If we are <30% cast enrage
+            if (!enraged && HealthBelowPct(30) && !me->IsNonMeleeSpellCast(false))
+            {
+                enraged = true;
+                DoCast(me, SPELL_ENRAGE, true);
+            }
+            else if (enraged && !me->HasAura(SPELL_ENRAGE, 0))
+                DoCast(me, SPELL_ENRAGE, true);
+
+
+            //MORTALWOUND_Timer
+            if (MORTALWOUND_Timer <= diff)
+            {
+                DoCastVictim(SPELL_MORTALWOUND);
+                MORTALWOUND_Timer = 6000 + rand() % 2000;
+            }
+            else MORTALWOUND_Timer -= diff;
+
+            if (THRASH_Timer <= diff)
+            {
+                DoCast(me, SPELL_THRASH);
+                THRASH_Timer = 3000 + rand() % 5000;
+            }
+            else THRASH_Timer -= diff;
+
+            if (SLASH_Timer <= diff)
+            {
+                DoCastVictim(SPELL_SLASH);
+                SLASH_Timer = 5000 + rand() % 5000;
+            }
+            else SLASH_Timer -= diff;
+
+            if (SUMMON_Timer <= diff)
+            {
+                Unit* pTarget = SelectTarget(SELECT_TARGET_RANDOM, 1, 70, true);
+                if (pTarget)
+                    DoCast(pTarget, SPELL_SUMMON);
+                SUMMON_Timer = 8000 + rand() % 2000;
+            }
+            else SUMMON_Timer -= diff;
+
+            //SANDTRAP_Timer
+            if (SANDTRAP_Timer <= diff)
+            {
+                if (!sandtrap)
+                {
+                    Unit* pTarget = SelectTarget(SELECT_TARGET_RANDOM, 0, 50, true);
+
+                    if (pTarget)
+                    {
+                        pTarget->CastSpell(pTarget, SPELL_SANDTRAP, true, 0, 0, me->GetGUID());
+                        sandtrap = true;
+                    }
+                    SANDTRAP_Timer = 5000;
+                }
+                else
+                {
+                    if (GameObject* trap = me->FindNearestGameObject(180647, 100))
+                    {
+                        float x, y, z;
+                        trap->GetPosition(x, y, z);
+
+                        //trap->CastSpell((Unit*)trap,25656);
+                        Creature* trigger = me->SummonCreature(15426, x, y, z, 0, TEMPSUMMON_TIMED_DESPAWN, 2000);
+
+                        trigger->CastSpell(trigger, 25656, false);
+                        trap->Delete();
+                    }
+                    SANDTRAP_Timer = 5000;
+                    sandtrap = false;
+                }
+            }
+            else SANDTRAP_Timer -= diff;
+
+
+            DoMeleeAttackIfReady();
+        }
+    };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return new boss_kurinnaxxAI(pCreature);
+    }
 };
 
 void AddSC_boss_kurinnaxx()
 {
     new boss_kurinnaxx();
 }
+

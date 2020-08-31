@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,61 +15,64 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "Cryptography/WardenKeyGeneration.h"
+#include "WardenKeyGeneration.h"
 #include "Common.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
 #include "Log.h"
 #include "Opcodes.h"
 #include "ByteBuffer.h"
-#include "GameTime.h"
+#include <openssl/md5.h>
+#include "World.h"
 #include "Player.h"
-#include "Util.h"
+#include "Utilities/Util.h"
 #include "WardenMac.h"
 #include "WardenModuleMac.h"
 
-#include <openssl/md5.h>
+WardenMac::WardenMac()
+{
+}
 
-WardenMac::WardenMac() : Warden() { }
-
-WardenMac::~WardenMac() { }
+WardenMac::~WardenMac()
+{
+}
 
 void WardenMac::Init(WorldSession* pClient, BigNumber* K)
 {
-    _session = pClient;
+    Client = pClient;
     // Generate Warden Key
-    SHA1Randx WK(K->AsByteArray().get(), K->GetNumBytes());
-    WK.Generate(_inputKey, 16);
-    WK.Generate(_outputKey, 16);
+    SHA1Randx WK(K->AsByteArray(), K->GetNumBytes());
+    WK.generate(InputKey, 16);
+    WK.generate(OutputKey, 16);
     /*
     Seed: 4D808D2C77D905C41A6380EC08586AFE (0x05 packet)
     Hash: <?> (0x04 packet)
     Module MD5: 0DBBF209A27B1E279A9FEC5C168A15F7
     New Client Key: <?>
-    New Cerver Key: <?>
+    New Server Key: <?>
     */
     uint8 mod_seed[16] = { 0x4D, 0x80, 0x8D, 0x2C, 0x77, 0xD9, 0x05, 0xC4, 0x1A, 0x63, 0x80, 0xEC, 0x08, 0x58, 0x6A, 0xFE };
 
-    memcpy(_seed, mod_seed, 16);
+    memcpy(Seed, mod_seed, 16);
 
-    _inputCrypto.Init(_inputKey);
-    _outputCrypto.Init(_outputKey);
-    TC_LOG_DEBUG("warden", "Server side warden for client %u initializing...", pClient->GetAccountId());
-    TC_LOG_DEBUG("warden", "C->S Key: %s", ByteArrayToHexStr(_inputKey, 16).c_str());
-    TC_LOG_DEBUG("warden", "S->C Key: %s", ByteArrayToHexStr(_outputKey, 16).c_str());
-    TC_LOG_DEBUG("warden", "  Seed: %s", ByteArrayToHexStr(_seed, 16).c_str());
-    TC_LOG_DEBUG("warden", "Loading Module...");
+    iCrypto.Init(InputKey);
+    oCrypto.Init(OutputKey);
+    sLog.outDebug("Server side warden for client %u initializing...", pClient->GetAccountId());
+    sLog.outDebug("  C->S Key: %s", ByteArrayToHexStr(InputKey, 16).c_str());
+    sLog.outDebug("  S->C Key: %s", ByteArrayToHexStr(OutputKey, 16).c_str());
+    sLog.outDebug("  Seed: %s", ByteArrayToHexStr(Seed, 16).c_str());
+    sLog.outDebug("Loading Module...");
 
-    _module = GetModuleForClient();
+    Module = GetModuleForClient(Client);
 
-    TC_LOG_DEBUG("warden", "Module Key: %s", ByteArrayToHexStr(_module->Key, 16).c_str());
-    TC_LOG_DEBUG("warden", "Module ID: %s", ByteArrayToHexStr(_module->Id, 16).c_str());
+    sLog.outDebug("  Module Key: %s", ByteArrayToHexStr(Module->Key, 16).c_str());
+    sLog.outDebug("  Module ID: %s", ByteArrayToHexStr(Module->ID, 16).c_str());
     RequestModule();
 }
 
-ClientWardenModule* WardenMac::GetModuleForClient()
+ClientWardenModule* WardenMac::GetModuleForClient(WorldSession* /*session*/)
 {
-    ClientWardenModule *mod = new ClientWardenModule;
+    ClientWardenModule* mod = new ClientWardenModule;
 
     uint32 len = sizeof(Module_0DBBF209A27B1E279A9FEC5C168A15F7_Data);
 
@@ -83,60 +86,43 @@ ClientWardenModule* WardenMac::GetModuleForClient()
     MD5_CTX ctx;
     MD5_Init(&ctx);
     MD5_Update(&ctx, mod->CompressedData, len);
-    MD5_Final((uint8*)&mod->Id, &ctx);
+    MD5_Final((uint8*)&mod->ID, &ctx);
 
     return mod;
 }
 
 void WardenMac::InitializeModule()
 {
-    TC_LOG_DEBUG("warden", "Initialize module");
+    sLog.outDebug("Initialize module");
 }
 
 void WardenMac::RequestHash()
 {
-    TC_LOG_DEBUG("warden", "Request hash");
+    sLog.outDebug("Request hash");
 
     // Create packet structure
     WardenHashRequest Request;
     Request.Command = WARDEN_SMSG_HASH_REQUEST;
-    memcpy(Request.Seed, _seed, 16);
+    memcpy(Request.Seed, Seed, 16);
 
     // Encrypt with warden RC4 key.
     EncryptData((uint8*)&Request, sizeof(WardenHashRequest));
 
     WorldPacket pkt(SMSG_WARDEN_DATA, sizeof(WardenHashRequest));
     pkt.append((uint8*)&Request, sizeof(WardenHashRequest));
-    _session->SendPacket(&pkt);
+    Client->SendPacket(&pkt);
 }
 
-struct keyData {
-    union
-    {
-        struct
-        {
-            uint8 bytes[16];
-        } bytes;
-
-        struct
-        {
-            int ints[4];
-        } ints;
-    };
-};
-
-void WardenMac::HandleHashResult(ByteBuffer &buff)
+void WardenMac::HandleHashResult(ByteBuffer& buff)
 {
 
     // test
     int keyIn[4];
 
-    keyData mod_seed = { { { { 0x4D, 0x80, 0x8D, 0x2C, 0x77, 0xD9, 0x05, 0xC4, 0x1A, 0x63, 0x80, 0xEC, 0x08, 0x58, 0x6A, 0xFE } } } };
+    uint8 mod_seed[16] = { 0x4D, 0x80, 0x8D, 0x2C, 0x77, 0xD9, 0x05, 0xC4, 0x1A, 0x63, 0x80, 0xEC, 0x08, 0x58, 0x6A, 0xFE };
 
     for (int i = 0; i < 4; ++i)
-    {
-        keyIn[i] = mod_seed.ints.ints[i];
-    }
+        keyIn[i] = *(int*)(&mod_seed[0] + i * 4);
 
     int keyOut[4];
     int keyIn1, keyIn2;
@@ -154,20 +140,22 @@ void WardenMac::HandleHashResult(ByteBuffer &buff)
 
     buff.rpos(buff.wpos());
 
-    SHA1Hash sha1;
+    Sha1Hash sha1;
     sha1.UpdateData((uint8*)keyIn, 16);
     sha1.Finalize();
 
     //const uint8 validHash[20] = { 0x56, 0x8C, 0x05, 0x4C, 0x78, 0x1A, 0x97, 0x2A, 0x60, 0x37, 0xA2, 0x29, 0x0C, 0x22, 0xB5, 0x25, 0x71, 0xA0, 0x6F, 0x4E };
 
-    // Verify key
+    // verify key not equal kick player
     if (memcmp(buff.contents() + 1, sha1.GetDigest(), 20) != 0)
     {
-        TC_LOG_WARN("warden", "%s failed hash reply. Action: %s", _session->GetPlayerInfo().c_str(), Penalty().c_str());
+        sLog.outWarden("Request hash reply: failed");
+        if (sWorld.getConfig(CONFIG_WARDEN_KICK))
+            Client->KickPlayer();
         return;
     }
 
-    TC_LOG_DEBUG("warden", "Request hash reply: succeed");
+    sLog.outDebug("Request hash reply: succeed");
 
     // client 7F96EEFDA5B63D20A4DF8E00CBF48304
     //const uint8 client_key[16] = { 0x7F, 0x96, 0xEE, 0xFD, 0xA5, 0xB6, 0x3D, 0x20, 0xA4, 0xDF, 0x8E, 0x00, 0xCB, 0xF4, 0x83, 0x04 };
@@ -176,20 +164,20 @@ void WardenMac::HandleHashResult(ByteBuffer &buff)
     //const uint8 server_key[16] = { 0xC2, 0xB7, 0xAD, 0xED, 0xFC, 0xCC, 0xA9, 0xC2, 0xBF, 0xB3, 0xF8, 0x56, 0x02, 0xBA, 0x80, 0x9B };
 
     // change keys here
-    memcpy(_inputKey, keyIn, 16);
-    memcpy(_outputKey, keyOut, 16);
+    memcpy(InputKey, keyIn, 16);
+    memcpy(OutputKey, keyOut, 16);
 
-    _inputCrypto.Init(_inputKey);
-    _outputCrypto.Init(_outputKey);
+    iCrypto.Init(InputKey);
+    oCrypto.Init(OutputKey);
 
-    _initialized = true;
+    m_initialized = true;
 
-    _previousTimestamp = GameTime::GetGameTimeMS();
+    m_WardenTimer = getMSTime();
 }
 
 void WardenMac::RequestData()
 {
-    TC_LOG_DEBUG("warden", "Request data");
+    sLog.outDebug("Request data");
 
     ByteBuffer buff;
     buff << uint8(WARDEN_SMSG_CHEAT_CHECKS_REQUEST);
@@ -202,21 +190,21 @@ void WardenMac::RequestData()
     buff.hexlike();
 
     // Encrypt with warden RC4 key.
-    EncryptData(buff.contents(), buff.size());
+    EncryptData(const_cast<uint8*>(buff.contents()), buff.size());
 
     WorldPacket pkt(SMSG_WARDEN_DATA, buff.size());
     pkt.append(buff);
-    _session->SendPacket(&pkt);
+    Client->SendPacket(&pkt);
 
-    _dataSent = true;
+    m_WardenDataSent = true;
 }
 
-void WardenMac::HandleData(ByteBuffer &buff)
+void WardenMac::HandleData(ByteBuffer& buff)
 {
-    TC_LOG_DEBUG("warden", "Handle data");
+    sLog.outDebug("Handle data");
 
-    _dataSent = false;
-    _clientResponseTimer = 0;
+    m_WardenDataSent = false;
+    m_WardenKickTimer = 0;
 
     //uint16 Length;
     //buff >> Length;
@@ -226,16 +214,16 @@ void WardenMac::HandleData(ByteBuffer &buff)
     //if (!IsValidCheckSum(Checksum, buff.contents() + buff.rpos(), Length))
     //{
     //    buff.rpos(buff.wpos());
-    //    if (sWorld->getBoolConfig(CONFIG_BOOL_WARDEN_KICK))
+    //    if (sWorld.getConfig(CONFIG_BOOL_WARDEN_KICK))
     //        Client->KickPlayer();
     //    return;
     //}
 
-    //bool found = false;
+    bool found = false;
 
     std::string str = "Test string!";
 
-    SHA1Hash sha1;
+    Sha1Hash sha1;
     sha1.UpdateData(str);
     uint32 magic = 0xFEEDFACE;                              // unsure
     sha1.UpdateData((uint8*)&magic, 4);
@@ -244,10 +232,10 @@ void WardenMac::HandleData(ByteBuffer &buff)
     uint8 sha1Hash[20];
     buff.read(sha1Hash, 20);
 
-    if (memcmp(sha1Hash, sha1.GetDigest(), 20) != 0)
+    if (memcmp(sha1Hash, sha1.GetDigest(), 20))
     {
-        TC_LOG_DEBUG("warden", "Handle data failed: SHA1 hash is wrong!");
-        //found = true;
+        sLog.outWarden("Handle data failed: SHA1 hash is wrong!");
+        found = true;
     }
 
     MD5_CTX ctx;
@@ -259,11 +247,12 @@ void WardenMac::HandleData(ByteBuffer &buff)
     uint8 theirsMD5Hash[16];
     buff.read(theirsMD5Hash, 16);
 
-    if (memcmp(ourMD5Hash, theirsMD5Hash, 16) != 0)
+    if (memcmp(ourMD5Hash, theirsMD5Hash, 16))
     {
-        TC_LOG_DEBUG("warden", "Handle data failed: MD5 hash is wrong!");
-        //found = true;
+        sLog.outWarden("Handle data failed: MD5 hash is wrong!");
+        found = true;
     }
 
-    _session->KickPlayer("WardenMac::HandleData");
+    if (found && sWorld.getConfig(CONFIG_WARDEN_KICK))
+        Client->KickPlayer();
 }

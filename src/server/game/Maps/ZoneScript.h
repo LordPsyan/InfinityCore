@@ -1,5 +1,5 @@
-/*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+/**
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -13,49 +13,57 @@
  *
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
+ *
+ * @file ZoneScript.h
  */
 
 #ifndef ZONE_SCRIPT_H_
 #define ZONE_SCRIPT_H_
 
-#include "Define.h"
-#include "ObjectGuid.h"
+#include "Common.h"
+#include "Creature.h"
 
+//struct CreatureData;
 class Creature;
 class GameObject;
-class Unit;
-class WorldObject;
-struct CreatureData;
 
-class TC_GAME_API ZoneScript
+class ZoneScript
 {
     public:
-        ZoneScript() { }
-        virtual ~ZoneScript() { }
+        explicit ZoneScript() {}
 
-        virtual uint32 GetCreatureEntry(ObjectGuid::LowType /*guidLow*/, CreatureData const* data);
-        virtual uint32 GetGameObjectEntry(ObjectGuid::LowType /*guidLow*/, uint32 entry) { return entry; }
+        virtual uint32 GetCreatureEntry(uint32 /*guidlow*/, const CreatureData* data)
+        {
+            return data->id;
+        }
+        virtual uint32 GetGameObjectEntry(uint32 /*guidlow*/, uint32 entry)
+        {
+            return entry;
+        }
 
-        virtual void OnCreatureCreate(Creature* ) { }
-        virtual void OnCreatureRemove(Creature* ) { }
+        virtual void OnCreatureCreate(Creature*, bool /*add*/) {}
+        virtual void OnGameObjectCreate(GameObject* /*go*/, bool /*add*/) {}
+        virtual void OnCreatureDeath(Creature* /*creature*/) {}
+        virtual void OnPlayerDeath(Player *) {}
 
-        virtual void OnGameObjectCreate(GameObject* ) { }
-        virtual void OnGameObjectRemove(GameObject* ) { }
+        /// All-purpose data storage 64 bit
+        virtual uint64 GetData64(uint32 /*DataId*/)
+        {
+            return 0;
+        }
+        virtual void SetData64(uint32 /*DataId*/, uint64 /*Value*/) {}
 
-        virtual void OnUnitDeath(Unit*) { }
+        /// All-purpose data storage 32 bit
+        virtual uint32 GetData(uint32 /*DataId*/)
+        {
+            return 0;
+        }
+        virtual void SetData(uint32 /*DataId*/, uint32 /*Value*/) {}
 
-        //All-purpose data storage 64 bit
-        virtual ObjectGuid GetGuidData(uint32 /*DataId*/) const { return ObjectGuid::Empty; }
-        virtual void SetGuidData(uint32 /*DataId*/, ObjectGuid /*Value*/) { }
-
-        virtual uint64 GetData64(uint32 /*DataId*/) const { return 0; }
-        virtual void SetData64(uint32 /*DataId*/, uint64 /*Value*/) { }
-
-        //All-purpose data storage 32 bit
-        virtual uint32 GetData(uint32 /*DataId*/) const { return 0; }
-        virtual void SetData(uint32 /*DataId*/, uint32 /*Value*/) { }
-
-        virtual void ProcessEvent(WorldObject* /*obj*/, uint32 /*eventId*/) { }
+        // These functions are called explicitly by scripting stuff, no regular core-link for them, yet.
+        virtual void ProcessEvent(GameObject* /*obj*/, uint32 /*eventId = 0*/) {}
+        virtual void ProcessEvent(Unit* /*obj*/, uint32 /*eventId = 0*/) {}
 };
 
 #endif
+

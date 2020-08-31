@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,60 +18,79 @@
 #ifndef _UTIL_H
 #define _UTIL_H
 
-#include "Define.h"
-#include "Errors.h"
+#include "Common.h"
 
 #include <string>
-#include <sstream>
-#include <utility>
 #include <vector>
 
-enum class TimeFormat : uint8
+typedef std::vector<std::string> Tokens;
+
+Tokens StrSplit(const std::string& src, const std::string& sep);
+
+void stripLineInvisibleChars(std::string& src);
+
+std::string secsToTimeString(uint32 timeInSecs, bool shortText = false, bool hoursOnly = false);
+uint32 TimeStringToSecs(const std::string& timestring);
+std::string TimeToTimestampStr(time_t t);
+
+inline uint32 secsToTimeBitFields(time_t secs)
 {
-    FullText,       // 1 Days 2 Hours 3 Minutes 4 Seconds
-    ShortText,      // 1d 2h 3m 4s
-    Numeric         // 1:2:3:4
-};
+    tm* lt = localtime(&secs);
+    return uint32((lt->tm_year - 100) << 24 | lt->tm_mon  << 20 | (lt->tm_mday - 1) << 14 | lt->tm_wday << 11 | lt->tm_hour << 6 | lt->tm_min);
+}
 
-class TC_COMMON_API Tokenizer
+/* Return a random number in the range min..max. */
+int32 irand(int32 min, int32 max);
+
+/* Return a random number in the range min..max (inclusive). */
+uint32 urand(uint32 min, uint32 max);
+
+/* Return a random number in the range 0 .. UINT32_MAX. */
+uint32 rand32();
+
+/* Return a random number in the range min..max */
+float frand(float min, float max);
+
+/* Return a random double from 0.0 to 1.0 (exclusive). */
+double rand_norm();
+
+/* Return a random double from 0.0 to 100.0 (exclusive). */
+double rand_chance();
+
+// Return true if a random roll fits in the specified chance (range 0-100).
+inline bool roll_chance_f(float chance)
 {
-public:
-    typedef std::vector<char const*> StorageType;
+    return chance > rand_chance();
+}
 
-    typedef StorageType::size_type size_type;
+// Return true if a random roll fits in the specified chance (range 0-100).
+inline bool roll_chance_i(int chance)
+{
+    return chance > irand(0, 99);
+}
 
-    typedef StorageType::const_iterator const_iterator;
-    typedef StorageType::reference reference;
-    typedef StorageType::const_reference const_reference;
+inline void ApplyModUInt32Var(uint32& var, int32 val, bool apply)
+{
+    int32 cur = var;
+    cur += (apply ? val : -val);
+    if (cur < 0)
+        cur = 0;
+    var = cur;
+}
 
-public:
-    Tokenizer(const std::string &src, char const sep, uint32 vectorReserve = 0, bool keepEmptyStrings = true);
-    ~Tokenizer() { delete[] m_str; }
+inline void ApplyModFloatVar(float& var, float  val, bool apply)
+{
+    var += (apply ? val : -val);
+    if (var < 0)
+        var = 0;
+}
 
-    const_iterator begin() const { return m_storage.begin(); }
-    const_iterator end() const { return m_storage.end(); }
-
-    size_type size() const { return m_storage.size(); }
-
-    reference operator [] (size_type i) { return m_storage[i]; }
-    const_reference operator [] (size_type i) const { return m_storage[i]; }
-
-private:
-    char* m_str;
-    StorageType m_storage;
-};
-
-TC_COMMON_API int32 MoneyStringToMoney(std::string const& moneyString);
-
-TC_COMMON_API struct tm* localtime_r(time_t const* time, struct tm *result);
-TC_COMMON_API time_t LocalTimeToUTCTime(time_t time);
-TC_COMMON_API time_t GetLocalHourTimestamp(time_t time, uint8 hour, bool onlyAfterTime = true);
-TC_COMMON_API tm TimeBreakdown(time_t t);
-
-TC_COMMON_API std::string secsToTimeString(uint64 timeInSecs, TimeFormat timeFormat = TimeFormat::FullText, bool hoursOnly = false);
-TC_COMMON_API uint32 TimeStringToSecs(std::string const& timestring);
-TC_COMMON_API std::string TimeToTimestampStr(time_t t);
-TC_COMMON_API std::string TimeToHumanReadable(time_t t);
+inline void ApplyPercentModFloatVar(float& var, float val, bool apply)
+{
+    if (val == -100.0f) // prevent set var to zero
+        val = -99.99f;
+    var *= (apply ? (100.0f + val) / 100.0f : 100.0f / (100.0f + val));
+}
 
 // Percentage calculation
 template <class T, class U>
@@ -98,27 +117,21 @@ inline T RoundToInterval(T& num, T floor, T ceil)
     return num = std::min(std::max(num, floor), ceil);
 }
 
-template <class T>
-inline T square(T x) { return x*x; }
-
 // UTF8 handling
-TC_COMMON_API bool Utf8toWStr(const std::string& utf8str, std::wstring& wstr);
-
+bool Utf8toWStr(const std::string& utf8str, std::wstring& wstr);
 // in wsize==max size of buffer, out wsize==real string size
-TC_COMMON_API bool Utf8toWStr(char const* utf8str, size_t csize, wchar_t* wstr, size_t& wsize);
-
+bool Utf8toWStr(char const* utf8str, size_t csize, wchar_t* wstr, size_t& wsize);
 inline bool Utf8toWStr(const std::string& utf8str, wchar_t* wstr, size_t& wsize)
 {
     return Utf8toWStr(utf8str.c_str(), utf8str.size(), wstr, wsize);
 }
 
-TC_COMMON_API bool WStrToUtf8(std::wstring const& wstr, std::string& utf8str);
+bool WStrToUtf8(std::wstring wstr, std::string& utf8str);
 // size==real string size
-TC_COMMON_API bool WStrToUtf8(wchar_t const* wstr, size_t size, std::string& utf8str);
+bool WStrToUtf8(wchar_t* wstr, size_t size, std::string& utf8str);
 
-// set string to "" if invalid utf8 sequence
-TC_COMMON_API size_t utf8length(std::string& utf8str);
-TC_COMMON_API void utf8truncate(std::string& utf8str, size_t len);
+size_t utf8length(std::string& utf8str);                    // set string to "" if invalid utf8 sequence
+void utf8truncate(std::string& utf8str, size_t len);
 
 inline bool isBasicLatinCharacter(wchar_t wchar)
 {
@@ -182,12 +195,17 @@ inline bool isEastAsianCharacter(wchar_t wchar)
 
 inline bool isNumeric(wchar_t wchar)
 {
-    return (wchar >= L'0' && wchar <=L'9');
+    return (wchar >= L'0' && wchar <= L'9');
 }
 
 inline bool isNumeric(char c)
 {
-    return (c >= '0' && c <='9');
+    return (c >= '0' && c <= '9');
+}
+
+inline bool isNumericOrSpace(wchar_t wchar)
+{
+    return isNumeric(wchar) || wchar == L' ';
 }
 
 inline bool isNumeric(char const* str)
@@ -199,12 +217,7 @@ inline bool isNumeric(char const* str)
     return true;
 }
 
-inline bool isNumericOrSpace(wchar_t wchar)
-{
-    return isNumeric(wchar) || wchar == L' ';
-}
-
-inline bool isBasicLatinString(const std::wstring &wstr, bool numericOrSpace)
+inline bool isBasicLatinString(std::wstring wstr, bool numericOrSpace)
 {
     for (size_t i = 0; i < wstr.size(); ++i)
         if (!isBasicLatinCharacter(wstr[i]) && (!numericOrSpace || !isNumericOrSpace(wstr[i])))
@@ -212,7 +225,7 @@ inline bool isBasicLatinString(const std::wstring &wstr, bool numericOrSpace)
     return true;
 }
 
-inline bool isExtendedLatinString(const std::wstring &wstr, bool numericOrSpace)
+inline bool isExtendedLatinString(std::wstring wstr, bool numericOrSpace)
 {
     for (size_t i = 0; i < wstr.size(); ++i)
         if (!isExtendedLatinCharacter(wstr[i]) && (!numericOrSpace || !isNumericOrSpace(wstr[i])))
@@ -220,7 +233,7 @@ inline bool isExtendedLatinString(const std::wstring &wstr, bool numericOrSpace)
     return true;
 }
 
-inline bool isCyrillicString(const std::wstring &wstr, bool numericOrSpace)
+inline bool isCyrillicString(std::wstring wstr, bool numericOrSpace)
 {
     for (size_t i = 0; i < wstr.size(); ++i)
         if (!isCyrillicCharacter(wstr[i]) && (!numericOrSpace || !isNumericOrSpace(wstr[i])))
@@ -228,7 +241,7 @@ inline bool isCyrillicString(const std::wstring &wstr, bool numericOrSpace)
     return true;
 }
 
-inline bool isEastAsianString(const std::wstring &wstr, bool numericOrSpace)
+inline bool isEastAsianString(std::wstring wstr, bool numericOrSpace)
 {
     for (size_t i = 0; i < wstr.size(); ++i)
         if (!isEastAsianCharacter(wstr[i]) && (!numericOrSpace || !isNumericOrSpace(wstr[i])))
@@ -239,20 +252,20 @@ inline bool isEastAsianString(const std::wstring &wstr, bool numericOrSpace)
 inline wchar_t wcharToUpper(wchar_t wchar)
 {
     if (wchar >= L'a' && wchar <= L'z')                      // LATIN SMALL LETTER A - LATIN SMALL LETTER Z
-        return wchar_t(uint16(wchar)-0x0020);
+        return wchar_t(uint16(wchar) - 0x0020);
     if (wchar == 0x00DF)                                     // LATIN SMALL LETTER SHARP S
         return wchar_t(0x1E9E);
     if (wchar >= 0x00E0 && wchar <= 0x00F6)                  // LATIN SMALL LETTER A WITH GRAVE - LATIN SMALL LETTER O WITH DIAERESIS
-        return wchar_t(uint16(wchar)-0x0020);
+        return wchar_t(uint16(wchar) - 0x0020);
     if (wchar >= 0x00F8 && wchar <= 0x00FE)                  // LATIN SMALL LETTER O WITH STROKE - LATIN SMALL LETTER THORN
-        return wchar_t(uint16(wchar)-0x0020);
+        return wchar_t(uint16(wchar) - 0x0020);
     if (wchar >= 0x0101 && wchar <= 0x012F)                  // LATIN SMALL LETTER A WITH MACRON - LATIN SMALL LETTER I WITH OGONEK (only %2=1)
     {
         if (wchar % 2 == 1)
-            return wchar_t(uint16(wchar)-0x0001);
+            return wchar_t(uint16(wchar) - 0x0001);
     }
     if (wchar >= 0x0430 && wchar <= 0x044F)                  // CYRILLIC SMALL LETTER A - CYRILLIC SMALL LETTER YA
-        return wchar_t(uint16(wchar)-0x0020);
+        return wchar_t(uint16(wchar) - 0x0020);
     if (wchar == 0x0451)                                     // CYRILLIC SMALL LETTER IO
         return wchar_t(0x0401);
 
@@ -267,260 +280,80 @@ inline wchar_t wcharToUpperOnlyLatin(wchar_t wchar)
 inline wchar_t wcharToLower(wchar_t wchar)
 {
     if (wchar >= L'A' && wchar <= L'Z')                      // LATIN CAPITAL LETTER A - LATIN CAPITAL LETTER Z
-        return wchar_t(uint16(wchar)+0x0020);
+        return wchar_t(uint16(wchar) + 0x0020);
     if (wchar >= 0x00C0 && wchar <= 0x00D6)                  // LATIN CAPITAL LETTER A WITH GRAVE - LATIN CAPITAL LETTER O WITH DIAERESIS
-        return wchar_t(uint16(wchar)+0x0020);
+        return wchar_t(uint16(wchar) + 0x0020);
     if (wchar >= 0x00D8 && wchar <= 0x00DE)                  // LATIN CAPITAL LETTER O WITH STROKE - LATIN CAPITAL LETTER THORN
-        return wchar_t(uint16(wchar)+0x0020);
+        return wchar_t(uint16(wchar) + 0x0020);
     if (wchar >= 0x0100 && wchar <= 0x012E)                  // LATIN CAPITAL LETTER A WITH MACRON - LATIN CAPITAL LETTER I WITH OGONEK (only %2=0)
     {
         if (wchar % 2 == 0)
-            return wchar_t(uint16(wchar)+0x0001);
+            return wchar_t(uint16(wchar) + 0x0001);
     }
     if (wchar == 0x1E9E)                                     // LATIN CAPITAL LETTER SHARP S
         return wchar_t(0x00DF);
     if (wchar == 0x0401)                                     // CYRILLIC CAPITAL LETTER IO
         return wchar_t(0x0451);
     if (wchar >= 0x0410 && wchar <= 0x042F)                  // CYRILLIC CAPITAL LETTER A - CYRILLIC CAPITAL LETTER YA
-        return wchar_t(uint16(wchar)+0x0020);
+        return wchar_t(uint16(wchar) + 0x0020);
 
     return wchar;
 }
 
-TC_COMMON_API void wstrToUpper(std::wstring& str);
-TC_COMMON_API void wstrToLower(std::wstring& str);
-
-TC_COMMON_API std::wstring GetMainPartOfName(std::wstring const& wname, uint32 declension);
-
-TC_COMMON_API bool utf8ToConsole(const std::string& utf8str, std::string& conStr);
-TC_COMMON_API bool consoleToUtf8(const std::string& conStr, std::string& utf8str);
-TC_COMMON_API bool Utf8FitTo(const std::string& str, std::wstring const& search);
-TC_COMMON_API void utf8printf(FILE* out, const char *str, ...);
-TC_COMMON_API void vutf8printf(FILE* out, const char *str, va_list* ap);
-TC_COMMON_API bool Utf8ToUpperOnlyLatin(std::string& utf8String);
-
-TC_COMMON_API bool IsIPAddress(char const* ipaddress);
-
-TC_COMMON_API uint32 CreatePIDFile(std::string const& filename);
-TC_COMMON_API uint32 GetPID();
-
-TC_COMMON_API std::string ByteArrayToHexStr(uint8 const* bytes, uint32 length, bool reverse = false);
-TC_COMMON_API void HexStrToByteArray(std::string const& str, uint8* out, bool reverse = false);
-
-TC_COMMON_API bool StringToBool(std::string const& str);
-
-TC_COMMON_API bool StringContainsStringI(std::string const& haystack, std::string const& needle);
-template <typename T>
-inline bool ValueContainsStringI(std::pair<T, std::string> const& haystack, std::string const& needle)
+inline void wstrToUpper(std::wstring& str)
 {
-    return StringContainsStringI(haystack.second, needle);
+    std::transform( str.begin(), str.end(), str.begin(), wcharToUpper );
 }
 
-// simple class for not-modifyable list
-template <typename T>
-class HookList final
+inline void wstrToLower(std::wstring& str)
 {
-    private:
-        typedef std::vector<T> ContainerType;
-
-        ContainerType _container;
-
-    public:
-        typedef typename ContainerType::iterator iterator;
-
-        HookList<T>& operator+=(T&& t)
-        {
-            _container.push_back(std::move(t));
-            return *this;
-        }
-
-        size_t size() const
-        {
-            return _container.size();
-        }
-
-        iterator begin()
-        {
-            return _container.begin();
-        }
-
-        iterator end()
-        {
-            return _container.end();
-        }
-};
-
-class TC_COMMON_API flag96
-{
-private:
-    uint32 part[3];
-
-public:
-    flag96(uint32 p1 = 0, uint32 p2 = 0, uint32 p3 = 0)
-    {
-        part[0] = p1;
-        part[1] = p2;
-        part[2] = p3;
-    }
-
-    inline bool IsEqual(uint32 p1 = 0, uint32 p2 = 0, uint32 p3 = 0) const
-    {
-        return (part[0] == p1 && part[1] == p2 && part[2] == p3);
-    }
-
-    inline bool HasFlag(uint32 p1 = 0, uint32 p2 = 0, uint32 p3 = 0) const
-    {
-        return (part[0] & p1 || part[1] & p2 || part[2] & p3);
-    }
-
-    inline void Set(uint32 p1 = 0, uint32 p2 = 0, uint32 p3 = 0)
-    {
-        part[0] = p1;
-        part[1] = p2;
-        part[2] = p3;
-    }
-
-    inline bool operator<(flag96 const& right) const
-    {
-        for (uint8 i = 3; i > 0; --i)
-        {
-            if (part[i - 1] < right.part[i - 1])
-                return true;
-            else if (part[i - 1] > right.part[i - 1])
-                return false;
-        }
-        return false;
-    }
-
-    inline bool operator==(flag96 const& right) const
-    {
-        return
-        (
-            part[0] == right.part[0] &&
-            part[1] == right.part[1] &&
-            part[2] == right.part[2]
-        );
-    }
-
-    inline bool operator!=(flag96 const& right) const
-    {
-        return !(*this == right);
-    }
-
-    inline flag96 operator&(flag96 const& right) const
-    {
-        return flag96(part[0] & right.part[0], part[1] & right.part[1], part[2] & right.part[2]);
-    }
-
-    inline flag96& operator&=(flag96 const& right)
-    {
-        part[0] &= right.part[0];
-        part[1] &= right.part[1];
-        part[2] &= right.part[2];
-        return *this;
-    }
-
-    inline flag96 operator|(flag96 const& right) const
-    {
-        return flag96(part[0] | right.part[0], part[1] | right.part[1], part[2] | right.part[2]);
-    }
-
-    inline flag96& operator |=(flag96 const& right)
-    {
-        part[0] |= right.part[0];
-        part[1] |= right.part[1];
-        part[2] |= right.part[2];
-        return *this;
-    }
-
-    inline flag96 operator~() const
-    {
-        return flag96(~part[0], ~part[1], ~part[2]);
-    }
-
-    inline flag96 operator^(flag96 const& right) const
-    {
-        return flag96(part[0] ^ right.part[0], part[1] ^ right.part[1], part[2] ^ right.part[2]);
-    }
-
-    inline flag96& operator^=(flag96 const& right)
-    {
-        part[0] ^= right.part[0];
-        part[1] ^= right.part[1];
-        part[2] ^= right.part[2];
-        return *this;
-    }
-
-    inline operator bool() const
-    {
-        return (part[0] != 0 || part[1] != 0 || part[2] != 0);
-    }
-
-    inline bool operator !() const
-    {
-        return !(bool(*this));
-    }
-
-    inline uint32& operator[](uint8 el)
-    {
-        return part[el];
-    }
-
-    inline uint32 const& operator [](uint8 el) const
-    {
-        return part[el];
-    }
-};
-
-enum ComparisionType
-{
-    COMP_TYPE_EQ = 0,
-    COMP_TYPE_HIGH,
-    COMP_TYPE_LOW,
-    COMP_TYPE_HIGH_EQ,
-    COMP_TYPE_LOW_EQ,
-    COMP_TYPE_MAX
-};
-
-template <class T>
-bool CompareValues(ComparisionType type, T val1, T val2)
-{
-    switch (type)
-    {
-        case COMP_TYPE_EQ:
-            return val1 == val2;
-        case COMP_TYPE_HIGH:
-            return val1 > val2;
-        case COMP_TYPE_LOW:
-            return val1 < val2;
-        case COMP_TYPE_HIGH_EQ:
-            return val1 >= val2;
-        case COMP_TYPE_LOW_EQ:
-            return val1 <= val2;
-        default:
-            // incorrect parameter
-            ABORT();
-            return false;
-    }
+    std::transform( str.begin(), str.end(), str.begin(), wcharToLower );
 }
 
-template<typename E>
-constexpr typename std::underlying_type<E>::type AsUnderlyingType(E enumValue)
-{
-    static_assert(std::is_enum<E>::value, "AsUnderlyingType can only be used with enums");
-    return static_cast<typename std::underlying_type<E>::type>(enumValue);
-}
+std::wstring GetMainPartOfName(std::wstring wname, uint32 declension);
 
-template<typename Ret, typename Only>
-Ret* Coalesce(Only* arg)
-{
-    return arg;
-}
+bool utf8ToConsole(const std::string& utf8str, std::string& conStr);
+bool consoleToUtf8(const std::string& conStr, std::string& utf8str);
+bool Utf8FitTo(const std::string& str, std::wstring search);
+void hexEncodeByteArray(uint8* bytes, uint32 arrayLen, std::string& result);
+std::string ByteArrayToHexStr(uint8* bytes, uint32 length);
 
-template<typename Ret, typename T1, typename... T>
-Ret* Coalesce(T1* first, T*... rest)
+#if PLATFORM == PLATFORM_WINDOWS
+#define UTF8PRINTF(OUT,FRM,RESERR)                      \
+    {                                                       \
+        char temp_buf[6000];                                \
+        va_list ap;                                         \
+        va_start(ap, FRM);                                  \
+        size_t temp_len = vsnprintf(temp_buf,6000,FRM,ap);  \
+        va_end(ap);                                         \
+        \
+        wchar_t wtemp_buf[6000];                            \
+        size_t wtemp_len = 6000-1;                          \
+        if (!Utf8toWStr(temp_buf,temp_len,wtemp_buf,wtemp_len)) \
+            return RESERR;                                  \
+        CharToOemBuffW(&wtemp_buf[0],&temp_buf[0],wtemp_len+1);\
+        fprintf(OUT,temp_buf);                              \
+    }
+#else
+#define UTF8PRINTF(OUT,FRM,RESERR)                      \
+    {                                                       \
+        va_list ap;                                         \
+        va_start(ap, FRM);                                  \
+        vfprintf(OUT, FRM, ap );                            \
+        va_end(ap);                                         \
+    }
+#endif
+
+bool IsIPAddress(char const* ipaddress);
+uint32 CreatePIDFile(const std::string& filename);
+
+
+/* Select a random element from a container. Note: make sure you explicitly empty check the container */
+template <class C> typename C::value_type const& SelectRandomContainerElement(C const& container)
 {
-    return static_cast<Ret*>(first ? static_cast<Ret*>(first) : Coalesce<Ret>(rest...));
+    typename C::const_iterator it = container.begin();
+    std::advance(it, urand(0, container.size() - 1));
+    return *it;
 }
 
 #endif

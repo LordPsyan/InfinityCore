@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,66 +15,97 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "scarlet_monastery.h"
-#include "ScriptedCreature.h"
+ /* ScriptData
+ SDName: Boss_Scorn
+ SD%Complete: 100
+ SDComment:
+ SDCategory: Scarlet Monastery
+ EndScriptData */
+
 #include "ScriptMgr.h"
+#include "ScriptedCreature.h"
 
-enum ScornSpells
+#define SPELL_LICHSLAP                  28873
+#define SPELL_FROSTBOLTVOLLEY           8398
+#define SPELL_MINDFLAY                  17313
+#define SPELL_FROSTNOVA                 15531
+
+
+class boss_scorn : public CreatureScript
 {
-    SPELL_LICHSLAP = 28873,
-    SPELL_FROSTBOLT_VOLLEY = 8398,
-    SPELL_MINDFLAY = 17313,
-    SPELL_FROSTNOVA = 15531
-};
+public:
+    boss_scorn() : CreatureScript("boss_scorn") { }
 
-enum ScornEvents
-{
-    EVENT_LICH_SLAP = 1,
-    EVENT_FROSTBOLT_VOLLEY,
-    EVENT_MIND_FLAY,
-    EVENT_FROST_NOVA
-};
-
-struct boss_scorn : public BossAI
-{
-    boss_scorn(Creature* creature) : BossAI(creature, DATA_SCORN) { }
-
-    void JustEngagedWith(Unit* who) override
+    struct boss_scornAI : public ScriptedAI
     {
-        BossAI::JustEngagedWith(who);
-        events.ScheduleEvent(EVENT_LICH_SLAP, 45s);
-        events.ScheduleEvent(EVENT_FROSTBOLT_VOLLEY, 30s);
-        events.ScheduleEvent(EVENT_MIND_FLAY, 30s);
-        events.ScheduleEvent(EVENT_FROST_NOVA, 30s);
-    }
+        boss_scornAI(Creature* c) : ScriptedAI(c) {}
 
-    void ExecuteEvent(uint32 eventId) override
-    {
-        switch (eventId)
+        uint32 LichSlap_Timer;
+        uint32 FrostboltVolley_Timer;
+        uint32 MindFlay_Timer;
+        uint32 FrostNova_Timer;
+
+        void Reset()
         {
-            case EVENT_LICH_SLAP:
-                DoCastVictim(SPELL_LICHSLAP);
-                events.Repeat(45s);
-                break;
-            case EVENT_FROSTBOLT_VOLLEY:
-                DoCastVictim(SPELL_FROSTBOLT_VOLLEY);
-                events.Repeat(20s);
-                break;
-            case EVENT_MIND_FLAY:
-                DoCastVictim(SPELL_MINDFLAY);
-                events.Repeat(20s);
-                break;
-            case EVENT_FROST_NOVA:
-                DoCastVictim(SPELL_FROSTNOVA);
-                events.Repeat(15s);
-                break;
-            default:
-                break;
+            LichSlap_Timer = 45000;
+            FrostboltVolley_Timer = 30000;
+            MindFlay_Timer = 30000;
+            FrostNova_Timer = 30000;
         }
+
+        void EnterCombat(Unit* /*who*/)
+        {
+        }
+
+        void UpdateAI(const uint32 diff)
+        {
+            if (!UpdateVictim())
+                return;
+
+            //LichSlap_Timer
+            if (LichSlap_Timer <= diff)
+            {
+                DoCastVictim(SPELL_LICHSLAP);
+                LichSlap_Timer = 45000;
+            }
+            else LichSlap_Timer -= diff;
+
+            //FrostboltVolley_Timer
+            if (FrostboltVolley_Timer <= diff)
+            {
+                DoCastVictim(SPELL_FROSTBOLTVOLLEY);
+                FrostboltVolley_Timer = 20000;
+            }
+            else FrostboltVolley_Timer -= diff;
+
+            //MindFlay_Timer
+            if (MindFlay_Timer <= diff)
+            {
+                DoCastVictim(SPELL_MINDFLAY);
+                MindFlay_Timer = 20000;
+            }
+            else MindFlay_Timer -= diff;
+
+            //FrostNova_Timer
+            if (FrostNova_Timer <= diff)
+            {
+                DoCastVictim(SPELL_FROSTNOVA);
+                FrostNova_Timer = 15000;
+            }
+            else FrostNova_Timer -= diff;
+
+            DoMeleeAttackIfReady();
+        }
+    };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return new boss_scornAI(pCreature);
     }
 };
 
 void AddSC_boss_scorn()
 {
-    RegisterScarletMonasteryCreatureAI(boss_scorn);
+    new boss_scorn();
 }
+

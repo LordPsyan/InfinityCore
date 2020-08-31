@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,120 +15,162 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _FIELD_H
-#define _FIELD_H
+#if !defined(FIELD_H)
+#define FIELD_H
 
-#include "Define.h"
-#include "DatabaseEnvFwd.h"
-#include <vector>
+#include "Common.h"
+#include <mysql.h>
 
-enum class DatabaseFieldTypes : uint8
+class Field
 {
-    Null,
-    Int8,
-    Int16,
-    Int32,
-    Int64,
-    Float,
-    Double,
-    Decimal,
-    Date,
-    Binary
-};
-
-struct QueryResultFieldMetadata
-{
-    char const* TableName = nullptr;
-    char const* TableAlias = nullptr;
-    char const* Name = nullptr;
-    char const* Alias = nullptr;
-    char const* TypeName = nullptr;
-    uint32 Index = 0;
-    DatabaseFieldTypes Type = DatabaseFieldTypes::Null;
-};
-
-/**
-    @class Field
-
-    @brief Class used to access individual fields of database query result
-
-    Guideline on field type matching:
-
-    |   MySQL type           |  method to use                         |
-    |------------------------|----------------------------------------|
-    | TINYINT                | GetBool, GetInt8, GetUInt8             |
-    | SMALLINT               | GetInt16, GetUInt16                    |
-    | MEDIUMINT, INT         | GetInt32, GetUInt32                    |
-    | BIGINT                 | GetInt64, GetUInt64                    |
-    | FLOAT                  | GetFloat                               |
-    | DOUBLE, DECIMAL        | GetDouble                              |
-    | CHAR, VARCHAR,         | GetCString, GetString                  |
-    | TINYTEXT, MEDIUMTEXT,  | GetCString, GetString                  |
-    | TEXT, LONGTEXT         | GetCString, GetString                  |
-    | TINYBLOB, MEDIUMBLOB,  | GetBinary, GetString                   |
-    | BLOB, LONGBLOB         | GetBinary, GetString                   |
-    | BINARY, VARBINARY      | GetBinary                              |
-
-    Return types of aggregate functions:
-
-    | Function |       Type        |
-    |----------|-------------------|
-    | MIN, MAX | Same as the field |
-    | SUM, AVG | DECIMAL           |
-    | COUNT    | BIGINT            |
-*/
-class TC_DATABASE_API Field
-{
-    friend class ResultSet;
-    friend class PreparedResultSet;
-
     public:
-        Field();
-        ~Field();
 
-        bool GetBool() const // Wrapper, actually gets integer
+        Field() : mValue(NULL), mType(MYSQL_TYPE_NULL) {}
+
+        ~Field()
         {
-            return GetUInt8() == 1 ? true : false;
+            if (mIsRawValue)
+                free (mRawValue);
         }
 
-        uint8 GetUInt8() const;
-        int8 GetInt8() const;
-        uint16 GetUInt16() const;
-        int16 GetInt16() const;
-        uint32 GetUInt32() const;
-        int32 GetInt32() const;
-        uint64 GetUInt64() const;
-        int64 GetInt64() const;
-        float GetFloat() const;
-        double GetDouble() const;
-        char const* GetCString() const;
-        std::string GetString() const;
-        std::vector<uint8> GetBinary() const;
-
-        bool IsNull() const
+        enum_field_types GetType() const
         {
-            return data.value == nullptr;
+            return mType;
+        }
+        bool IsNULL() const { return mValue == NULL; }
+
+        const char* GetString() const
+        {
+            if (!mIsRawValue)
+                return mValue;
+
+            if (mType != MYSQL_TYPE_STRING)
+                return NULL;
+
+            return reinterpret_cast<char*> (mRawValue);
         }
 
-    protected:
-        struct
+        std::string GetCppString() const
         {
-            char const* value;          // Actual data in memory
-            uint32 length;              // Length
-            bool raw;                   // Raw bytes? (Prepared statement or ad hoc)
-         } data;
+            if (!mIsRawValue)
+                return mValue ? mValue : "";                    // std::string s = 0 have undefine result in C++
 
-        void SetByteValue(char const* newValue, uint32 length);
-        void SetStructuredValue(char const* newValue, uint32 length);
+            if (mType != MYSQL_TYPE_STRING || !mRawValue)
+                return "";
 
-        bool IsType(DatabaseFieldTypes type) const;
+            return reinterpret_cast<char*> (mRawValue);
+        }
 
-        bool IsNumeric() const;
+        std::vector<uint8> GetBinary() const
+        {
+            std::vector<uint8> data;
+
+            if (!mIsRawValue)
+                return data;
+
+            data.resize(mRawValueSize, 0);
+            std::copy((unsigned char*)mRawValue, ((unsigned char*) mRawValue) + mRawValueSize, data.begin());
+            
+            return data;
+        }
+
+        #ifdef OREGON_DEBUG
+        #  define dbg_help_var 1
+        #else
+        #  define dbg_help_var 0
+        #endif
+        #define GetIntegerDataImpl(name, expected_type, ctype, regular_cast)   \
+        ctype name() const                                                     \
+        {                                                                      \
+            if (!mValue)                                                       \
+                return 0;                                                      \
+                                                                               \
+            if (!mIsRawValue)                                                  \
+                return static_cast<ctype>(regular_cast);                       \
+                                                                               \
+            if (mType != expected_type)                                        \
+            {                                                                  \
+                /*if (dbg_help_var)*/                                              \
+                /*    error_db_log(__FUNCTION__ " on incorrent column data type.");*/ \
+                                                                               \
+                switch (mType)                                                 \
+                {                                                                                                   \
+                    case MYSQL_TYPE_TINY:     return static_cast<ctype>(*reinterpret_cast<int8*>(mRawValue));       \
+                    case MYSQL_TYPE_SHORT:    return static_cast<ctype>(*reinterpret_cast<int16*>(mRawValue));      \
+                    case MYSQL_TYPE_INT24:                                                                          \
+                    case MYSQL_TYPE_LONG:     return static_cast<ctype>(*reinterpret_cast<int32*>(mRawValue));      \
+                    case MYSQL_TYPE_LONGLONG: return static_cast<ctype>(*reinterpret_cast<int64*>(mRawValue));      \
+                    case MYSQL_TYPE_FLOAT:    return static_cast<ctype>(*reinterpret_cast<float*>(mRawValue));      \
+                    case MYSQL_TYPE_DOUBLE:   return static_cast<ctype>(*reinterpret_cast<double*>(mRawValue));     \
+                    default:                  return 0;                                                             \
+                }                                                                                                   \
+            }                                                                                                       \
+                                                                                                                    \
+            return *reinterpret_cast<ctype*> (mRawValue);                                                           \
+        }
+
+        GetIntegerDataImpl(GetFloat,  MYSQL_TYPE_FLOAT,      float,  STRTOF(mValue,   NULL))
+        GetIntegerDataImpl(GetDouble, MYSQL_TYPE_DOUBLE,     double, strtod(mValue,   NULL))
+        GetIntegerDataImpl(GetInt8,   MYSQL_TYPE_TINY,       int8,   strtol(mValue,   NULL, 10))
+        GetIntegerDataImpl(GetInt16,  MYSQL_TYPE_SHORT,      int16,  strtol(mValue,   NULL, 10))
+        GetIntegerDataImpl(GetInt32,  MYSQL_TYPE_LONG,       int32,  strtol(mValue,   NULL, 10))
+        GetIntegerDataImpl(GetInt64,  MYSQL_TYPE_LONGLONG,   int64,  strtoll(mValue,  NULL, 10))
+        GetIntegerDataImpl(GetUInt8,  MYSQL_TYPE_TINY,       uint8,  strtoul(mValue,  NULL, 10))
+        GetIntegerDataImpl(GetUInt16, MYSQL_TYPE_SHORT,      uint16, strtoul(mValue,  NULL, 10))
+        GetIntegerDataImpl(GetUInt32, MYSQL_TYPE_LONG,       uint32, strtoul(mValue,  NULL, 10))
+        GetIntegerDataImpl(GetUInt64, MYSQL_TYPE_LONGLONG,   uint64, strtoull(mValue, NULL, 10))
+
+        #undef GetIntegerDataImpl 
+        #undef dbg_help_var
+
+        bool GetBool() const
+        {
+            return GetUInt8() == 1;
+        }
+
+        /// Used by PreparedQueryResult, we need to copy the original data and free it later
+        void SetBinaryValue(void* value, size_t size, enum_field_types type)
+        {
+            mRawValue = value;
+            mRawValueSize = size;
+            mType = type;
+            mIsRawValue = true;
+        }
+        
+        /// Called by QueryResult
+        void SetType(enum_field_types type)
+        {
+            mType = type;
+        }
+        
+        /// Called by QueryResult, no need free this
+        void SetValue(const char* value)
+        {
+            mValue = value;
+            mIsRawValue = false;
+        };
 
     private:
-        QueryResultFieldMetadata const* meta;
-        void LogWrongType(char const* getter) const;
-        void SetMetadata(QueryResultFieldMetadata const* fieldMeta);
-};
+        Field(Field const&);
+        Field& operator=(Field const&);
 
+        union
+        {
+            /// data and size (prepared statements)
+            /// freed in destructor
+            struct
+            {
+                void* mRawValue;
+                size_t mRawValueSize;
+            };
+
+            /// data from regular query, we don't own this data,
+            /// mysql_free_result will free these
+            const char* mValue;
+        };
+
+        enum_field_types mType;  //!< The mysql type of this field
+        bool mIsRawValue;        //!< flag whether we have native data (from prepared statements) or not
+};
 #endif
+

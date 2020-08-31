@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,21 +15,16 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_SKILL_EXTRA_ITEMS_H
-#define TRINITY_SKILL_EXTRA_ITEMS_H
+#ifndef OREGON_SKILL_EXTRA_ITEMS_H
+#define OREGON_SKILL_EXTRA_ITEMS_H
 
 #include "Common.h"
 
 // predef classes used in functions
 class Player;
-
-// returns true and sets the appropriate info if the player can create a perfect item with the given spellId
-TC_GAME_API bool CanCreatePerfectItem(Player* player, uint32 spellId, float &perfectCreateChance, uint32 &perfectItemType);
-// load perfection proc info from DB
-TC_GAME_API void LoadSkillPerfectItemTable();
 // returns true and sets the appropriate info if the player can create extra items with the given spellId
-TC_GAME_API bool CanCreateExtraItems(Player* player, uint32 spellId, float &additionalChance, uint8 &additionalMax);
+bool canCreateExtraItems(Player* player, uint32 spellId, float& additionalChance, uint8& additionalMax);
 // function to load the extra item creation info from DB
-TC_GAME_API void LoadSkillExtraItemTable();
-
+void LoadSkillExtraItemTable();
 #endif
+

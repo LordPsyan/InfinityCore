@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,100 +15,90 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: Boss_Landslide
-SD%Complete: 100
-SDComment:
-SDCategory: Maraudon
-EndScriptData */
+ /* ScriptData
+ SDName: Boss_Landslide
+ SD%Complete: 100
+ SDComment:
+ SDCategory: Maraudon
+ EndScriptData */
 
 #include "ScriptMgr.h"
-#include "maraudon.h"
 #include "ScriptedCreature.h"
 
-enum Spells
-{
-    SPELL_KNOCKAWAY         = 18670,
-    SPELL_TRAMPLE           = 5568,
-    SPELL_LANDSLIDE         = 21808
-};
+#define SPELL_KNOCKAWAY         18670
+#define SPELL_TRAMPLE           5568
+#define SPELL_LANDSLIDE         21808
 
 class boss_landslide : public CreatureScript
 {
 public:
     boss_landslide() : CreatureScript("boss_landslide") { }
 
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return GetMaraudonAI<boss_landslideAI>(creature);
-    }
-
     struct boss_landslideAI : public ScriptedAI
     {
-        boss_landslideAI(Creature* creature) : ScriptedAI(creature)
+        boss_landslideAI(Creature* c) : ScriptedAI(c) {}
+
+        uint32 KnockAway_Timer;
+        uint32 Trample_Timer;
+        uint32 Landslide_Timer;
+
+        void Reset()
         {
-            Initialize();
+            KnockAway_Timer = 8000;
+            Trample_Timer = 2000;
+            Landslide_Timer = 0;
         }
 
-        void Initialize()
-        {
-            KnockAwayTimer = 8000;
-            TrampleTimer = 2000;
-            LandslideTimer = 0;
-        }
-
-        uint32 KnockAwayTimer;
-        uint32 TrampleTimer;
-        uint32 LandslideTimer;
-
-        void Reset() override
-        {
-            Initialize();
-        }
-
-        void JustEngagedWith(Unit* /*who*/) override
+        void EnterCombat(Unit* /*who*/)
         {
         }
 
-        void UpdateAI(uint32 diff) override
+        void UpdateAI(const uint32 diff)
         {
             if (!UpdateVictim())
                 return;
 
-            //KnockAwayTimer
-            if (KnockAwayTimer <= diff)
+            //KnockAway_Timer
+            if (KnockAway_Timer <= diff)
             {
                 DoCastVictim(SPELL_KNOCKAWAY);
-                KnockAwayTimer = 15000;
+                KnockAway_Timer = 15000;
             }
-            else KnockAwayTimer -= diff;
+            else KnockAway_Timer -= diff;
 
-            //TrampleTimer
-            if (TrampleTimer <= diff)
+            //Trample_Timer
+            if (Trample_Timer <= diff)
             {
                 DoCast(me, SPELL_TRAMPLE);
-                TrampleTimer = 8000;
+                Trample_Timer = 8000;
             }
-            else TrampleTimer -= diff;
+            else Trample_Timer -= diff;
 
             //Landslide
             if (HealthBelowPct(50))
             {
-                if (LandslideTimer <= diff)
+                if (Landslide_Timer <= diff)
                 {
                     me->InterruptNonMeleeSpells(false);
                     DoCast(me, SPELL_LANDSLIDE);
-                    LandslideTimer = 60000;
+                    Landslide_Timer = 60000;
                 }
-                else LandslideTimer -= diff;
+                else Landslide_Timer -= diff;
             }
 
             DoMeleeAttackIfReady();
         }
     };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return new boss_landslideAI(pCreature);
+    }
+
 };
 
 void AddSC_boss_landslide()
 {
     new boss_landslide();
 }
+

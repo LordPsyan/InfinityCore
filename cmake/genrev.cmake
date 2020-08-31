@@ -1,4 +1,5 @@
-# This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+# Copyright (C) 2008-2018 OregonCore <https://oregon-core.net/>
+# Copyright (C) 2008-2012 TrinityCore <https://www.trinitycore.org/>
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without
@@ -8,71 +9,64 @@
 # WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-# User has manually chosen to ignore the git-tests, so throw them a warning.
-# This is done EACH compile so they can be alerted about the consequences.
+find_package(Git)
 
+execute_process(
+  COMMAND "${GIT_EXECUTABLE}" rev-list HEAD --abbrev-commit --count
+  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+  OUTPUT_VARIABLE rev_id_str
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET
+)
+
+execute_process(
+  COMMAND "${GIT_EXECUTABLE}" rev-list HEAD --abbrev-commit -1
+  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+  OUTPUT_VARIABLE rev_hash_str
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET
+)
+
+execute_process(
+  COMMAND "${GIT_EXECUTABLE}" diff --quiet HEAD
+  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+  RESULT_VARIABLE rev_unstaged_changes
+)
+
+# Last minute check - ensure that we have a proper revision
+# If everything above fails (means the user has erased the git revisional control directory, or runs archive and erased their .git_archival.txt)
+if(NOT "${rev_id_str}")
+  if (CMAKE_BUILD_TYPE)
+      message(STATUS "WARNING - No revision-information found? Although this is not fatal, if you want any support in the future, please install git and clone the source properly - (do not just download files)")
+  endif()
+  # Ok, since we have no valid ways of finding/setting the revision, let's force some defaults
+  set(rev_hash_str "Unknown")
+  set(rev_hash "0")
+  set(rev_id_str "0")
+  set(rev_id "0")
+endif()
+
+# Detect is source is actually modified
+if(rev_unstaged_changes)
+  if (CMAKE_BUILD_TYPE)
+      message(STATUS "WARNING - Unstaged (uncommitted) changes were found.")
+  endif()
+  set(rev_id "${rev_id_str}")
+  set(rev_id_str "${rev_id_str}+")
+  set(rev_hash_str "${rev_hash_str}+")
+endif()
+
+# Its not set during initial run
 if(NOT BUILDDIR)
-  # Workaround for funny MSVC behaviour - this segment is only used when using cmake gui
   set(BUILDDIR ${CMAKE_BINARY_DIR})
 endif()
 
-if(WITHOUT_GIT)
-  set(rev_date "1970-01-01 00:00:00 +0000")
-  set(rev_hash "unknown")
-  set(rev_branch "Archived")
-else()
-  if(GIT_EXECUTABLE)
-    # Create a revision-string that we can use
-    execute_process(
-      COMMAND "${GIT_EXECUTABLE}" describe --long --match init --dirty=+ --abbrev=12
-      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-      OUTPUT_VARIABLE rev_info
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      ERROR_QUIET
-    )
-
-    # And grab the commits timestamp
-    execute_process(
-      COMMAND "${GIT_EXECUTABLE}" show -s --format=%ci
-      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-      OUTPUT_VARIABLE rev_date
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      ERROR_QUIET
-    )
-
-    # Also retrieve branch name
-    execute_process(
-      COMMAND "${GIT_EXECUTABLE}" rev-parse --abbrev-ref HEAD
-      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-      OUTPUT_VARIABLE rev_branch
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      ERROR_QUIET
-    )
-  endif()
-
-  # Last minute check - ensure that we have a proper revision
-  # If everything above fails (means the user has erased the git revision control directory or removed the origin/HEAD tag)
-  if(NOT rev_info)
-    # No valid ways available to find/set the revision/hash, so let's force some defaults
-    message(STATUS "
-    Could not find a proper repository signature (hash) - you may need to pull tags with git fetch -t
-    Continuing anyway - note that the versionstring will be set to \"unknown 1970-01-01 00:00:00 (Archived)\"")
-    set(rev_date "1970-01-01 00:00:00 +0000")
-    set(rev_hash "unknown")
-    set(rev_branch "Archived")
-  else()
-    # Extract information required to build a proper versionstring
-    string(REGEX REPLACE init-|[0-9]+-g "" rev_hash ${rev_info})
-  endif()
-endif()
-
-# Create the actual revision_data.h file from the above params
-if(NOT "${rev_hash_cached}" MATCHES "${rev_hash}" OR NOT "${rev_branch_cached}" MATCHES "${rev_branch}" OR NOT EXISTS "${BUILDDIR}/revision_data.h")
+# Create the actual revision.h file from the above params
+if(NOT "${rev_id_cached}" MATCHES "${rev_id_str}")
   configure_file(
-    "${CMAKE_SOURCE_DIR}/revision_data.h.in.cmake"
-    "${BUILDDIR}/revision_data.h"
+    "${CMAKE_SOURCE_DIR}/revision.h.in.cmake"
+    "${BUILDDIR}/revision.h"
     @ONLY
   )
-  set(rev_hash_cached "${rev_hash}" CACHE INTERNAL "Cached commit-hash")
-  set(rev_branch_cached "${rev_branch}" CACHE INTERNAL "Cached branch name")
+  set(rev_id_cached "${rev_id_str}" CACHE INTERNAL "Cached revision ID")
 endif()

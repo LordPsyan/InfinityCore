@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,107 +15,118 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "scarlet_monastery.h"
-#include "ScriptedCreature.h"
+ /* ScriptData
+ SDName: Boss_Arcanist_Doan
+ SD%Complete: 100
+ SDComment:
+ SDCategory: Scarlet Monastery
+ EndScriptData */
+
 #include "ScriptMgr.h"
+#include "ScriptedCreature.h"
 
-enum ArcanistDoanYells
+enum eEnums
 {
-    SAY_AGGRO = 0,
-    SAY_SPECIALAE = 1
+    SAY_AGGRO = -1189019,
+    SAY_SPECIALAE = -1189020,
+
+    SPELL_POLYMORPH = 13323,
+    SPELL_AOESILENCE = 8988,
+    SPELL_ARCANEEXPLOSION = 9433,
+    SPELL_FIREAOE = 9435,
+    SPELL_ARCANEBUBBLE = 9438,
 };
 
-enum ArcanistDoanSpells
+
+class boss_arcanist_doan : public CreatureScript
 {
-    SPELL_SILENCE = 8988,
-    SPELL_ARCANE_EXPLOSION = 9433,
-    SPELL_DETONATION = 9435,
-    SPELL_ARCANE_BUBBLE = 9438,
-    SPELL_POLYMORPH = 13323
-};
+public:
+    boss_arcanist_doan() : CreatureScript("boss_arcanist_doan") { }
 
-enum ArcanistDoanEvents
-{
-    EVENT_SILENCE = 1,
-    EVENT_ARCANE_EXPLOSION,
-    EVENT_ARCANE_BUBBLE,
-    EVENT_POLYMORPH
-};
-
-struct boss_arcanist_doan : public BossAI
-{
-    boss_arcanist_doan(Creature* creature) : BossAI(creature, DATA_ARCANIST_DOAN)
+    struct boss_arcanist_doanAI : public ScriptedAI
     {
-        _healthAbove50Pct = true;
-    }
+        boss_arcanist_doanAI(Creature* c) : ScriptedAI(c) {}
 
-    void Reset() override
-    {
-        _Reset();
-        _healthAbove50Pct = true;
-    }
+        uint32 Polymorph_Timer;
+        uint32 AoESilence_Timer;
+        uint32 ArcaneExplosion_Timer;
+        bool bCanDetonate;
+        bool bShielded;
 
-    void JustEngagedWith(Unit* who) override
-    {
-        BossAI::JustEngagedWith(who);
-        Talk(SAY_AGGRO);
-
-        events.ScheduleEvent(EVENT_SILENCE, 15s);
-        events.ScheduleEvent(EVENT_ARCANE_EXPLOSION, 3s);
-        events.ScheduleEvent(EVENT_POLYMORPH, 30s);
-    }
-
-    void UpdateAI(uint32 diff) override
-    {
-        if (!UpdateVictim())
-            return;
-
-        events.Update(diff);
-
-        if (me->HasUnitState(UNIT_STATE_CASTING))
-            return;
-
-        while (uint32 eventId = events.ExecuteEvent())
+        void Reset()
         {
-            switch (eventId)
+            Polymorph_Timer = 20000;
+            AoESilence_Timer = 15000;
+            ArcaneExplosion_Timer = 3000;
+            bCanDetonate = false;
+            bShielded = false;
+        }
+
+        void EnterCombat(Unit* /*who*/)
+        {
+            DoScriptText(SAY_AGGRO, me);
+        }
+
+        void UpdateAI(const uint32 diff)
+        {
+            if (!UpdateVictim())
+                return;
+
+            if (me->HasAura(SPELL_ARCANEBUBBLE, 0))
+                return;
+
+            //If we are <50% hp cast Arcane Bubble
+            if (!bShielded && HealthBelowPct(50))
             {
-                case EVENT_SILENCE:
-                    DoCastVictim(SPELL_SILENCE);
-                    events.Repeat(15s, 20s);
-                    break;
-                case EVENT_ARCANE_EXPLOSION:
-                    DoCastVictim(SPELL_ARCANE_EXPLOSION);
-                    events.Repeat(8s);
-                    break;
-                case EVENT_POLYMORPH:
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 1, 30.0f, true))
-                        DoCast(target, SPELL_POLYMORPH);
-                    events.Repeat(20s);
-                    break;
-                default:
-                    break;
+                //wait if we already casting
+                if (me->IsNonMeleeSpellCast(false))
+                    return;
+
+                DoScriptText(SAY_SPECIALAE, me);
+                DoCast(me, SPELL_ARCANEBUBBLE);
+                DoCast(me, SPELL_FIREAOE);
+
+                bCanDetonate = true;
+                bShielded = true;
             }
 
-            if (me->HasUnitState(UNIT_STATE_CASTING))
-                return;
-        }
+            if (Polymorph_Timer <= diff)
+            {
+                if (Unit* pTarget = SelectUnit(SELECT_TARGET_RANDOM, 1))
+                    DoCast(pTarget, SPELL_POLYMORPH);
 
-        if (_healthAbove50Pct && HealthBelowPct(50))
-        {
-            _healthAbove50Pct = false;
-            Talk(SAY_SPECIALAE);
-            DoCastSelf(SPELL_ARCANE_BUBBLE);
-            DoCastAOE(SPELL_DETONATION);
-        }
+                Polymorph_Timer = 20000;
+            }
+            else Polymorph_Timer -= diff;
 
-        DoMeleeAttackIfReady();
+            //AoESilence_Timer
+            if (AoESilence_Timer <= diff)
+            {
+                DoCastVictim(SPELL_AOESILENCE);
+                AoESilence_Timer = 15000 + rand() % 5000;
+            }
+            else AoESilence_Timer -= diff;
+
+            //ArcaneExplosion_Timer
+            if (ArcaneExplosion_Timer <= diff)
+            {
+                DoCastVictim(SPELL_ARCANEEXPLOSION);
+                ArcaneExplosion_Timer = 8000;
+            }
+            else ArcaneExplosion_Timer -= diff;
+
+            DoMeleeAttackIfReady();
+        }
+    };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return new boss_arcanist_doanAI(pCreature);
     }
-
-private:
-    bool _healthAbove50Pct;
 };
 
 void AddSC_boss_arcanist_doan()
 {
-    RegisterScarletMonasteryCreatureAI(boss_arcanist_doan);
+    new boss_arcanist_doan();
 }
+

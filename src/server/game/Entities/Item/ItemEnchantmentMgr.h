@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -14,15 +14,13 @@
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-
 #ifndef _ITEM_ENCHANTMENT_MGR_H
 #define _ITEM_ENCHANTMENT_MGR_H
 
 #include "Common.h"
 
-TC_GAME_API void LoadRandomEnchantmentsTable();
-TC_GAME_API int32 GenerateItemRandomPropertyId(uint32 item_id);
-TC_GAME_API uint32 GetItemEnchantMod(int32 entry);
-TC_GAME_API uint32 GenerateEnchSuffixFactor(uint32 item_id);
-
+void LoadRandomEnchantmentsTable();
+uint32 GetItemEnchantMod(uint32 entry);
+uint32 GenerateEnchSuffixFactor(uint32 item_id);
 #endif
+

@@ -1,0 +1,1 @@
+UPDATE `gameobject_template` SET `ScriptName` = 'go_helculars_grave' WHERE entry = '1767';

@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -27,9 +27,6 @@ npc_kalecgos
 EndContentData */
 
 #include "ScriptMgr.h"
-#include "magisters_terrace.h"
-#include "MotionMaster.h"
-#include "Player.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
 
@@ -37,24 +34,15 @@ EndContentData */
 ## npc_kalecgos
 ######*/
 
-enum Spells
+enum eEnums
 {
-    SPELL_KALECGOS_TRANSFORM    = 44670,
-    SPELL_TRANSFORM_VISUAL      = 24085,
-    SPELL_CAMERA_SHAKE          = 44762,
-    SPELL_ORB_KILL_CREDIT       = 46307
+    SPELL_TRANSFORM_TO_KAEL     = 44670,
+    SPELL_ORB_KILL_CREDIT       = 46307,
+    NPC_KAEL                    = 24848,                    //human form entry
+    POINT_ID_LAND               = 1
 };
 
-enum MovementPoints
-{
-    POINT_ID_PREPARE_LANDING    = 6
-};
-
-enum EventIds
-{
-    EVENT_KALECGOS_TRANSFORM         = 1,
-    EVENT_KALECGOS_LANDING           = 2
-};
+const float afKaelLandPoint[] = {225.045f, -276.236f, -5.434f};
 
 #define GOSSIP_ITEM_KAEL_1      "Who are you?"
 #define GOSSIP_ITEM_KAEL_2      "What can we do to assist you?"
@@ -62,103 +50,107 @@ enum EventIds
 #define GOSSIP_ITEM_KAEL_4      "You're not alone here?"
 #define GOSSIP_ITEM_KAEL_5      "What would Kil'jaeden want with a mortal woman?"
 
+// This is friendly keal that appear after used Orb.
+// If we assume DB handle summon, summon appear somewhere outside the platform where Orb is
+
 class npc_kalecgos : public CreatureScript
 {
-public:
+public: 
     npc_kalecgos() : CreatureScript("npc_kalecgos") { }
-
     struct npc_kalecgosAI : public ScriptedAI
     {
-        npc_kalecgosAI(Creature* creature) : ScriptedAI(creature) { }
-
-        void MovementInform(uint32 type, uint32 pointId) override
+        npc_kalecgosAI(Creature* pCreature) : ScriptedAI(pCreature) {}
+    
+        uint32 m_uiTransformTimer;
+    
+        void Reset()
         {
-            if (type != WAYPOINT_MOTION_TYPE)
+            m_uiTransformTimer = 0;
+    
+            // @todo Remove this requirement
+            me->setActive(true);
+    
+            // we must assume he appear as dragon somewhere outside the platform of orb, and then move directly to here
+            if (me->GetEntry() != NPC_KAEL)
+                me->GetMotionMaster()->MovePoint(POINT_ID_LAND, afKaelLandPoint[0], afKaelLandPoint[1], afKaelLandPoint[2], false);
+        }
+    
+        void MovementInform(uint32 uiType, uint32 uiPointId)
+        {
+            if (uiType != POINT_MOTION_TYPE)
                 return;
-
-            if (pointId == POINT_ID_PREPARE_LANDING)
+    
+            if (uiPointId == POINT_ID_LAND)
+                m_uiTransformTimer = MINUTE * IN_MILLISECONDS;
+        }
+    
+        void UpdateAI(const uint32 uiDiff)
+        {
+            if (m_uiTransformTimer)
             {
-                me->HandleEmoteCommand(EMOTE_ONESHOT_LAND);
-                me->SetDisableGravity(false);
-                me->SetHover(false);
-                events.ScheduleEvent(EVENT_KALECGOS_LANDING, 2s);
+                if (m_uiTransformTimer <= uiDiff)
+                {
+                    DoCast(me, SPELL_ORB_KILL_CREDIT, false);
+    
+                    // Transform and update entry, now ready for quest/read gossip
+                    DoCast(me, SPELL_TRANSFORM_TO_KAEL, false);
+                    me->UpdateEntry(NPC_KAEL);
+    
+                    m_uiTransformTimer = 0;
+                }
+                else m_uiTransformTimer -= uiDiff;
             }
         }
-
-        void UpdateAI(uint32 diff) override
-        {
-            events.Update(diff);
-
-            switch (events.ExecuteEvent())
-            {
-                case EVENT_KALECGOS_LANDING:
-                    DoCastAOE(SPELL_CAMERA_SHAKE);
-                    me->SetObjectScale(0.6f);
-                    events.ScheduleEvent(EVENT_KALECGOS_TRANSFORM, 1s);
-                    break;
-                case EVENT_KALECGOS_TRANSFORM:
-                    DoCast(me, SPELL_ORB_KILL_CREDIT, true);
-                    DoCast(me, SPELL_TRANSFORM_VISUAL, false);
-                    DoCast(me, SPELL_KALECGOS_TRANSFORM, false);
-                    me->UpdateEntry(NPC_HUMAN_KALECGOS);
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 gossipListId) override
-        {
-            uint32 const action = player->PlayerTalkClass->GetGossipOptionAction(gossipListId);
-            ClearGossipMenuFor(player);
-            switch (action)
-            {
-                case GOSSIP_ACTION_INFO_DEF:
-                    AddGossipItemFor(player, GOSSIP_ICON_CHAT, GOSSIP_ITEM_KAEL_2, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
-                    SendGossipMenuFor(player, 12500, me->GetGUID());
-                    break;
-                case GOSSIP_ACTION_INFO_DEF + 1:
-                    AddGossipItemFor(player, GOSSIP_ICON_CHAT, GOSSIP_ITEM_KAEL_3, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);
-                    SendGossipMenuFor(player, 12502, me->GetGUID());
-                    break;
-                case GOSSIP_ACTION_INFO_DEF + 2:
-                    AddGossipItemFor(player, GOSSIP_ICON_CHAT, GOSSIP_ITEM_KAEL_4, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 3);
-                    SendGossipMenuFor(player, 12606, me->GetGUID());
-                    break;
-                case GOSSIP_ACTION_INFO_DEF + 3:
-                    AddGossipItemFor(player, GOSSIP_ICON_CHAT, GOSSIP_ITEM_KAEL_5, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 4);
-                    SendGossipMenuFor(player, 12607, me->GetGUID());
-                    break;
-                case GOSSIP_ACTION_INFO_DEF + 4:
-                    SendGossipMenuFor(player, 12608, me->GetGUID());
-                    break;
-            }
-
-            return true;
-        }
-
-        bool GossipHello(Player* player) override
-        {
-            if (me->IsQuestGiver())
-                player->PrepareQuestMenu(me->GetGUID());
-
-            AddGossipItemFor(player, GOSSIP_ICON_CHAT, GOSSIP_ITEM_KAEL_1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF);
-            SendGossipMenuFor(player, 12498, me->GetGUID());
-
-            return true;
-        }
-
-        private:
-            EventMap events;
     };
-
-    CreatureAI* GetAI(Creature* creature) const override
+    
+     CreatureAI* GetAI(Creature* pCreature) const
     {
-        return GetMagistersTerraceAI<npc_kalecgosAI>(creature);
+        return new npc_kalecgosAI(pCreature);
     }
+    
+    bool OnGossipHello(Player* pPlayer, Creature* pCreature) override
+    {
+        if (pCreature->IsQuestGiver())
+            pPlayer->PrepareQuestMenu(pCreature->GetGUID());
+    
+        pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_KAEL_1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF);
+        pPlayer->SEND_GOSSIP_MENU(12498, pCreature->GetGUID());
+    
+        return true;
+    }
+    
+    bool OnGossipSelect(Player* pPlayer, Creature* pCreature, uint32 /*uiSender*/, uint32 uiAction) override
+    {
+        switch (uiAction)
+        {
+        case GOSSIP_ACTION_INFO_DEF:
+            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_KAEL_2, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
+            pPlayer->SEND_GOSSIP_MENU(12500, pCreature->GetGUID());
+            break;
+        case GOSSIP_ACTION_INFO_DEF+1:
+            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_KAEL_3, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);
+            pPlayer->SEND_GOSSIP_MENU(12502, pCreature->GetGUID());
+            break;
+        case GOSSIP_ACTION_INFO_DEF+2:
+            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_KAEL_4, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 3);
+            pPlayer->SEND_GOSSIP_MENU(12606, pCreature->GetGUID());
+            break;
+        case GOSSIP_ACTION_INFO_DEF+3:
+            pPlayer->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_KAEL_5, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 4);
+            pPlayer->SEND_GOSSIP_MENU(12607, pCreature->GetGUID());
+            break;
+        case GOSSIP_ACTION_INFO_DEF+4:
+            pPlayer->SEND_GOSSIP_MENU(12608, pCreature->GetGUID());
+            break;
+        }
+    
+        return true;
+    }
+    
+    
 };
-
 void AddSC_magisters_terrace()
 {
     new npc_kalecgos();
 }
+

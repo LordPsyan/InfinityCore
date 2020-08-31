@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,100 +15,113 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*
-Name: Boss_Illucia_Barov
-%Complete: 100
-Comment:
-Category: Scholomance
-*/
+ /* ScriptData
+ SDName: Boss_Illucia_Barov
+ SD%Complete: 100
+ SDComment:
+ SDCategory: Scholomance
+ EndScriptData */
 
 #include "ScriptMgr.h"
-#include "scholomance.h"
 #include "ScriptedCreature.h"
+#include "scholomance.h"
 
-enum Spells
-{
-    SPELL_CURSEOFAGONY          = 18671,
-    SPELL_DOMINATE              = 7645, // UNUSED YET added for documentation
-    SPELL_FEAR                  = 12542,
-    SPELL_SHADOWSHOCK           = 17234,
-    SPELL_SILENCE               = 12528
-};
+#define SPELL_CURSEOFAGONY      18671
+#define SPELL_SHADOWSHOCK       20603
+#define SPELL_SILENCE           15487
+#define SPELL_FEAR              6215
 
-enum Events
-{
-    EVENT_CURSEOFAGONY          = 1,
-    EVENT_SHADOWSHOCK           = 2,
-    EVENT_SILENCE               = 3,
-    EVENT_FEAR                  = 4
-};
 
 class boss_illucia_barov : public CreatureScript
 {
-    public: boss_illucia_barov() : CreatureScript("boss_illucia_barov") { }
+public:
+    boss_illucia_barov() : CreatureScript("boss_illucia_barov") { }
 
-        struct boss_illuciabarovAI : public BossAI
+    struct boss_illucia_barovAI : public ScriptedAI
+    {
+        boss_illucia_barovAI(Creature* c) : ScriptedAI(c) {}
+
+        uint32 CurseOfAgony_Timer;
+        uint32 ShadowShock_Timer;
+        uint32 Silence_Timer;
+        uint32 Fear_Timer;
+
+        void Reset()
         {
-            boss_illuciabarovAI(Creature* creature) : BossAI(creature, DATA_LADYILLUCIABAROV) { }
-
-            void JustEngagedWith(Unit* who) override
-            {
-                BossAI::JustEngagedWith(who);
-                events.ScheduleEvent(EVENT_CURSEOFAGONY, 18s);
-                events.ScheduleEvent(EVENT_SHADOWSHOCK, 9s);
-                events.ScheduleEvent(EVENT_SILENCE, 5s);
-                events.ScheduleEvent(EVENT_FEAR, 30s);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_CURSEOFAGONY:
-                            DoCastVictim(SPELL_CURSEOFAGONY, true);
-                            events.ScheduleEvent(EVENT_CURSEOFAGONY, 30s);
-                            break;
-                        case EVENT_SHADOWSHOCK:
-                            DoCast(SelectTarget(SelectTargetMethod::Random, 0, 100, true), SPELL_SHADOWSHOCK, true);
-                            events.ScheduleEvent(EVENT_SHADOWSHOCK, 12s);
-                            break;
-                        case EVENT_SILENCE:
-                            DoCastVictim(SPELL_SILENCE, true);
-                            events.ScheduleEvent(EVENT_SILENCE, 14s);
-                            break;
-                        case EVENT_FEAR:
-                            DoCastVictim(SPELL_FEAR, true);
-                            events.ScheduleEvent(EVENT_FEAR, 30s);
-                            break;
-                        default:
-                            break;
-                    }
-
-                    if (me->HasUnitState(UNIT_STATE_CASTING))
-                        return;
-                }
-
-                DoMeleeAttackIfReady();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetScholomanceAI<boss_illuciabarovAI>(creature);
+            CurseOfAgony_Timer = 18000;
+            ShadowShock_Timer = 9000;
+            Silence_Timer = 5000;
+            Fear_Timer = 30000;
         }
+
+        void JustDied(Unit* /*killer*/)
+        {
+            ScriptedInstance* pInstance = (ScriptedInstance*)me->GetInstanceData();
+            if (pInstance)
+            {
+                pInstance->SetData(DATA_LADYILLUCIABAROV_DEATH, 0);
+
+                if (pInstance->GetData(TYPE_GANDLING) == IN_PROGRESS)
+                    me->SummonCreature(1853, 180.73f, -9.43856f, 75.507f, 1.61399f, TEMPSUMMON_DEAD_DESPAWN, 0);
+            }
+        }
+
+        void EnterCombat(Unit* /*who*/)
+        {
+        }
+
+        void UpdateAI(const uint32 diff)
+        {
+            if (!UpdateVictim())
+                return;
+
+            //CurseOfAgony_Timer
+            if (CurseOfAgony_Timer <= diff)
+            {
+                DoCastVictim(SPELL_CURSEOFAGONY);
+                CurseOfAgony_Timer = 30000;
+            }
+            else CurseOfAgony_Timer -= diff;
+
+            //ShadowShock_Timer
+            if (ShadowShock_Timer <= diff)
+            {
+                Unit* pTarget = NULL;
+                pTarget = SelectUnit(SELECT_TARGET_RANDOM, 0);
+                if (pTarget) DoCast(pTarget, SPELL_SHADOWSHOCK);
+
+                ShadowShock_Timer = 12000;
+            }
+            else ShadowShock_Timer -= diff;
+
+            //Silence_Timer
+            if (Silence_Timer <= diff)
+            {
+                DoCastVictim(SPELL_SILENCE);
+                Silence_Timer = 14000;
+            }
+            else Silence_Timer -= diff;
+
+            //Fear_Timer
+            if (Fear_Timer <= diff)
+            {
+                DoCastVictim(SPELL_FEAR);
+                Fear_Timer = 30000;
+            }
+            else Fear_Timer -= diff;
+
+            DoMeleeAttackIfReady();
+        }
+    };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return new boss_illucia_barovAI(pCreature);
+    }
 };
 
 void AddSC_boss_illuciabarov()
 {
     new boss_illucia_barov();
 }
+

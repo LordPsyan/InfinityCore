@@ -23,7 +23,7 @@ if(WIN32)
   )
 endif(WIN32)
 
-add_subdirectory(database)
+# add_subdirectory(database)
 add_subdirectory(shared)
 add_subdirectory(game)
 add_subdirectory(authserver)

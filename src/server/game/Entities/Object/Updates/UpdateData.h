@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,14 +18,10 @@
 #ifndef __UPDATEDATA_H
 #define __UPDATEDATA_H
 
-#include "Define.h"
 #include "ByteBuffer.h"
-#include "ObjectGuid.h"
-#include <set>
-
 class WorldPacket;
 
-enum OBJECT_UPDATE_TYPE
+enum ObjectUpdateType
 {
     UPDATETYPE_VALUES               = 0,
     UPDATETYPE_MOVEMENT             = 1,
@@ -35,48 +31,44 @@ enum OBJECT_UPDATE_TYPE
     UPDATETYPE_NEAR_OBJECTS         = 5
 };
 
-enum OBJECT_UPDATE_FLAGS
+enum ObjectUpdateFlags
 {
     UPDATEFLAG_NONE                 = 0x0000,
     UPDATEFLAG_SELF                 = 0x0001,
     UPDATEFLAG_TRANSPORT            = 0x0002,
-    UPDATEFLAG_HAS_TARGET           = 0x0004,
-    UPDATEFLAG_UNKNOWN              = 0x0008,
-    UPDATEFLAG_LOWGUID              = 0x0010,
+    UPDATEFLAG_HAS_ATTACKING_TARGET = 0x0004,
+    UPDATEFLAG_LOWGUID              = 0x0008,
+    UPDATEFLAG_HIGHGUID             = 0x0010,
     UPDATEFLAG_LIVING               = 0x0020,
-    UPDATEFLAG_STATIONARY_POSITION  = 0x0040,
-    UPDATEFLAG_VEHICLE              = 0x0080,
-    UPDATEFLAG_POSITION             = 0x0100,
-    UPDATEFLAG_ROTATION             = 0x0200
+    UPDATEFLAG_HAS_POSITION         = 0x0040,
 };
 
 class UpdateData
 {
     public:
         UpdateData();
-        UpdateData(UpdateData&& right) : m_blockCount(right.m_blockCount),
-            m_outOfRangeGUIDs(std::move(right.m_outOfRangeGUIDs)),
-            m_data(std::move(right.m_data))
-        {
-        }
 
-        void AddOutOfRangeGUID(GuidSet& guids);
-        void AddOutOfRangeGUID(ObjectGuid guid);
-        void AddUpdateBlock(ByteBuffer const& block);
-        bool BuildPacket(WorldPacket* packet);
-        bool HasData() const { return m_blockCount > 0 || !m_outOfRangeGUIDs.empty(); }
+        void AddOutOfRangeGUID(std::set<uint64>& guids);
+        void AddOutOfRangeGUID(const uint64& guid);
+        void AddUpdateBlock(const ByteBuffer& block);
+        bool BuildPacket(WorldPacket* packet, bool hasTransport = false);
+        bool HasData()
+        {
+            return m_blockCount > 0 || !m_outOfRangeGUIDs.empty();
+        }
         void Clear();
 
-        GuidSet const& GetOutOfRangeGUIDs() const { return m_outOfRangeGUIDs; }
+        std::set<uint64> const& GetOutOfRangeGUIDs() const
+        {
+            return m_outOfRangeGUIDs;
+        }
 
     protected:
         uint32 m_blockCount;
-        GuidSet m_outOfRangeGUIDs;
+        std::set<uint64> m_outOfRangeGUIDs;
         ByteBuffer m_data;
 
-        void Compress(void* dst, uint32 *dst_size, void* src, int src_size);
-
-        UpdateData(UpdateData const& right) = delete;
-        UpdateData& operator=(UpdateData const& right) = delete;
+        void Compress(void* dst, uint32* dst_size, void* src, int src_size);
 };
 #endif
+

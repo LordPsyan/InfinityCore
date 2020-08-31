@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,23 +15,34 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_GUARDAI_H
-#define TRINITY_GUARDAI_H
+#ifndef OREGON_GUARDAI_H
+#define OREGON_GUARDAI_H
 
 #include "ScriptedCreature.h"
+#include "Timer.h"
 
 class Creature;
 
-class TC_GAME_API GuardAI : public ScriptedAI
+class GuardAI : public ScriptedAI
 {
+        enum GuardState
+        {
+            STATE_NORMAL = 1,
+            STATE_LOOK_AT_VICTIM = 2
+        };
+
     public:
         explicit GuardAI(Creature* creature);
 
-        static int32 Permissible(Creature const* creature);
-        void UpdateAI(uint32 diff) override;
-        bool CanSeeAlways(WorldObject const* obj) override;
+        void EnterEvadeMode();
+        void JustDied(Unit*);
 
-        void EnterEvadeMode(EvadeReason /*why*/) override;
-        void JustDied(Unit* killer) override;
+        static int Permissible(const Creature*);
+        bool CanSeeAlways(WorldObject const* obj) override;
+    private:
+        uint64 i_victimGuid;
+        GuardState i_state;
+        TimeTracker i_tracker;
 };
 #endif
+

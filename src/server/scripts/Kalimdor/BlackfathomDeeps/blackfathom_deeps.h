@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,17 +15,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BFD_H_
-#define BFD_H_
+#ifndef DEF_BFD_H
+#define DEF_BFD_H
 
-#include "CreatureAIImpl.h"
-
-#define BFDScriptName "instance_blackfathom_deeps"
-#define DataHeader "BFD"
-
-uint32 const EncounterCount = 3;
-
-enum BFDData64
+enum Data64
 {
     DATA_SHRINE1,
     DATA_SHRINE2,
@@ -37,16 +30,17 @@ enum BFDData64
     DATA_MAINDOOR,
 };
 
-enum BFDData
+enum Data
 {
-    DATA_GELIHAST,
-    DATA_KELRIS,
-    DATA_AKU_MAI,
+    TYPE_GELIHAST,
+    TYPE_KELRIS,
+    TYPE_SHRINE,
+    TYPE_AKU_MAI,
     DATA_FIRE,
     DATA_EVENT
 };
 
-enum BFDCreatureIds
+enum Creatures
 {
     NPC_TWILIGHT_LORD_KELRIS                               = 4832,
     NPC_LORGUS_JETT                                        = 12902,
@@ -59,7 +53,7 @@ enum BFDCreatureIds
     NPC_MORRIDUNE                                          = 6729
 };
 
-enum BFDGameObjectIds
+enum GameObjects
 {
     GO_SHRINE_OF_GELIHAST                                  = 103015,
     GO_FIRE_OF_AKU_MAI_1                                   = 21118,
@@ -69,13 +63,4 @@ enum BFDGameObjectIds
     GO_AKU_MAI_DOOR                                        = 21117,
     GO_ALTAR_OF_THE_DEEPS                                  = 103016
 };
-
-template <class AI, class T>
-inline AI* GetBlackfathomDeepsAI(T* obj)
-{
-    return GetInstanceAI<AI>(obj, BFDScriptName);
-}
-
-#define RegisterBlackfathomDeepsCreatureAI(ai_name) RegisterCreatureAIWithFactory(ai_name, GetBlackfathomDeepsAI)
-
-#endif // BFD_H_
+#endif

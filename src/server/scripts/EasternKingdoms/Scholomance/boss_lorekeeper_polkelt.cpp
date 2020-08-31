@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,99 +15,111 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*
-Name: Boss_Lorekeeper_Polkelt
-%Complete: 100
-Comment:
-Category: Scholomance
-*/
+ /* ScriptData
+ SDName: Boss_Lorekeeper_Polkelt
+ SD%Complete: 100
+ SDComment:
+ SDCategory: Scholomance
+ EndScriptData */
 
-#include "scholomance.h"
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
+#include "scholomance.h"
 
-enum Spells
-{
-    SPELL_VOLATILEINFECTION     = 24928,
-    SPELL_DARKPLAGUE            = 18270,
-    SPELL_CORROSIVEACID         = 23313,
-    SPELL_NOXIOUSCATALYST       = 18151
-};
+#define SPELL_VOLATILEINFECTION      24928
+#define SPELL_DARKPLAGUE             18270
+#define SPELL_CORROSIVEACID          23313
+#define SPELL_NOXIOUSCATALYST        18151
 
-enum Events
-{
-    EVENT_VOLATILEINFECTION     = 1,
-    EVENT_DARKPLAGUE            = 2,
-    EVENT_CORROSIVEACID         = 3,
-    EVENT_NOXIOUSCATALYST       = 4
-};
 
 class boss_lorekeeper_polkelt : public CreatureScript
 {
-    public: boss_lorekeeper_polkelt() : CreatureScript("boss_lorekeeper_polkelt") { }
+public:
+    boss_lorekeeper_polkelt() : CreatureScript("boss_lorekeeper_polkelt") { }
 
-        struct boss_lorekeeperpolkeltAI : public BossAI
+    struct boss_lorekeeper_polkeltAI : public ScriptedAI
+    {
+        boss_lorekeeper_polkeltAI(Creature* c) : ScriptedAI(c) {}
+
+        uint32 VolatileInfection_Timer;
+        uint32 Darkplague_Timer;
+        uint32 CorrosiveAcid_Timer;
+        uint32 NoxiousCatalyst_Timer;
+
+        void Reset()
         {
-            boss_lorekeeperpolkeltAI(Creature* creature) : BossAI(creature, DATA_LOREKEEPERPOLKELT) { }
-
-            void JustEngagedWith(Unit* who) override
-            {
-                BossAI::JustEngagedWith(who);
-                events.ScheduleEvent(EVENT_VOLATILEINFECTION, 38s);
-                events.ScheduleEvent(EVENT_DARKPLAGUE, 8s);
-                events.ScheduleEvent(EVENT_CORROSIVEACID, 45s);
-                events.ScheduleEvent(EVENT_NOXIOUSCATALYST, 35s);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_VOLATILEINFECTION:
-                            DoCastVictim(SPELL_VOLATILEINFECTION, true);
-                            events.ScheduleEvent(EVENT_VOLATILEINFECTION, 32s);
-                            break;
-                        case EVENT_DARKPLAGUE:
-                            DoCastVictim(SPELL_DARKPLAGUE, true);
-                            events.ScheduleEvent(EVENT_DARKPLAGUE, 8s);
-                            break;
-                        case EVENT_CORROSIVEACID:
-                            DoCastVictim(SPELL_CORROSIVEACID, true);
-                            events.ScheduleEvent(EVENT_CORROSIVEACID, 25s);
-                            break;
-                        case EVENT_NOXIOUSCATALYST:
-                            DoCastVictim(SPELL_NOXIOUSCATALYST, true);
-                            events.ScheduleEvent(EVENT_NOXIOUSCATALYST, 38s);
-                            break;
-                        default:
-                            break;
-                    }
-
-                    if (me->HasUnitState(UNIT_STATE_CASTING))
-                        return;
-                }
-
-                DoMeleeAttackIfReady();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetScholomanceAI<boss_lorekeeperpolkeltAI>(creature);
+            VolatileInfection_Timer = 38000;
+            Darkplague_Timer = 8000;
+            CorrosiveAcid_Timer = 45000;
+            NoxiousCatalyst_Timer = 35000;
         }
+
+        void JustDied(Unit* /*killer*/)
+        {
+            ScriptedInstance* pInstance = (ScriptedInstance*)me->GetInstanceData();
+            if (pInstance)
+            {
+                pInstance->SetData(DATA_LOREKEEPERPOLKELT_DEATH, 0);
+
+                if (pInstance->GetData(TYPE_GANDLING) == IN_PROGRESS)
+                    me->SummonCreature(1853, 180.73f, -9.43856f, 75.507f, 1.61399f, TEMPSUMMON_DEAD_DESPAWN, 0);
+            }
+        }
+
+        void EnterCombat(Unit* /*who*/)
+        {
+        }
+
+        void UpdateAI(const uint32 diff)
+        {
+            if (!UpdateVictim())
+                return;
+
+            //VolatileInfection_Timer
+            if (VolatileInfection_Timer <= diff)
+            {
+                DoCastVictim(SPELL_VOLATILEINFECTION);
+                VolatileInfection_Timer = 32000;
+            }
+            else VolatileInfection_Timer -= diff;
+
+            //Darkplague_Timer
+            if (Darkplague_Timer <= diff)
+            {
+                DoCastVictim(SPELL_DARKPLAGUE);
+                Darkplague_Timer = 8000;
+            }
+            else Darkplague_Timer -= diff;
+
+            //CorrosiveAcid_Timer
+            if (CorrosiveAcid_Timer <= diff)
+            {
+                DoCastVictim(SPELL_CORROSIVEACID);
+                CorrosiveAcid_Timer = 25000;
+            }
+            else CorrosiveAcid_Timer -= diff;
+
+            //NoxiousCatalyst_Timer
+            if (NoxiousCatalyst_Timer <= diff)
+            {
+                DoCastVictim(SPELL_NOXIOUSCATALYST);
+                NoxiousCatalyst_Timer = 38000;
+            }
+            else NoxiousCatalyst_Timer -= diff;
+
+            DoMeleeAttackIfReady();
+        }
+    };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return new boss_lorekeeper_polkeltAI(pCreature);
+    }
+
 };
 
 void AddSC_boss_lorekeeperpolkelt()
 {
     new boss_lorekeeper_polkelt();
 }
+

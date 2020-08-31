@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,34 +15,30 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_CONFUSEDGENERATOR_H
-#define TRINITY_CONFUSEDGENERATOR_H
+#ifndef OREGON_CONFUSEDGENERATOR_H
+#define OREGON_CONFUSEDGENERATOR_H
 
 #include "MovementGenerator.h"
-#include "Timer.h"
-
-class PathGenerator;
 
 template<class T>
-class ConfusedMovementGenerator : public MovementGeneratorMedium<T, ConfusedMovementGenerator<T>>
+class ConfusedMovementGenerator
+    : public MovementGeneratorMedium< T, ConfusedMovementGenerator<T> >
 {
     public:
-        explicit ConfusedMovementGenerator();
+        explicit ConfusedMovementGenerator() : i_nextMoveTime(0), i_x(0), i_y(0), i_z(0) {}
 
-        MovementGeneratorType GetMovementGeneratorType() const override;
+        void Initialize(T&);
+        void Finalize(T&);
+        void Reset(T&);
+        bool Update(T&, const uint32&);
 
-        void DoInitialize(T*);
-        void DoReset(T*);
-        bool DoUpdate(T*, uint32);
-        void DoDeactivate(T*);
-        void DoFinalize(T*, bool, bool);
-
-        void UnitSpeedChanged() override { ConfusedMovementGenerator<T>::AddFlag(MOVEMENTGENERATOR_FLAG_SPEED_UPDATE_PENDING); }
-
+        MovementGeneratorType GetMovementGeneratorType()
+        {
+            return CONFUSED_MOTION_TYPE;
+        }
     private:
-        std::unique_ptr<PathGenerator> _path;
-        TimeTracker _timer;
-        float _x, _y, _z;
+        TimeTracker i_nextMoveTime;
+        float i_x, i_y, i_z;
 };
-
 #endif
+

@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,68 +18,106 @@
 #ifndef QUERYRESULT_H
 #define QUERYRESULT_H
 
-#include "Define.h"
-#include "DatabaseEnvFwd.h"
-#include <vector>
+#include <ace/Refcounted_Auto_Ptr.h>
+#include <ace/Null_Mutex.h>
+#include <stdexcept>
 
-class TC_DATABASE_API ResultSet
+#include "Field.h"
+#include "Utilities/UnorderedMap.h"
+
+#ifdef WIN32
+#include <winsock2.h>
+#endif
+#include <mysql.h>
+
+class QueryResult
 {
     public:
-        ResultSet(MySQLResult* result, MySQLField* fields, uint64 rowCount, uint32 fieldCount);
-        ~ResultSet();
+        QueryResult(MYSQL_RES* result, MYSQL_FIELD* fields, uint64 rowCount, uint32 fieldCount);
+        ~QueryResult();
 
         bool NextRow();
-        uint64 GetRowCount() const { return _rowCount; }
-        uint32 GetFieldCount() const { return _fieldCount; }
 
-        Field* Fetch() const { return _currentRow; }
-        Field const& operator[](std::size_t index) const;
+        Field* Fetch() const { return mCurrentRow; }
+        Field const& operator [] (int index) const { return mCurrentRow[index]; }
+        Field const& operator [] (const char* name) const { return mCurrentRow[GetField_idx(name)]; }
+
+        uint32 GetFieldCount() const { return mFieldCount; }
+        uint64 GetRowCount() const { return mRowCount; }
+
+        size_t GetField_idx(const char* name) const
+        {
+            for (size_t i = 0; i < mFieldCount; ++i)
+                if (!strcmp(name, mFields[i].name))
+                    return i;
+
+            std::string err = "No column named ";
+            err += name;
+            err += "in field list!";
+            throw std::invalid_argument(err);
+        }
+        const char* GetFieldName(size_t i)
+        {
+            if (i < mFieldCount)
+                return mFields[i].name;
+
+            return "No column named";
+        }
 
     protected:
-        std::vector<QueryResultFieldMetadata> _fieldMetadata;
-        uint64 _rowCount;
-        Field* _currentRow;
-        uint32 _fieldCount;
-
+        Field* mCurrentRow;
+        uint32 mFieldCount;
+        uint64 mRowCount;
+        MYSQL_FIELD* mFields;
+    
     private:
-        void CleanUp();
-        MySQLResult* _result;
-        MySQLField* _fields;
-
-        ResultSet(ResultSet const& right) = delete;
-        ResultSet& operator=(ResultSet const& right) = delete;
+        void EndQuery();
+        
+        MYSQL_RES* mResult;
 };
 
-class TC_DATABASE_API PreparedResultSet
+class PreparedQueryResult
 {
     public:
-        PreparedResultSet(MySQLStmt* stmt, MySQLResult* result, uint64 rowCount, uint32 fieldCount);
-        ~PreparedResultSet();
+        PreparedQueryResult(MYSQL_STMT* stmt);
+        ~PreparedQueryResult();
 
         bool NextRow();
-        uint64 GetRowCount() const { return m_rowCount; }
-        uint32 GetFieldCount() const { return m_fieldCount; }
 
-        Field* Fetch() const;
-        Field const& operator[](std::size_t index) const;
+        Field* Fetch() const { return mCurrentRow; }
+        Field const& operator [] (int index) const { return mCurrentRow[index]; }
+        Field const& operator [] (const char* name) const { return mCurrentRow[GetField_idx(name)]; }
+
+        uint32 GetFieldCount() const { return mFieldCount; }
+        uint64 GetRowCount() const { return mRowCount; }
+
+        size_t GetField_idx(const char* name) const
+        {
+            for (size_t i = 0; i < mFieldCount; ++i)
+                if (!strcmp(name, mFields[i].name))
+                    return i;
+
+            std::string err = "No column named ";
+            err += name;
+            err += "in field list!";
+            throw std::invalid_argument(err);
+        }
 
     protected:
-        std::vector<QueryResultFieldMetadata> m_fieldMetadata;
-        std::vector<Field> m_rows;
-        uint64 m_rowCount;
-        uint64 m_rowPosition;
-        uint32 m_fieldCount;
-
+        Field* mCurrentRow;
+        uint32 mFieldCount;
+        uint64 mRowCount;
+        MYSQL_FIELD* mFields;
+    
     private:
-        MySQLBind* m_rBind;
-        MySQLStmt* m_stmt;
-        MySQLResult* m_metadataResult;    ///< Field metadata, returned by mysql_stmt_result_metadata
+        void EndQuery();
 
-        void CleanUp();
-        bool _NextRow();
-
-        PreparedResultSet(PreparedResultSet const& right) = delete;
-        PreparedResultSet& operator=(PreparedResultSet const& right) = delete;
+        std::vector<Field*> mRows;
+        size_t mCursor;
+        MYSQL_RES* mMetaData;
 };
+
+typedef ACE_Refcounted_Auto_Ptr<QueryResult, ACE_Null_Mutex> QueryResult_AutoPtr;
+typedef ACE_Refcounted_Auto_Ptr<PreparedQueryResult, ACE_Null_Mutex> PreparedQueryResult_AutoPtr;
 
 #endif

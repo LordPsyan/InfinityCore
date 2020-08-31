@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,34 +18,36 @@
 #ifndef _INTERMEDIATE_VALUES_H
 #define _INTERMEDIATE_VALUES_H
 
-#include "PathCommon.h"
+#include "MMapCommon.h"
 #include "TerrainBuilder.h"
+
 #include "Recast.h"
+#include "DetourNavMesh.h"
 
 namespace MMAP
 {
-    // this class gathers all debug info holding and output
-    struct IntermediateValues
-    {
-        rcHeightfield* heightfield;
-        rcCompactHeightfield* compactHeightfield;
-        rcContourSet* contours;
-        rcPolyMesh* polyMesh;
-        rcPolyMeshDetail* polyMeshDetail;
+// this class gathers all debug info holding and output
+struct IntermediateValues
+{
+    rcCompactHeightfield* compactHeightfield;
+    rcHeightfield* heightfield;
+    rcContourSet* contours;
+    rcPolyMesh* polyMesh;
+    rcPolyMeshDetail* polyMeshDetail;
 
-        IntermediateValues() :  heightfield(nullptr), compactHeightfield(nullptr),
-                                contours(nullptr), polyMesh(nullptr), polyMeshDetail(nullptr) {}
-        ~IntermediateValues();
+    IntermediateValues() :  compactHeightfield(NULL), heightfield(NULL),
+        contours(NULL), polyMesh(NULL), polyMeshDetail(NULL) {}
+    ~IntermediateValues();
 
-        void writeIV(uint32 mapID, uint32 tileX, uint32 tileY);
+    void writeIV(uint32 mapID, uint32 tileX, uint32 tileY);
 
-        void debugWrite(FILE* file, rcHeightfield const* mesh);
-        void debugWrite(FILE* file, rcCompactHeightfield const* chf);
-        void debugWrite(FILE* file, rcContourSet const* cs);
-        void debugWrite(FILE* file, rcPolyMesh const* mesh);
-        void debugWrite(FILE* file, rcPolyMeshDetail const* mesh);
+    void debugWrite(FILE* file, const rcHeightfield* mesh);
+    void debugWrite(FILE* file, const rcCompactHeightfield* chf);
+    void debugWrite(FILE* file, const rcContourSet* cs);
+    void debugWrite(FILE* file, const rcPolyMesh* mesh);
+    void debugWrite(FILE* file, const rcPolyMeshDetail* mesh);
 
-        void generateObjFile(uint32 mapID, uint32 tileX, uint32 tileY, MeshData &meshData);
-    };
+    void generateObjFile(uint32 mapID, uint32 tileX, uint32 tileY, MeshData& meshData);
+};
 }
 #endif

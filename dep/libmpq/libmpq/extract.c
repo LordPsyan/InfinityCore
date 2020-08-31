@@ -49,7 +49,6 @@ static decompress_table_s dcmp_table[] = {
 /* this function decompress a stream using huffman algorithm. */
 int32_t libmpq__decompress_huffman(uint8_t *in_buf, uint32_t in_size, uint8_t *out_buf, uint32_t out_size) {
 
-    (void)in_size;
 	/* TODO: make typdefs of this structs? */
 	/* some common variables. */
 	int32_t tb     = 0;
@@ -57,13 +56,9 @@ int32_t libmpq__decompress_huffman(uint8_t *in_buf, uint32_t in_size, uint8_t *o
 	struct huffman_input_stream_s *is;
 
 	/* allocate memory for the huffman tree. */
-    if ((ht = malloc(sizeof(struct huffman_tree_s))) == NULL) {
-        /* memory allocation problem. */
-        return LIBMPQ_ERROR_MALLOC;
-    }
+	if ((ht = malloc(sizeof(struct huffman_tree_s))) == NULL ||
+	    (is = malloc(sizeof(struct huffman_input_stream_s))) == NULL) {
 
-    if ((is = malloc(sizeof(struct huffman_input_stream_s))) == NULL) {
-        free(ht);
 		/* memory allocation problem. */
 		return LIBMPQ_ERROR_MALLOC;
 	}

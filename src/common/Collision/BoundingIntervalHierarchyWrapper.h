@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,10 +18,10 @@
 #ifndef _BIH_WRAP
 #define _BIH_WRAP
 
+#include "G3D/Table.h"
+#include "G3D/Array.h"
+#include "G3D/Set.h"
 #include "BoundingIntervalHierarchy.h"
-#include <G3D/Table.h>
-#include <G3D/Array.h>
-#include <G3D/Set.h>
 
 
 template<class T, class BoundsFunc = BoundsTrait<T> >
@@ -34,24 +34,22 @@ class BIHWrap
         RayCallback& _callback;
         uint32 objects_size;
 
-        MDLCallback(RayCallback& callback, const T* const* objects_array, uint32 objects_size ) : objects(objects_array), _callback(callback), objects_size(objects_size) { }
+        MDLCallback(RayCallback& callback, const T* const* objects_array, uint32 objects_size) : objects(objects_array), _callback(callback), objects_size(objects_size) {}
 
-        /// Intersect ray
-        bool operator() (const G3D::Ray& ray, uint32 idx, float& maxDist, bool /*stopAtFirst*/)
+        bool operator() (const Ray& ray, uint32 Idx, float& MaxDist, bool /*stopAtFirst*/)
         {
-            if (idx >= objects_size)
+            if (Idx >= objects_size)
                 return false;
-            if (const T* obj = objects[idx])
-                return _callback(ray, *obj, maxDist/*, stopAtFirst*/);
+            if (const T* obj = objects[Idx])
+                return _callback(ray, *obj, MaxDist/*, stopAtFirst*/);
             return false;
         }
 
-        /// Intersect point
-        void operator() (const G3D::Vector3& p, uint32 idx)
+        void operator() (const Vector3& p, uint32 Idx)
         {
-            if (idx >= objects_size)
+             if (Idx >= objects_size)
                 return;
-            if (const T* obj = objects[idx])
+            if (const T* obj = objects[Idx])
                 _callback(p, *obj);
         }
     };
@@ -65,7 +63,7 @@ class BIHWrap
     int unbalanced_times;
 
 public:
-    BIHWrap() : unbalanced_times(0) { }
+    BIHWrap() : unbalanced_times(0) {}
 
     void insert(const T& obj)
     {
@@ -79,7 +77,7 @@ public:
         uint32 Idx = 0;
         const T * temp;
         if (m_obj2Idx.getRemove(&obj, temp, Idx))
-            m_objects[Idx] = nullptr;
+            m_objects[Idx] = NULL;
         else
             m_objects_to_push.remove(&obj);
     }
@@ -93,13 +91,13 @@ public:
         m_objects.fastClear();
         m_obj2Idx.getKeys(m_objects);
         m_objects_to_push.getMembers(m_objects);
-        //assert that m_obj2Idx has all the keys
+        //assert that m_obj2Idx has all the keys 
 
         m_tree.build(m_objects, BoundsFunc::getBounds2);
     }
 
     template<typename RayCallback>
-    void intersectRay(const G3D::Ray& ray, RayCallback& intersectCallback, float& maxDist)
+    void intersectRay(const Ray& ray, RayCallback& intersectCallback, float& maxDist)
     {
         balance();
         MDLCallback<RayCallback> temp_cb(intersectCallback, m_objects.getCArray(), m_objects.size());
@@ -107,7 +105,7 @@ public:
     }
 
     template<typename IsectCallback>
-    void intersectPoint(const G3D::Vector3& point, IsectCallback& intersectCallback)
+    void intersectPoint(const Vector3& point, IsectCallback& intersectCallback)
     {
         balance();
         MDLCallback<IsectCallback> callback(intersectCallback, m_objects.getCArray(), m_objects.size());

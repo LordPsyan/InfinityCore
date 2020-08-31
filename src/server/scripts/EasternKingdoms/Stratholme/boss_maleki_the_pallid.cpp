@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,33 +15,22 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: boss_maleki_the_pallid
-SD%Complete: 100
-SDComment:
-SDCategory: Stratholme
-EndScriptData */
+ /* ScriptData
+ SDName: boss_maleki_the_pallid
+ SD%Complete: 100
+ SDComment:
+ SDCategory: Stratholme
+ EndScriptData */
 
 #include "ScriptMgr.h"
-#include "InstanceScript.h"
 #include "ScriptedCreature.h"
 #include "stratholme.h"
 
-enum Spells
-{
-    SPELL_FROSTBOLT     = 17503,
-    SPELL_DRAINLIFE     = 20743,
-    SPELL_DRAIN_MANA    = 17243,
-    SPELL_ICETOMB       = 16869
-};
+#define SPELL_FROSTBOLT    17503
+#define SPELL_DRAINLIFE    20743
+#define SPELL_DRAIN_MANA    17243
+#define SPELL_ICETOMB    16869
 
-enum MalekiEvents
-{
-    EVENT_FROSTBOLT     = 1,
-    EVENT_DRAINLIFE     = 2,
-    EVENT_DRAIN_MANA    = 3,
-    EVENT_ICETOMB       = 4
-};
 
 class boss_maleki_the_pallid : public CreatureScript
 {
@@ -50,78 +39,80 @@ public:
 
     struct boss_maleki_the_pallidAI : public ScriptedAI
     {
-        boss_maleki_the_pallidAI(Creature* creature) : ScriptedAI(creature)
+        boss_maleki_the_pallidAI(Creature* c) : ScriptedAI(c)
         {
-            instance = me->GetInstanceScript();
+            pInstance = (ScriptedInstance*)me->GetInstanceData();
         }
 
-        void Reset() override
+        ScriptedInstance* pInstance;
+
+        uint32 Frostbolt_Timer;
+        uint32 IceTomb_Timer;
+        uint32 DrainLife_Timer;
+
+        void Reset()
         {
-            _events.Reset();
+            Frostbolt_Timer = 1000;
+            IceTomb_Timer = 16000;
+            DrainLife_Timer = 31000;
         }
 
-        void JustEngagedWith(Unit* /*who*/) override
+        void EnterCombat(Unit* /*who*/)
         {
-            _events.ScheduleEvent(EVENT_FROSTBOLT, 1s);
-            _events.ScheduleEvent(EVENT_ICETOMB, 16s);
-            _events.ScheduleEvent(EVENT_DRAINLIFE, 31s);
         }
 
-        void JustDied(Unit* /*killer*/) override
+        void JustDied(Unit* /*Killer*/)
         {
-            instance->SetData(TYPE_PALLID, IN_PROGRESS);
+            if (pInstance)
+                pInstance->SetData(TYPE_PALLID, IN_PROGRESS);
         }
 
-        void UpdateAI(uint32 diff) override
+        void UpdateAI(const uint32 diff)
         {
             //Return since we have no target
             if (!UpdateVictim())
                 return;
 
-            _events.Update(diff);
-
-            if (me->HasUnitState(UNIT_STATE_CASTING))
-                return;
-
-            while (uint32 eventId = _events.ExecuteEvent())
+            //Frostbolt
+            if (Frostbolt_Timer <= diff)
             {
-                switch (eventId)
-                {
-                    case EVENT_FROSTBOLT:
-                        if (rand32() % 90)
-                            DoCastVictim(SPELL_FROSTBOLT);
-                        _events.ScheduleEvent(EVENT_FROSTBOLT, 3500ms);
-                        break;
-                    case EVENT_ICETOMB:
-                        if (rand32() % 65)
-                            DoCastVictim(SPELL_ICETOMB);
-                        _events.ScheduleEvent(EVENT_ICETOMB, 28s);
-                        break;
-                    case EVENT_DRAINLIFE:
-                        if (rand32() % 55)
-                            DoCastVictim(SPELL_DRAINLIFE);
-                        _events.ScheduleEvent(EVENT_DRAINLIFE, 31s);
-                        break;
-                    default:
-                        break;
-                }
+                if (rand() % 100 < 90)
+                    DoCastVictim(SPELL_FROSTBOLT);
+                Frostbolt_Timer = 3500;
             }
+            else Frostbolt_Timer -= diff;
+
+            //IceTomb
+            if (IceTomb_Timer <= diff)
+            {
+                if (rand() % 100 < 65)
+                    DoCastVictim(SPELL_ICETOMB);
+                IceTomb_Timer = 28000;
+            }
+            else IceTomb_Timer -= diff;
+
+            //DrainLife
+            if (DrainLife_Timer <= diff)
+            {
+                if (rand() % 100 < 55)
+                    DoCastVictim(SPELL_DRAINLIFE);
+                DrainLife_Timer = 31000;
+            }
+            else DrainLife_Timer -= diff;
 
             DoMeleeAttackIfReady();
         }
-
-    private:
-        EventMap _events;
-        InstanceScript* instance;
     };
 
-    CreatureAI* GetAI(Creature* creature) const override
+    CreatureAI* GetAI(Creature* pCreature) const
     {
-        return GetStratholmeAI<boss_maleki_the_pallidAI>(creature);
+        return new boss_maleki_the_pallidAI(pCreature);
     }
+
 };
 
 void AddSC_boss_maleki_the_pallid()
 {
     new boss_maleki_the_pallid();
 }
+

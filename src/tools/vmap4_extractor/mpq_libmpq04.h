@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,11 +20,13 @@
 
 #include "loadlib/loadlib.h"
 #include "libmpq/mpq.h"
-
 #include <string.h>
-#include <string>
+#include <ctype.h>
 #include <vector>
+#include <iostream>
 #include <deque>
+
+using namespace std;
 
 class MPQArchive
 {
@@ -32,16 +34,17 @@ class MPQArchive
 public:
     mpq_archive_s *mpq_a;
 
-    MPQArchive(char const* filename);
-    ~MPQArchive() { if (isOpened()) close(); }
+    MPQArchive(const char* filename);
+    ~MPQArchive() { close(); }
+    void close();
 
-    void GetFileListTo(std::vector<std::string>& filelist) {
+    void GetFileListTo(vector<string>& filelist) {
         uint32_t filenum;
         if(libmpq__file_number(mpq_a, "(listfile)", &filenum)) return;
         libmpq__off_t size, transferred;
         libmpq__file_size_unpacked(mpq_a, filenum, &size);
 
-        char *buffer = new char[size + 1];
+        char *buffer = new char[size+1];
         buffer[size] = '\0';
 
         libmpq__file_read(mpq_a, filenum, (unsigned char*)buffer, size, &transferred);
@@ -51,21 +54,17 @@ public:
 
         token = strtok( buffer, seps );
         uint32 counter = 0;
-        while ((token != nullptr) && (counter < size)) {
+        while ((token != NULL) && (counter < size)) {
             //cout << token << endl;
             token[strlen(token) - 1] = 0;
-            std::string s = token;
+            string s = token;
             filelist.push_back(s);
             counter += strlen(token) + 2;
-            token = strtok(nullptr, seps);
+            token = strtok(NULL, seps);
         }
 
         delete[] buffer;
     }
-
-private:
-    void close();
-    bool isOpened() const;
 };
 typedef std::deque<MPQArchive*> ArchiveSet;
 
@@ -76,11 +75,12 @@ class MPQFile
     char *buffer;
     libmpq__off_t pointer,size;
 
-    MPQFile(MPQFile const& /*f*/) = delete;
-    void operator=(MPQFile const& /*f*/) = delete;
+    // disable copying
+    MPQFile(const MPQFile& /*f*/) {}
+    void operator=(const MPQFile& /*f*/) {}
 
 public:
-    MPQFile(char const* filename);    // filenames are not case sensitive
+    MPQFile(const char* filename);    // filenames are not case sensitive
     ~MPQFile() { close(); }
     size_t read(void* dest, size_t bytes);
     size_t getSize() { return size; }
@@ -95,8 +95,13 @@ public:
 
 inline void flipcc(char *fcc)
 {
-    std::swap(fcc[0], fcc[3]);
-    std::swap(fcc[1], fcc[2]);
+    char t;
+    t=fcc[0];
+    fcc[0]=fcc[3];
+    fcc[3]=t;
+    t=fcc[1];
+    fcc[1]=fcc[2];
+    fcc[2]=t;
 }
 
 #endif

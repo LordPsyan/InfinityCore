@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,6 +15,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "Player.h"
 #include "Group.h"
 #include "GroupReference.h"
 
@@ -27,11 +28,12 @@ void GroupReference::targetObjectBuildLink()
 void GroupReference::targetObjectDestroyLink()
 {
     // called from unlink()
-    //getTarget()->DelinkMember(this);
+    getTarget()->DelinkMember(this);
 }
 
 void GroupReference::sourceObjectDestroyLink()
 {
     // called from invalidate()
-    //getTarget()->DelinkMember(this);
+    getTarget()->DelinkMember(this);
 }
+

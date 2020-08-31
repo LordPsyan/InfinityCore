@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,17 +18,5 @@
 #ifndef DEF_RAZORFEN_KRAUL_H
 #define DEF_RAZORFEN_KRAUL_H
 
-#include "CreatureAIImpl.h"
-
-#define RFKScriptName "instance_razorfen_kraul"
-#define DataHeader "RFK"
-
-#define EVENT_WARD_KEEPER 1
-
-template <class AI, class T>
-inline AI* GetRazorfenKraulAI(T* obj)
-{
-    return GetInstanceAI<AI>(obj, RFKScriptName);
-}
-
+#define TYPE_WARD_KEEPERS       1
 #endif

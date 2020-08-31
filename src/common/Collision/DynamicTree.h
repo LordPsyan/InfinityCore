@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,55 +15,41 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 #ifndef _DYNTREE_H
 #define _DYNTREE_H
 
-#include "Define.h"
+#include "Platform/Define.h"
 
 namespace G3D
 {
-    class Ray;
     class Vector3;
+    class Matrix3;
+    class AABox;
+    class Ray;
 }
 
 class GameObjectModel;
-struct DynTreeImpl;
 
-namespace VMAP
+class DynamicMapTree
 {
-    struct AreaAndLiquidData;
-}
+    public:
+        DynamicMapTree();
+        ~DynamicMapTree();
 
-class TC_COMMON_API DynamicMapTree
-{
-    DynTreeImpl *impl;
+        bool isInLineOfSight(float x1, float y1, float z1, float x2, float y2, float z2) const;
+        bool getIntersectionTime(const G3D::Ray& ray, const G3D::Vector3& endPos, float& maxDist) const;
+        bool getObjectHitPos(const G3D::Vector3& pPos1, const G3D::Vector3& pPos2, G3D::Vector3& pResultHitPos, float pModifyDist) const;
+        float getHeight(float x, float y, float z, float maxSearchDist) const;
 
-public:
+        void insert(const GameObjectModel&);
+        void remove(const GameObjectModel&);
+        bool contains(const GameObjectModel&) const;
+        int size() const;
 
-    DynamicMapTree();
-    ~DynamicMapTree();
-
-    bool isInLineOfSight(float x1, float y1, float z1, float x2, float y2,
-                         float z2, uint32 phasemask) const;
-
-    bool getIntersectionTime(uint32 phasemask, const G3D::Ray& ray,
-                             const G3D::Vector3& endPos, float& maxDist) const;
-    bool getAreaInfo(float x, float y, float& z, uint32 phasemask, uint32& flags, int32& adtId, int32& rootId, int32& groupId) const;
-    void getAreaAndLiquidData(float x, float y, float z, uint32 phasemask, uint8 reqLiquidType, VMAP::AreaAndLiquidData& data) const;
-
-    bool getObjectHitPos(uint32 phasemask, const G3D::Vector3& pPos1,
-                         const G3D::Vector3& pPos2, G3D::Vector3& pResultHitPos,
-                         float pModifyDist) const;
-
-    float getHeight(float x, float y, float z, float maxSearchDist, uint32 phasemask) const;
-
-    void insert(GameObjectModel const&);
-    void remove(GameObjectModel const&);
-    bool contains(GameObjectModel const&) const;
-
-    void balance();
-    void update(uint32 diff);
+        void balance();
+        void update(uint32 diff);
+    private:
+        struct DynTreeImpl& impl;
 };
 
 #endif // _DYNTREE_H

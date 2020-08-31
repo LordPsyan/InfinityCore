@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,143 +15,129 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+ /* ScriptData
+ SDName: Boss_Amnennar_the_coldbringer
+ SD%Complete: 100
+ SDComment:
+ SDCategory: Razorfen Downs
+ EndScriptData */
+
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
-#include "razorfen_downs.h"
 
-enum Say
-{
-    SAY_AGGRO               = 0,
-    SAY_SUMMON60            = 1,
-    SAY_SUMMON30            = 2,
-    SAY_HP                  = 3,
-    SAY_KILL                = 4
-};
+#define SAY_AGGRO               -1129000
+#define SAY_SUMMON60            -1129001
+#define SAY_SUMMON30            -1129002
+#define SAY_HP                  -1129003
+#define SAY_KILL                -1129004
 
-enum Spells
-{
-    SPELL_AMNENNARSWRATH    = 13009,
-    SPELL_FROSTBOLT         = 15530,
-    SPELL_FROST_NOVA        = 15531,
-    SPELL_FROST_SPECTRES    = 12642
-};
+#define SPELL_AMNENNARSWRATH    13009
+#define SPELL_FROSTBOLT         15530
+#define SPELL_FROST_NOVA        15531
+#define SPELL_FROST_SPECTRES    12642
 
-enum Events
-{
-    EVENT_AMNENNARSWRATH    = 1,
-    EVENT_FROSTBOLT         = 2,
-    EVENT_FROST_NOVA        = 3
-};
 
 class boss_amnennar_the_coldbringer : public CreatureScript
 {
 public:
     boss_amnennar_the_coldbringer() : CreatureScript("boss_amnennar_the_coldbringer") { }
 
-    struct boss_amnennar_the_coldbringerAI : public BossAI
+    struct boss_amnennar_the_coldbringerAI : public ScriptedAI
     {
-        boss_amnennar_the_coldbringerAI(Creature* creature) : BossAI(creature, DATA_AMNENNAR_THE_COLD_BRINGER)
+        boss_amnennar_the_coldbringerAI(Creature* c) : ScriptedAI(c) {}
+
+        uint32 AmnenarsWrath_Timer;
+        uint32 FrostBolt_Timer;
+        uint32 FrostNova_Timer;
+        bool Spectrals70;
+        bool Spectrals55;
+        bool Spectrals30;
+        bool Hp;
+
+        void Reset()
         {
-            Initialize();
+            AmnenarsWrath_Timer = 8000;
+            FrostBolt_Timer = 1000;
+            FrostNova_Timer = 10000 + rand() % 5000;
+            Spectrals70 = false;
+            Spectrals55 = false;
+            Spectrals30 = false;
+            Hp = false;
         }
 
-        void Initialize()
+        void EnterCombat(Unit* /*who*/)
         {
-            hp60Spectrals = false;
-            hp30Spectrals = false;
-            hp50 = false;
+            DoScriptText(SAY_AGGRO, me);
         }
 
-        void Reset() override
+        void KilledUnit()
         {
-            _Reset();
-            Initialize();
+            DoScriptText(SAY_KILL, me);
         }
 
-        void JustEngagedWith(Unit* who) override
-        {
-            BossAI::JustEngagedWith(who);
-            events.ScheduleEvent(EVENT_AMNENNARSWRATH, 8s);
-            events.ScheduleEvent(EVENT_FROSTBOLT, 1s);
-            events.ScheduleEvent(EVENT_FROST_NOVA, 10s, 15s);
-            Talk(SAY_AGGRO);
-        }
-
-        void KilledUnit(Unit* who) override
-        {
-            if (who->GetTypeId() == TYPEID_PLAYER)
-                Talk(SAY_KILL);
-        }
-
-        void JustDied(Unit* /*killer*/) override
-        {
-            _JustDied();
-        }
-
-        void UpdateAI(uint32 diff) override
+        void UpdateAI(const uint32 diff)
         {
             if (!UpdateVictim())
                 return;
 
-            events.Update(diff);
-
-            if (me->HasUnitState(UNIT_STATE_CASTING))
-                return;
-
-            while (uint32 eventId = events.ExecuteEvent())
+            //AmnenarsWrath_Timer
+            if (AmnenarsWrath_Timer <= diff)
             {
-                switch (eventId)
-                {
-                    case EVENT_AMNENNARSWRATH:
-                        DoCastVictim(SPELL_AMNENNARSWRATH);
-                        events.ScheduleEvent(EVENT_AMNENNARSWRATH, 12s);
-                        break;
-                    case EVENT_FROSTBOLT:
-                        DoCastVictim(SPELL_FROSTBOLT);
-                        events.ScheduleEvent(EVENT_FROSTBOLT, 8s);
-                        break;
-                    case EVENT_FROST_NOVA:
-                        DoCast(me, SPELL_FROST_NOVA);
-                        events.ScheduleEvent(EVENT_FROST_NOVA, 15s);
-                        break;
-                }
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
+                DoCastVictim(SPELL_AMNENNARSWRATH);
+                AmnenarsWrath_Timer = 12000;
             }
+            else AmnenarsWrath_Timer -= diff;
 
-            if (!hp60Spectrals && HealthBelowPct(60))
+            //FrostBolt_Timer
+            if (FrostBolt_Timer <= diff)
             {
-                Talk(SAY_SUMMON60);
+                DoCastVictim(SPELL_FROSTBOLT);
+                FrostBolt_Timer = 8000;
+            }
+            else FrostBolt_Timer -= diff;
+
+            if (FrostNova_Timer <= diff)
+            {
+                DoCast(me, SPELL_FROST_NOVA);
+                FrostNova_Timer = 15000;
+            }
+            else FrostNova_Timer -= diff;
+
+            if (!Spectrals70 && HealthBelowPct(70))
+            {
+                DoScriptText(SAY_SUMMON60, me);
                 DoCastVictim(SPELL_FROST_SPECTRES);
-                hp60Spectrals = true;
+                Spectrals70 = true;
             }
 
-            if (!hp50 && HealthBelowPct(50))
+            if (!Hp && HealthBelowPct(50))
             {
-                Talk(SAY_HP);
-                hp50 = true;
+                DoScriptText(SAY_HP, me);
+                Hp = true;
             }
 
-            if (!hp30Spectrals && HealthBelowPct(30))
+            if (!Spectrals55 && HealthBelowPct(55))
             {
-                Talk(SAY_SUMMON30);
+                DoScriptText(SAY_SUMMON30, me);
                 DoCastVictim(SPELL_FROST_SPECTRES);
-                hp30Spectrals = true;
+                Spectrals55 = true;
+            }
+
+
+            if (!Spectrals30 && HealthBelowPct(30))
+            {
+                DoScriptText(SAY_SUMMON30, me);
+                DoCastVictim(SPELL_FROST_SPECTRES);
+                Spectrals30 = true;
             }
 
             DoMeleeAttackIfReady();
         }
-
-    private:
-        bool hp60Spectrals;
-        bool hp30Spectrals;
-        bool hp50;
     };
 
-    CreatureAI* GetAI(Creature* creature) const override
+    CreatureAI* GetAI(Creature* pCreature) const
     {
-        return GetRazorfenDownsAI<boss_amnennar_the_coldbringerAI>(creature);
+        return new boss_amnennar_the_coldbringerAI(pCreature);
     }
 };
 
@@ -159,3 +145,4 @@ void AddSC_boss_amnennar_the_coldbringer()
 {
     new boss_amnennar_the_coldbringer();
 }
+

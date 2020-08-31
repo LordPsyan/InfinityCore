@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,209 +15,247 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "zulgurub.h"
-#include "DBCStructure.h"
-#include "InstanceScript.h"
-#include "Player.h"
-#include "ScriptedCreature.h"
+ /* ScriptData
+ SDName: Boss_Hakkar
+ SD%Complete: 95
+ SDComment: Blood siphon spell buggy cause of Core Issue.
+ SDCategory: Zul'Gurub
+ EndScriptData */
+
 #include "ScriptMgr.h"
+#include "ScriptedCreature.h"
+#include "zulgurub.h"
 
-enum Says
-{
-    SAY_AGGRO                   = 0,
-    SAY_FLEEING                 = 1,
-    SAY_MINION_DESTROY          = 2,
-    SAY_PROTECT_ALTAR           = 3,
-    SAY_ENTRANCE                = 4
-};
+#define SAY_AGGRO                   -1309020
+#define SAY_FLEEING                 -1309021
+#define SAY_MINION_DESTROY          -1309022                //where does it belong?
+#define SAY_PROTECT_ALTAR           -1309023                //where does it belong?
 
-enum Spells
-{
-    SPELL_BLOOD_SIPHON          = 24322, // Buggy ?
-    SPELL_CORRUPTED_BLOOD       = 24328,
-    SPELL_CAUSE_INSANITY        = 24327, // Spell needs scripting.
-    SPELL_WILL_OF_HAKKAR        = 24178,
-    SPELL_ENRAGE                = 24318,
+#define SPELL_BLOODSIPHON            24322
+#define SPELL_CORRUPTEDBLOOD         24328
+#define SPELL_CAUSEINSANITY          24327                  //Not working disabled.
+#define SPELL_WILLOFHAKKAR           24178
+#define SPELL_ENRAGE                 24318
 
-    // The Aspects of all High Priests spells
-    SPELL_ASPECT_OF_JEKLIK      = 24687,
-    SPELL_ASPECT_OF_VENOXIS     = 24688,
-    SPELL_ASPECT_OF_MARLI       = 24686,
-    SPELL_ASPECT_OF_THEKAL      = 24689,
-    SPELL_ASPECT_OF_ARLOKK      = 24690
-};
+ // The Aspects of all High Priests
+#define SPELL_ASPECT_OF_JEKLIK       24687
+#define SPELL_ASPECT_OF_VENOXIS      24688
+#define SPELL_ASPECT_OF_MARLI        24686
+#define SPELL_ASPECT_OF_THEKAL       24689
+#define SPELL_ASPECT_OF_ARLOKK       24690
 
-enum Events
-{
-    EVENT_BLOOD_SIPHON          = 1,
-    EVENT_CORRUPTED_BLOOD       = 2,
-    EVENT_CAUSE_INSANITY        = 3,     // Spell needs scripting. Event disabled
-    EVENT_WILL_OF_HAKKAR        = 4,
-    EVENT_ENRAGE                = 5,
-
-    // The Aspects of all High Priests events
-    EVENT_ASPECT_OF_JEKLIK      = 6,
-    EVENT_ASPECT_OF_VENOXIS     = 7,
-    EVENT_ASPECT_OF_MARLI       = 8,
-    EVENT_ASPECT_OF_THEKAL      = 9,
-    EVENT_ASPECT_OF_ARLOKK      = 10
-};
 
 class boss_hakkar : public CreatureScript
 {
-    public:
-        boss_hakkar() : CreatureScript("boss_hakkar") { }
-
-        struct boss_hakkarAI : public BossAI
-        {
-            boss_hakkarAI(Creature* creature) : BossAI(creature, DATA_HAKKAR) { }
-
-            void Reset() override
-            {
-                _Reset();
-            }
-
-            void JustDied(Unit* /*killer*/) override
-            {
-                _JustDied();
-            }
-
-            void JustEngagedWith(Unit* who) override
-            {
-                BossAI::JustEngagedWith(who);
-                events.ScheduleEvent(EVENT_BLOOD_SIPHON, 90s);
-                events.ScheduleEvent(EVENT_CORRUPTED_BLOOD, 25s);
-                events.ScheduleEvent(EVENT_CAUSE_INSANITY, 15s);
-                events.ScheduleEvent(EVENT_WILL_OF_HAKKAR, 15s);
-                events.ScheduleEvent(EVENT_ENRAGE, 10min);
-                if (instance->GetBossState(DATA_JEKLIK) != DONE)
-                    events.ScheduleEvent(EVENT_ASPECT_OF_JEKLIK, 4s);
-                if (instance->GetBossState(DATA_VENOXIS) != DONE)
-                    events.ScheduleEvent(EVENT_ASPECT_OF_VENOXIS, 7s);
-                if (instance->GetBossState(DATA_MARLI) != DONE)
-                    events.ScheduleEvent(EVENT_ASPECT_OF_MARLI, 12s);
-                if (instance->GetBossState(DATA_THEKAL) != DONE)
-                    events.ScheduleEvent(EVENT_ASPECT_OF_THEKAL, 8s);
-                if (instance->GetBossState(DATA_ARLOKK) != DONE)
-                    events.ScheduleEvent(EVENT_ASPECT_OF_ARLOKK, 18s);
-                Talk(SAY_AGGRO);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_BLOOD_SIPHON:
-                            DoCastVictim(SPELL_BLOOD_SIPHON, true);
-                            events.ScheduleEvent(EVENT_BLOOD_SIPHON, 90s);
-                            break;
-                        case EVENT_CORRUPTED_BLOOD:
-                            DoCastVictim(SPELL_CORRUPTED_BLOOD, true);
-                            events.ScheduleEvent(EVENT_CORRUPTED_BLOOD, 30s, 45s);
-                            break;
-                        case EVENT_CAUSE_INSANITY:
-                            // DoCast(SelectTarget(SelectTargetMethod::Random, 0, 100, true), SPELL_CAUSE_INSANITY);
-                            // events.ScheduleEvent(EVENT_CAUSE_INSANITY, 35s, 45s);
-                            break;
-                        case EVENT_WILL_OF_HAKKAR:
-                        {
-                            // Mind Control is only triggered when there is more than one unit currently fighting Hakkar, including pets/guardians
-                            // But it is only actually cast on the player with the highest threat
-                            std::list<Unit*> unitList;
-                            SelectTargetList(unitList, 2, SelectTargetMethod::MaxThreat, 0, 0.0f, false);
-                            if (unitList.size() > 1)
-                                DoCast(SelectTarget(SelectTargetMethod::MaxThreat, 0, 100, true), SPELL_WILL_OF_HAKKAR);
-                            events.ScheduleEvent(EVENT_WILL_OF_HAKKAR, 25s, 35s);
-                            break;
-                        }
-                        case EVENT_ENRAGE:
-                            if (!me->HasAura(SPELL_ENRAGE))
-                                DoCast(me, SPELL_ENRAGE);
-                            events.ScheduleEvent(EVENT_ENRAGE, 90s);
-                            break;
-                        case EVENT_ASPECT_OF_JEKLIK:
-                            DoCastVictim(SPELL_ASPECT_OF_JEKLIK, true);
-                            events.ScheduleEvent(EVENT_ASPECT_OF_JEKLIK, 10s, 14s);
-                            break;
-                        case EVENT_ASPECT_OF_VENOXIS:
-                            DoCastVictim(SPELL_ASPECT_OF_VENOXIS, true);
-                            events.ScheduleEvent(EVENT_ASPECT_OF_VENOXIS, 8s);
-                            break;
-                        case EVENT_ASPECT_OF_MARLI:
-                            DoCastVictim(SPELL_ASPECT_OF_MARLI, true);
-                            events.ScheduleEvent(EVENT_ASPECT_OF_MARLI, 10s);
-                            break;
-                        case EVENT_ASPECT_OF_THEKAL:
-                            DoCastVictim(SPELL_ASPECT_OF_THEKAL, true);
-                            events.ScheduleEvent(EVENT_ASPECT_OF_THEKAL, 15s);
-                            break;
-                        case EVENT_ASPECT_OF_ARLOKK:
-                            DoCastVictim(SPELL_ASPECT_OF_ARLOKK, true);
-                            events.ScheduleEvent(EVENT_ASPECT_OF_ARLOKK, 10s, 15s);
-                            break;
-                        default:
-                            break;
-                    }
-
-                    if (me->HasUnitState(UNIT_STATE_CASTING))
-                        return;
-                }
-
-                DoMeleeAttackIfReady();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetZulGurubAI<boss_hakkarAI>(creature);
-        }
-};
-
-class at_zulgurub_entrance : public OnlyOnceAreaTriggerScript
-{
 public:
-    at_zulgurub_entrance() : OnlyOnceAreaTriggerScript("at_zulgurub_entrance") { }
+    boss_hakkar() : CreatureScript("boss_hakkar") { }
 
-    bool _OnTrigger(Player* player, AreaTriggerEntry const* areaTrigger) override
+    struct boss_hakkarAI : public ScriptedAI
     {
-        InstanceScript* instance = player->GetInstanceScript();
-        if (!instance || instance->GetBossState(DATA_HAKKAR) == DONE)
-            return true;
-
-        if (Creature* hakkar = instance->GetCreature(DATA_HAKKAR))
+        boss_hakkarAI(Creature* c) : ScriptedAI(c)
         {
-            switch (areaTrigger->ID)
-            {
-                case AREA_TRIGGER_1:
-                    hakkar->AI()->Talk(SAY_ENTRANCE);
-                    break;
-                case AREA_TRIGGER_2:
-                    hakkar->AI()->Talk(SAY_PROTECT_ALTAR);
-                    break;
-                case AREA_TRIGGER_3:
-                    hakkar->AI()->Talk(SAY_MINION_DESTROY);
-                    break;
-                default:
-                    break;
-            }
+            pInstance = (ScriptedInstance*)c->GetInstanceData();
         }
 
-        return true;
+        ScriptedInstance* pInstance;
+
+        uint32 BloodSiphon_Timer;
+        uint32 CorruptedBlood_Timer;
+        uint32 CauseInsanity_Timer;
+        uint32 WillOfHakkar_Timer;
+        uint32 Enrage_Timer;
+
+        uint32 CheckJeklik_Timer;
+        uint32 CheckVenoxis_Timer;
+        uint32 CheckMarli_Timer;
+        uint32 CheckThekal_Timer;
+        uint32 CheckArlokk_Timer;
+
+        uint32 AspectOfJeklik_Timer;
+        uint32 AspectOfVenoxis_Timer;
+        uint32 AspectOfMarli_Timer;
+        uint32 AspectOfThekal_Timer;
+        uint32 AspectOfArlokk_Timer;
+
+        bool Enraged;
+
+        void Reset()
+        {
+            BloodSiphon_Timer = 90000;
+            CorruptedBlood_Timer = 25000;
+            CauseInsanity_Timer = 17000;
+            WillOfHakkar_Timer = 17000;
+            Enrage_Timer = 600000;
+
+            CheckJeklik_Timer = 1000;
+            CheckVenoxis_Timer = 2000;
+            CheckMarli_Timer = 3000;
+            CheckThekal_Timer = 4000;
+            CheckArlokk_Timer = 5000;
+
+            AspectOfJeklik_Timer = 4000;
+            AspectOfVenoxis_Timer = 7000;
+            AspectOfMarli_Timer = 12000;
+            AspectOfThekal_Timer = 8000;
+            AspectOfArlokk_Timer = 18000;
+
+            Enraged = false;
+        }
+
+        void EnterCombat(Unit* /*who*/)
+        {
+            DoScriptText(SAY_AGGRO, me);
+        }
+
+        void UpdateAI(const uint32 diff)
+        {
+            if (!UpdateVictim())
+                return;
+
+            //BloodSiphon_Timer
+            if (BloodSiphon_Timer <= diff)
+            {
+                DoCastVictim(SPELL_BLOODSIPHON);
+                BloodSiphon_Timer = 90000;
+            }
+            else BloodSiphon_Timer -= diff;
+
+            //CorruptedBlood_Timer
+            if (CorruptedBlood_Timer <= diff)
+            {
+                DoCastVictim(SPELL_CORRUPTEDBLOOD);
+                CorruptedBlood_Timer = 30000 + rand() % 15000;
+            }
+            else CorruptedBlood_Timer -= diff;
+
+            //WillOfHakkar_Timer
+            if (WillOfHakkar_Timer <= diff)
+            {
+                if (Unit* pTarget = SelectUnit(SELECT_TARGET_RANDOM, 0))
+                    DoCast(pTarget, SPELL_WILLOFHAKKAR);
+
+                WillOfHakkar_Timer = 25000 + rand() % 10000;
+            }
+            else WillOfHakkar_Timer -= diff;
+
+            if (!Enraged && Enrage_Timer <= diff)
+            {
+                DoCast(me, SPELL_ENRAGE);
+                Enraged = true;
+            }
+            else Enrage_Timer -= diff;
+
+            //Checking if Jeklik is dead. If not we cast her Aspect
+            if (CheckJeklik_Timer <= diff)
+            {
+                if (pInstance)
+                {
+                    if (pInstance->GetData(TYPE_JEKLIK) != DONE)
+                    {
+                        if (AspectOfJeklik_Timer <= diff)
+                        {
+                            DoCastVictim(SPELL_ASPECT_OF_JEKLIK);
+                            AspectOfJeklik_Timer = 10000 + rand() % 4000;
+                        }
+                        else AspectOfJeklik_Timer -= diff;
+                    }
+                }
+                CheckJeklik_Timer = 1000;
+            }
+            else CheckJeklik_Timer -= diff;
+
+            //Checking if Venoxis is dead. If not we cast his Aspect
+            if (CheckVenoxis_Timer <= diff)
+            {
+                if (pInstance)
+                {
+                    if (pInstance->GetData(TYPE_VENOXIS) != DONE)
+                    {
+                        if (AspectOfVenoxis_Timer <= diff)
+                        {
+                            DoCastVictim(SPELL_ASPECT_OF_VENOXIS);
+                            AspectOfVenoxis_Timer = 8000;
+                        }
+                        else AspectOfVenoxis_Timer -= diff;
+                    }
+                }
+                CheckVenoxis_Timer = 1000;
+            }
+            else CheckVenoxis_Timer -= diff;
+
+            //Checking if Marli is dead. If not we cast her Aspect
+            if (CheckMarli_Timer <= diff)
+            {
+                if (pInstance)
+                {
+                    if (pInstance->GetData(TYPE_MARLI) != DONE)
+                    {
+                        if (AspectOfMarli_Timer <= diff)
+                        {
+                            DoCastVictim(SPELL_ASPECT_OF_MARLI);
+                            AspectOfMarli_Timer = 10000;
+                        }
+                        else AspectOfMarli_Timer -= diff;
+
+                    }
+                }
+                CheckMarli_Timer = 1000;
+            }
+            else CheckMarli_Timer -= diff;
+
+            //Checking if Thekal is dead. If not we cast his Aspect
+            if (CheckThekal_Timer <= diff)
+            {
+                if (pInstance)
+                {
+                    if (pInstance->GetData(TYPE_THEKAL) != DONE)
+                    {
+                        if (AspectOfThekal_Timer <= diff)
+                        {
+                            DoCast(me, SPELL_ASPECT_OF_THEKAL);
+                            AspectOfThekal_Timer = 15000;
+                        }
+                        else AspectOfThekal_Timer -= diff;
+                    }
+                }
+                CheckThekal_Timer = 1000;
+            }
+            else CheckThekal_Timer -= diff;
+
+            //Checking if Arlokk is dead. If yes we cast her Aspect
+            if (CheckArlokk_Timer <= diff)
+            {
+                if (pInstance)
+                {
+                    if (pInstance->GetData(TYPE_ARLOKK) != DONE)
+                    {
+                        if (AspectOfArlokk_Timer <= diff)
+                        {
+                            DoCast(me, SPELL_ASPECT_OF_ARLOKK);
+                            DoResetThreat();
+
+                            AspectOfArlokk_Timer = 10000 + rand() % 5000;
+                        }
+                        else AspectOfArlokk_Timer -= diff;
+                    }
+                }
+                CheckArlokk_Timer = 1000;
+            }
+            else CheckArlokk_Timer -= diff;
+
+            DoMeleeAttackIfReady();
+        }
+    };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return new boss_hakkarAI(pCreature);
     }
+
 };
 
 void AddSC_boss_hakkar()
 {
     new boss_hakkar();
-    new at_zulgurub_entrance();
 }
+

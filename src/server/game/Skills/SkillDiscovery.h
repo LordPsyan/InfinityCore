@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,17 +15,14 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_SKILLDISCOVERY_H
-#define TRINITY_SKILLDISCOVERY_H
+#ifndef OREGON_SKILLDISCOVERY_H
+#define OREGON_SKILLDISCOVERY_H
 
 #include "Common.h"
 
 class Player;
 
-TC_GAME_API void LoadSkillDiscoveryTable();
-TC_GAME_API uint32 GetSkillDiscoverySpell(uint32 skillId, uint32 spellId, Player* player);
-TC_GAME_API bool HasDiscoveredAllSpells(uint32 spellId, Player* player);
-TC_GAME_API bool HasDiscoveredAnySpell(uint32 spellId, Player* player);
-TC_GAME_API uint32 GetExplicitDiscoverySpell(uint32 spellId, Player* player);
-
+void LoadSkillDiscoveryTable();
+uint32 GetSkillDiscoverySpell(uint32 skillId, uint32 spellId, Player* player);
 #endif
+

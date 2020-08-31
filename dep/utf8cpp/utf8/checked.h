@@ -86,7 +86,7 @@ namespace utf8
             *(result++) = static_cast<uint8_t>(((cp >> 6) & 0x3f)   | 0x80);
             *(result++) = static_cast<uint8_t>((cp & 0x3f)          | 0x80);
         }
-        else {                                // four octets
+        else {      // four octets
             *(result++) = static_cast<uint8_t>((cp >> 18)           | 0xf0);
             *(result++) = static_cast<uint8_t>(((cp >> 12) & 0x3f)  | 0x80);
             *(result++) = static_cast<uint8_t>(((cp >> 6) & 0x3f)   | 0x80);

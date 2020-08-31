@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,24 +15,35 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+ /* ScriptData
+ SDName: Boss_Vanndar
+ SD%Complete:
+ SDComment:
+ EndScriptData */
+
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 
 enum Yells
 {
-    YELL_AGGRO                                    = 0,
-    YELL_EVADE                                    = 1,
-  //YELL_RESPAWN1                                 = -1810010, // Missing in database
-  //YELL_RESPAWN2                                 = -1810011, // Missing in database
-    YELL_RANDOM                                   = 2,
-    YELL_SPELL                                    = 3,
+    YELL_AGGRO = -1810008,
+    YELL_EVADE = -1810009,
+    YELL_RESPAWN1 = -1810010,
+    YELL_RESPAWN2 = -1810011,
+    YELL_RANDOM1 = -1810012,
+    YELL_RANDOM2 = -1810013,
+    YELL_RANDOM3 = -1810014,
+    YELL_RANDOM4 = -1810015,
+    YELL_RANDOM5 = -1810016,
+    YELL_RANDOM6 = -1810017,
+    YELL_RANDOM7 = -1810018
 };
 
 enum Spells
 {
-    SPELL_AVATAR                                  = 19135,
-    SPELL_THUNDERCLAP                             = 15588,
-    SPELL_STORMBOLT                               = 20685 // not sure
+    SPELL_AVATAR = 19135,
+    SPELL_THUNDERCLAP = 15588,
+    SPELL_STORMBOLT = 20685 // not sure
 };
 
 class boss_vanndar : public CreatureScript
@@ -42,83 +53,88 @@ public:
 
     struct boss_vanndarAI : public ScriptedAI
     {
-        boss_vanndarAI(Creature* creature) : ScriptedAI(creature)
+        boss_vanndarAI(Creature* c) : ScriptedAI(c) {}
+
+
+        uint32 uiAvatarTimer;
+        uint32 uiThunderclapTimer;
+        uint32 uiStormboltTimer;
+        uint32 uiResetTimer;
+        uint32 uiYellTimer;
+
+
+        void Reset()
         {
-            Initialize();
+            uiAvatarTimer = 3 * IN_MILLISECONDS;
+            uiThunderclapTimer = 4 * IN_MILLISECONDS;
+            uiStormboltTimer = 6 * IN_MILLISECONDS;
+            uiResetTimer = 5 * IN_MILLISECONDS;
+            uiYellTimer = urand(20 * IN_MILLISECONDS, 30 * IN_MILLISECONDS);
         }
 
-        void Initialize()
+        void EnterCombat(Unit* /*who*/)
         {
-            AvatarTimer = 3 * IN_MILLISECONDS;
-            ThunderclapTimer = 4 * IN_MILLISECONDS;
-            StormboltTimer = 6 * IN_MILLISECONDS;
-            ResetTimer = 5 * IN_MILLISECONDS;
-            YellTimer = urand(20 * IN_MILLISECONDS, 30 * IN_MILLISECONDS);
+            DoScriptText(YELL_AGGRO, me);
         }
 
-        uint32 AvatarTimer;
-        uint32 ThunderclapTimer;
-        uint32 StormboltTimer;
-        uint32 ResetTimer;
-        uint32 YellTimer;
-
-        void Reset() override
+        void JustRespawned()
         {
-            Initialize();
+            Reset();
+            DoScriptText(RAND(YELL_RESPAWN1, YELL_RESPAWN2), me);
         }
 
-        void JustEngagedWith(Unit* /*who*/) override
-        {
-            Talk(YELL_AGGRO);
-        }
-
-        void UpdateAI(uint32 diff) override
+        void UpdateAI(const uint32 diff)
         {
             if (!UpdateVictim())
                 return;
 
-            if (AvatarTimer <= diff)
+            if (uiAvatarTimer <= diff)
             {
                 DoCastVictim(SPELL_AVATAR);
-                AvatarTimer =  urand(15 * IN_MILLISECONDS, 20 * IN_MILLISECONDS);
-            } else AvatarTimer -= diff;
+                uiAvatarTimer = urand(15 * IN_MILLISECONDS, 20 * IN_MILLISECONDS);
+            }
+            else uiAvatarTimer -= diff;
 
-            if (ThunderclapTimer <= diff)
+            if (uiThunderclapTimer <= diff)
             {
                 DoCastVictim(SPELL_THUNDERCLAP);
-                ThunderclapTimer = urand(5 * IN_MILLISECONDS, 15 * IN_MILLISECONDS);
-            } else ThunderclapTimer -= diff;
+                uiThunderclapTimer = urand(5 * IN_MILLISECONDS, 15 * IN_MILLISECONDS);
+            }
+            else uiThunderclapTimer -= diff;
 
-            if (StormboltTimer <= diff)
+            if (uiStormboltTimer <= diff)
             {
                 DoCastVictim(SPELL_STORMBOLT);
-                StormboltTimer = urand(10 * IN_MILLISECONDS, 25 * IN_MILLISECONDS);
-            } else StormboltTimer -= diff;
+                uiStormboltTimer = urand(10 * IN_MILLISECONDS, 25 * IN_MILLISECONDS);
+            }
+            else uiStormboltTimer -= diff;
 
-            if (YellTimer <= diff)
+            if (uiYellTimer <= diff)
             {
-                Talk(YELL_RANDOM);
-                YellTimer = urand(20 * IN_MILLISECONDS, 30 * IN_MILLISECONDS); //20 to 30 seconds
-            } else YellTimer -= diff;
+                DoScriptText(RAND(YELL_RANDOM1, YELL_RANDOM2, YELL_RANDOM3, YELL_RANDOM4, YELL_RANDOM5, YELL_RANDOM6, YELL_RANDOM7), me);
+                uiYellTimer = urand(20 * IN_MILLISECONDS, 30 * IN_MILLISECONDS); //20 to 30 seconds
+            }
+            else uiYellTimer -= diff;
 
             // check if creature is not outside of building
-            if (ResetTimer <= diff)
+            if (uiResetTimer <= diff)
             {
                 if (me->GetDistance2d(me->GetHomePosition().GetPositionX(), me->GetHomePosition().GetPositionY()) > 50)
                 {
                     EnterEvadeMode();
-                    Talk(YELL_EVADE);
+                    DoScriptText(YELL_EVADE, me);
                 }
-                ResetTimer = 5 * IN_MILLISECONDS;
-            } else ResetTimer -= diff;
+                uiResetTimer = 5 * IN_MILLISECONDS;
+            }
+            else uiResetTimer -= diff;
 
             DoMeleeAttackIfReady();
         }
     };
 
-    CreatureAI* GetAI(Creature* creature) const override
+    CreatureAI* GetAI(Creature* pCreature) const
     {
-        return new boss_vanndarAI(creature);
+        return new boss_vanndarAI(pCreature);
     }
 };
 

@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,42 +18,55 @@
 #ifndef _BIH_H
 #define _BIH_H
 
-#include <G3D/Vector3.h>
-#include <G3D/Ray.h>
-#include <G3D/AABox.h>
+#include "G3D/Vector3.h"
+#include "G3D/Ray.h"
+#include "G3D/AABox.h"
 
-#include "Define.h"
+#include "Platform/Define.h"
 
 #include <stdexcept>
 #include <vector>
 #include <algorithm>
 #include <limits>
 #include <cmath>
-#include "string.h"
 
 #define MAX_STACK_SIZE 64
 
-// https://stackoverflow.com/a/4328396
+#ifdef _MSC_VER
+    #define isnan(x) _isnan(x)
+#else
+    #define isnan(x) (std::isnan(x))
+#endif
+
+using G3D::Vector3;
+using G3D::AABox;
+using G3D::Ray;
 
 static inline uint32 floatToRawIntBits(float f)
 {
-    static_assert(sizeof(float) == sizeof(uint32), "Size of uint32 and float must be equal for this to work");
-    uint32 ret;
-    memcpy(&ret, &f, sizeof(float));
-    return ret;
+    union
+    {
+        uint32 ival;
+        float fval;
+    } temp;
+    temp.fval=f;
+    return temp.ival;
 }
 
 static inline float intBitsToFloat(uint32 i)
 {
-    static_assert(sizeof(float) == sizeof(uint32), "Size of uint32 and float must be equal for this to work");
-    float ret;
-    memcpy(&ret, &i, sizeof(uint32));
-    return ret;
+    union
+    {
+        uint32 ival;
+        float fval;
+    } temp;
+    temp.ival=i;
+    return temp.fval;
 }
 
 struct AABound
 {
-    G3D::Vector3 lo, hi;
+    Vector3 lo, hi;
 };
 
 /** Bounding Interval Hierarchy Class.
@@ -63,7 +76,7 @@ struct AABound
     Copyright (c) 2003-2007 Christopher Kulla
 */
 
-class TC_COMMON_API BIH
+class BIH
 {
     private:
         void init_empty()
@@ -71,13 +84,13 @@ class TC_COMMON_API BIH
             tree.clear();
             objects.clear();
             // create space for the first node
-            tree.push_back(3u << 30u); // dummy leaf
+            tree.push_back(3 << 30); // dummy leaf
             tree.insert(tree.end(), 2, 0);
         }
     public:
         BIH() { init_empty(); }
-        template <class BoundsFunc, class PrimArray>
-        void build(PrimArray const& primitives, BoundsFunc& getBounds, uint32 leafSize = 3, bool printStats = false)
+        template< class BoundsFunc, class PrimArray >
+        void build(const PrimArray &primitives, BoundsFunc &getBounds, uint32 leafSize = 3, bool printStats=false)
         {
             if (primitives.size() == 0)
             {
@@ -87,13 +100,14 @@ class TC_COMMON_API BIH
 
             buildData dat;
             dat.maxPrims = leafSize;
-            dat.numPrims = uint32(primitives.size());
+            dat.numPrims = primitives.size();
             dat.indices = new uint32[dat.numPrims];
-            dat.primBound = new G3D::AABox[dat.numPrims];
+            dat.primBound = new AABox[dat.numPrims];
             getBounds(primitives[0], bounds);
             for (uint32 i=0; i<dat.numPrims; ++i)
             {
                 dat.indices[i] = i;
+                AABox tb;
                 getBounds(primitives[i], dat.primBound[i]);
                 bounds.merge(dat.primBound[i]);
             }
@@ -111,16 +125,16 @@ class TC_COMMON_API BIH
             delete[] dat.primBound;
             delete[] dat.indices;
         }
-        uint32 primCount() const { return uint32(objects.size()); }
+        uint32 primCount() { return objects.size(); }
 
         template<typename RayCallback>
-        void intersectRay(const G3D::Ray &r, RayCallback& intersectCallback, float &maxDist, bool stopAtFirst = false) const
+        void intersectRay(const Ray &r, RayCallback& intersectCallback, float &maxDist, bool stopAtFirst=false) const
         {
             float intervalMin = -1.f;
             float intervalMax = -1.f;
-            G3D::Vector3 org = r.origin();
-            G3D::Vector3 dir = r.direction();
-            G3D::Vector3 invDir;
+            Vector3 org = r.origin();
+            Vector3 dir = r.direction();
+            Vector3 invDir;
             for (int i=0; i<3; ++i)
             {
                 invDir[i] = 1.f / dir[i];
@@ -173,7 +187,7 @@ class TC_COMMON_API BIH
                 {
                     uint32 tn = tree[node];
                     uint32 axis = (tn & (3 << 30)) >> 30;
-                    bool BVH2 = (tn & (1 << 29)) != 0;
+                    bool BVH2 = tn & (1 << 29);
                     int offset = tn & ~(7 << 29);
                     if (!BVH2)
                     {
@@ -253,7 +267,7 @@ class TC_COMMON_API BIH
         }
 
         template<typename IsectCallback>
-        void intersectPoint(const G3D::Vector3 &p, IsectCallback& intersectCallback) const
+        void intersectPoint(const Vector3 &p, IsectCallback& intersectCallback) const
         {
             if (!bounds.contains(p))
                 return;
@@ -267,7 +281,7 @@ class TC_COMMON_API BIH
                 {
                     uint32 tn = tree[node];
                     uint32 axis = (tn & (3 << 30)) >> 30;
-                    bool BVH2 = (tn & (1 << 29)) != 0;
+                    bool BVH2 = tn & (1 << 29);
                     int offset = tn & ~(7 << 29);
                     if (!BVH2)
                     {
@@ -336,12 +350,12 @@ class TC_COMMON_API BIH
     protected:
         std::vector<uint32> tree;
         std::vector<uint32> objects;
-        G3D::AABox bounds;
+        AABox bounds;
 
         struct buildData
         {
             uint32 *indices;
-            G3D::AABox *primBound;
+            AABox *primBound;
             uint32 numPrims;
             int maxPrims;
         };
@@ -383,8 +397,7 @@ class TC_COMMON_API BIH
 
         void buildHierarchy(std::vector<uint32> &tempTree, buildData &dat, BuildStats &stats);
 
-        void createNode(std::vector<uint32> &tempTree, int nodeIndex, uint32 left, uint32 right) const
-        {
+        void createNode(std::vector<uint32> &tempTree, int nodeIndex, uint32 left, uint32 right) {
             // write leaf node
             tempTree[nodeIndex + 0] = (3 << 30) | left;
             tempTree[nodeIndex + 1] = right - left + 1;

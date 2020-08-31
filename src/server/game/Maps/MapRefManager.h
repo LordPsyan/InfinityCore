@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,23 +18,57 @@
 #ifndef _MAPREFMANAGER
 #define _MAPREFMANAGER
 
-#include "RefManager.h"
+#include "Utilities/LinkedReference/RefManager.h"
 
 class MapReference;
 
 class MapRefManager : public RefManager<Map, Player>
 {
     public:
-        typedef LinkedListHead::Iterator<MapReference> iterator;
-        typedef LinkedListHead::Iterator<MapReference const> const_iterator;
+        typedef LinkedListHead::Iterator< MapReference > iterator;
+        typedef LinkedListHead::Iterator< MapReference const > const_iterator;
 
-        MapReference* getFirst() { return (MapReference*)RefManager<Map, Player>::getFirst(); }
-        MapReference const* getFirst() const { return (MapReference const*)RefManager<Map, Player>::getFirst(); }
+        MapReference* getFirst()
+        {
+            return (MapReference*)RefManager<Map, Player>::getFirst();
+        }
+        MapReference const* getFirst() const
+        {
+            return (MapReference const*)RefManager<Map, Player>::getFirst();
+        }
+        MapReference* getLast()
+        {
+            return (MapReference*)RefManager<Map, Player>::getLast();
+        }
+        MapReference const* getLast() const
+        {
+            return (MapReference const*)RefManager<Map, Player>::getLast();
+        }
 
-        iterator begin() { return iterator(getFirst()); }
-        iterator end() { return iterator(nullptr); }
-
-        const_iterator begin() const { return const_iterator(getFirst()); }
-        const_iterator end() const { return const_iterator(nullptr); }
+        iterator begin()
+        {
+            return iterator(getFirst());
+        }
+        iterator end()
+        {
+            return iterator(NULL);
+        }
+        iterator rbegin()
+        {
+            return iterator(getLast());
+        }
+        iterator rend()
+        {
+            return iterator(NULL);
+        }
+        const_iterator begin() const
+        {
+            return const_iterator(getFirst());
+        }
+        const_iterator end() const
+        {
+            return const_iterator(NULL);
+        }
 };
 #endif
+

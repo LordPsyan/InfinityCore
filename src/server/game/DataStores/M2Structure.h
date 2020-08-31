@@ -1,25 +1,40 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the
- * Free Software Foundation; either version 2 of the License, or (at your
- * option) any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
- * more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program. If not, see <http://www.gnu.org/licenses/>.
- */
+* This file is part of the OregonCore Project. See AUTHORS file for Copyright information
+*
+* This program is free software; you can redistribute it and/or modify it
+* under the terms of the GNU General Public License as published by the
+* Free Software Foundation; either version 2 of the License, or (at your
+* option) any later version.
+*
+* This program is distributed in the hope that it will be useful, but WITHOUT
+* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+* FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+* more details.
+*
+* You should have received a copy of the GNU General Public License along
+* with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
-#ifndef TRINITY_M2STRUCTURE_H
-#define TRINITY_M2STRUCTURE_H
+#ifndef OREGON_M2STRUCTURE_H
+#define OREGON_M2STRUCTURE_H
 
 #include <G3D/Vector3.h>
 #include <G3D/AABox.h>
+
+#define VERSION_ORGINAL_MIN 0
+#define VERSION_ORGINAL_MAX 256
+#define VERSION_BC_MIN      260
+#define VERSION_BC_MAX      263
+#define VERSION_WRATH_MIN   264
+#define VERSION_WRATH_MAX   264
+#define VERSION_CATA_MIN    265
+#define VERSION_CATA_MAX    271
+#define VERSION_MISTS_MIN   272
+#define VERSION_MISTS_MAX   272
+#define VERSION_WOD_MIN     272
+#define VERSION_WOD_MAX     272
+#define VERSION_LEGION_MIN  274
+#define VERSION_LEGION_MAX  274
 
 // Structures for M2 file. Source: https://wowdev.wiki
 #pragma pack(push, 1)
@@ -44,19 +59,24 @@ struct M2Header
     uint32 ofsAnimations;          // Information about the animations in the model.
     uint32 nAnimationLookup;
     uint32 ofsAnimationLookup;     // Mapping of global IDs to the entries in the Animation sequences block.
+    uint32 nPlayableAnimationLookup;
+    uint32 ofsPlayableAnimationLookup;     // Mapping of global IDs to the entries in the Animation sequences block.
     uint32 nBones;                 // MAX_BONES = 0x100
     uint32 ofsBones;               // Information about the bones in this model.
     uint32 nKeyBoneLookup;
     uint32 ofsKeyBoneLookup;       // Lookup table for key skeletal bones.
     uint32 nVertices;
     uint32 ofsVertices;            // Vertices of the model.
-    uint32 nViews;                 // Views (LOD) are now in .skins.
+    uint32 nViews;                 // Views (LOD)
+    uint32 ofsViews;
     uint32 nSubmeshAnimations;
     uint32 ofsSubmeshAnimations;   // Submesh color and alpha animations definitions.
     uint32 nTextures;
     uint32 ofsTextures;            // Textures of this model.
     uint32 nTransparency;
     uint32 ofsTransparency;        // Transparency of textures.
+    uint32 nUnknown;
+    uint32 ofsUnknown;
     uint32 nUVAnimation;
     uint32 ofsUVAnimation;
     uint32 nTexReplace;
@@ -99,8 +119,6 @@ struct M2Header
     uint32 ofsRibbonEmitters;      // Things swirling around. See the CoT-entrance for light-trails.
     uint32 nParticleEmitters;
     uint32 ofsParticleEmitters;    // Spells and weapons, doodads and loginscreens use them. Blood dripping of a blade? Particles.
-    uint32 nBlendMaps;             // This has to deal with blending. Exists IFF (flags & 0x8) != 0. When set, textures blending is overriden by the associated array. See M2/WotLK#Blend_mode_overrides
-    uint32 ofsBlendMaps;           // Same as above. Points to an array of uint16 of nBlendMaps entries -- From WoD information.};
 };
 
 struct M2Array
@@ -112,6 +130,7 @@ struct M2Track
 {
     uint16_t interpolation_type;
     uint16_t global_sequence;
+    M2Array interpolation_ranges;
     M2Array timestamps;
     M2Array values;
 };

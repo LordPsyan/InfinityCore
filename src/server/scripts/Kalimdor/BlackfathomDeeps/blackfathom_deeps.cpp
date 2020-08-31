@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,226 +16,250 @@
  */
 
 #include "ScriptMgr.h"
+#include "ScriptedCreature.h"
 #include "blackfathom_deeps.h"
-#include "InstanceScript.h"
-#include "GameObject.h"
-#include "GameObjectAI.h"
-#include "Map.h"
-#include "Player.h"
 #include "ScriptedEscortAI.h"
 #include "ScriptedGossip.h"
 
-enum Spells
+enum eSpells
 {
-    SPELL_BLESSING_OF_BLACKFATHOM                           = 8733,
-    SPELL_RAVAGE                                            = 8391,
-    SPELL_FROST_NOVA                                        = 865,
-    SPELL_FROST_BOLT_VOLLEY                                 = 8398,
-    SPELL_TELEPORT_DARNASSUS                                = 9268
+    SPELL_BLESSING_OF_BLACKFATHOM = 8733,
+    SPELL_RAVAGE = 8391,
+    SPELL_FROST_NOVA = 865,
+    SPELL_FROST_BOLT_VOLLEY = 8398,
+    SPELL_TELEPORT_DARNASSUS = 9268
 };
 
-const Position HomePosition = {-815.817f, -145.299f, -25.870f, 0};
+#define GOSSIP_ITEM_MORRIDUNE "Please port me to Darnassus"
 
-class go_blackfathom_altar : public GameObjectScript
-{
-    public:
-        go_blackfathom_altar() : GameObjectScript("go_blackfathom_altar") { }
+const Position HomePosition = { -815.817f, -145.299f, -25.870f, 0 };
 
-        struct go_blackfathom_altarAI : public GameObjectAI
-        {
-            go_blackfathom_altarAI(GameObject* go) : GameObjectAI(go) { }
-
-            bool GossipHello(Player* player) override
-            {
-                if (!player->HasAura(SPELL_BLESSING_OF_BLACKFATHOM))
-                    player->AddAura(SPELL_BLESSING_OF_BLACKFATHOM, player);
-                return true;
-            }
-        };
-
-        GameObjectAI* GetAI(GameObject* go) const override
-        {
-            return GetBlackfathomDeepsAI<go_blackfathom_altarAI>(go);
-        }
-};
-
-class go_blackfathom_fire : public GameObjectScript
-{
-    public:
-        go_blackfathom_fire() : GameObjectScript("go_blackfathom_fire") { }
-
-        struct go_blackfathom_fireAI : public GameObjectAI
-        {
-            go_blackfathom_fireAI(GameObject* go) : GameObjectAI(go), instance(go->GetInstanceScript()) { }
-
-            InstanceScript* instance;
-
-            bool GossipHello(Player* /*player*/) override
-            {
-                me->SetGoState(GO_STATE_ACTIVE);
-                me->SetFlag(GAMEOBJECT_FLAGS, GO_FLAG_NOT_SELECTABLE);
-                instance->SetData(DATA_FIRE, instance->GetData(DATA_FIRE) + 1);
-                return true;
-            }
-        };
-
-        GameObjectAI* GetAI(GameObject* go) const override
-        {
-            return GetBlackfathomDeepsAI<go_blackfathom_fireAI>(go);
-        }
-};
-
-enum Events
-{
-    EVENT_RAVAGE = 1,
-    EVENT_FROST_NOVA,
-    EVENT_FROST_BOLT_VOLLEY
-};
-
-struct npc_blackfathom_deeps_event : public ScriptedAI
-{
-    npc_blackfathom_deeps_event(Creature* creature) : ScriptedAI(creature), _instance(me->GetInstanceScript()), _flee(false) { }
-
-    void JustEngagedWith(Unit* /*who*/) override
-    {
-        _flee = false;
-
-        switch (me->GetEntry())
-        {
-            case NPC_AKU_MAI_SNAPJAW:
-                _events.ScheduleEvent(EVENT_RAVAGE, 5s, 8s);
-                break;
-            case NPC_AKU_MAI_SERVANT:
-                _events.ScheduleEvent(EVENT_FROST_NOVA, 9s, 12s);
-                _events.ScheduleEvent(EVENT_FROST_BOLT_VOLLEY, 2s, 4s);
-                break;
-            default:
-                break;
-        }
-    }
-
-    void EnterEvadeMode(EvadeReason why) override
-    {
-        _events.Reset();
-        ScriptedAI::EnterEvadeMode(why);
-    }
-
-    void IsSummonedBy(WorldObject* /*summoner*/) override
-    {
-        DoZoneInCombat();
-    }
-
-    void JustDied(Unit* /*killer*/) override
-    {
-        if (me->IsSummon()) //we are not a normal spawn.
-            _instance->SetData(DATA_EVENT, _instance->GetData(DATA_EVENT) + 1);
-    }
-
-    void DamageTaken(Unit* /*attacker*/, uint32& damage) override
-    {
-        if (me->GetEntry() != NPC_MURKSHALLOW_SOFTSHELL && me->GetEntry() != NPC_BARBED_CRUSTACEAN)
-            return;
-
-        if (!_flee && me->HealthBelowPctDamaged(15, damage))
-        {
-            _flee = true;
-            me->DoFleeToGetAssistance();
-        }
-    }
-
-    void UpdateAI(uint32 diff) override
-    {
-        if (!UpdateVictim())
-            return;
-
-        _events.Update(diff);
-
-        if (me->HasUnitState(UNIT_STATE_CASTING))
-            return;
-
-        while (uint32 eventId = _events.ExecuteEvent())
-        {
-            switch (eventId)
-            {
-                case EVENT_RAVAGE:
-                    DoCastVictim(SPELL_RAVAGE);
-                    _events.Repeat(9s, 14s);
-                    break;
-                case EVENT_FROST_NOVA:
-                    DoCastAOE(SPELL_FROST_NOVA, false);
-                    _events.Repeat(25s, 30s);
-                    break;
-                case EVENT_FROST_BOLT_VOLLEY:
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-                        DoCast(target, SPELL_FROST_BOLT_VOLLEY);
-                    _events.Repeat(5s, 8s);
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        DoMeleeAttackIfReady();
-    }
-
-private:
-    EventMap _events;
-    InstanceScript* _instance;
-    bool _flee;
-};
-
-enum Morridune
-{
-    SAY_MORRIDUNE_1 = 0,
-    SAY_MORRIDUNE_2 = 1
-};
-
-class npc_morridune : public CreatureScript
+class go_blackfathom_altar : GameObjectScript
 {
 public:
-    npc_morridune() : CreatureScript("npc_morridune") { }
+    go_blackfathom_altar() : GameObjectScript("go_blackfathom_altar") {}
 
-    struct npc_morriduneAI : public EscortAI
+    bool OnGossipHello(Player* player, GameObject* /*go*/)
     {
-        npc_morriduneAI(Creature* creature) : EscortAI(creature) { }
+        if (!player->HasAura(SPELL_BLESSING_OF_BLACKFATHOM, 0))
+            player->AddAura(SPELL_BLESSING_OF_BLACKFATHOM, player);
+        return true;
+    }
+};
 
-        void Reset() override
+class go_blackfathom_fire : GameObjectScript
+{
+public:
+    go_blackfathom_fire() : GameObjectScript("go_blackfathom_fire") {}
+
+    bool OnGossipHello(Player* /*player*/, GameObject* go)
+    {
+        ScriptedInstance* pInstance = (ScriptedInstance*)go->GetInstanceData();
+
+        if (pInstance)
         {
-            Talk(SAY_MORRIDUNE_1);
-            me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
-            Start(false);
+            go->SetGoState(GO_STATE_ACTIVE);
+            go->SetFlag(GAMEOBJECT_FLAGS, GO_FLAG_NOT_SELECTABLE);
+            pInstance->SetData(DATA_FIRE, pInstance->GetData(DATA_FIRE) + 1);
+            return true;
+        }
+        return false;
+    }
+};
+
+class npc_blackfathom_deeps_event : public CreatureScript
+{
+public:
+    npc_blackfathom_deeps_event() : CreatureScript("npc_blackfathom_deeps_event") {}
+
+    struct npc_blackfathom_deeps_eventAI : public ScriptedAI
+    {
+        npc_blackfathom_deeps_eventAI(Creature* pCreature) : ScriptedAI(pCreature)
+        {
+            //if (pCreature->IsSummon())
+            if (pCreature->IsPet()) //@todo Use line above
+            {
+                pCreature->SetHomePosition(HomePosition);
+                AttackPlayer();
+            }
+
+            pInstance = (ScriptedInstance*)pCreature->GetInstanceData();
         }
 
-        void WaypointReached(uint32 waypointId, uint32 /*pathId*/) override
+        ScriptedInstance* pInstance;
+
+        uint32 uiRavageTimer;
+        uint32 uiFrostNovaTimer;
+        uint32 uiFrostBoltVolleyTimer;
+
+        bool bFlee;
+
+        void Reset()
         {
-            switch (waypointId)
+            bFlee = false;
+
+            uiRavageTimer = urand(5000, 8000);
+            uiFrostNovaTimer = urand(9000, 12000);
+            uiFrostBoltVolleyTimer = urand(2000, 4000);
+        }
+
+        void AttackPlayer()
+        {
+            Map::PlayerList const& PlList = me->GetMap()->GetPlayers();
+
+            if (PlList.isEmpty())
+                return;
+
+            for (Map::PlayerList::const_iterator i = PlList.begin(); i != PlList.end(); ++i)
             {
-                case 4:
-                    SetEscortPaused(true);
-                    me->SetFacingTo(1.775791f);
-                    me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
-                    Talk(SAY_MORRIDUNE_2);
-                    break;
+                if (Player* pPlayer = i->GetSource())
+                {
+                    if (pPlayer->IsGameMaster())
+                        continue;
+
+                    if (pPlayer->IsAlive())
+                    {
+                        me->SetInCombatWith(pPlayer);
+                        pPlayer->SetInCombatWith(me);
+                        me->AddThreat(pPlayer, 0.0f);
+                    }
+                }
             }
         }
 
-        bool GossipSelect(Player* player, uint32 /*menuId*/, uint32 /*gossipListId*/) override
+        void UpdateAI(const uint32 uiDiff)
         {
-            DoCast(player, SPELL_TELEPORT_DARNASSUS);
-            return false;
+            if (!UpdateVictim())
+                return;
+
+            switch (me->GetEntry())
+            {
+            case NPC_AKU_MAI_SNAPJAW:
+            {
+                if (uiRavageTimer <= uiDiff)
+                {
+                    DoCastVictim(SPELL_RAVAGE);
+                    uiRavageTimer = urand(9000, 14000);
+                }
+                else uiRavageTimer -= uiDiff;
+                break;
+            }
+            case NPC_MURKSHALLOW_SOFTSHELL:
+            case NPC_BARBED_CRUSTACEAN:
+            {
+                if (!bFlee && HealthBelowPct(15))
+                {
+                    bFlee = true;
+                    me->DoFleeToGetAssistance();
+                }
+                break;
+            }
+            case NPC_AKU_MAI_SERVANT:
+            {
+                if (uiFrostBoltVolleyTimer <= uiDiff)
+                {
+                    if (Unit* pTarget = SelectUnit(SELECT_TARGET_RANDOM, 0))
+                    {
+                        if (pTarget)
+                            DoCast(pTarget, SPELL_FROST_BOLT_VOLLEY);
+                    }
+                    uiFrostBoltVolleyTimer = urand(5000, 8000);
+                }
+                else uiFrostBoltVolleyTimer -= uiDiff;
+                if (uiFrostNovaTimer <= uiDiff)
+                {
+                    DoCastAOE(SPELL_FROST_NOVA, false);
+                    uiFrostNovaTimer = urand(25000, 30000);
+                }
+                else uiFrostNovaTimer -= uiDiff;
+                break;
+            }
+            }
+
+            DoMeleeAttackIfReady();
+        }
+
+        void JustDied(Unit* /*pKiller*/)
+        {
+            //if (me->IsSummon()) //we are not a normal spawn.
+            if (me->IsPet()) //@todo Use line above
+                if (pInstance)
+                    pInstance->SetData(DATA_EVENT, pInstance->GetData(DATA_EVENT) + 1);
         }
     };
 
-    CreatureAI* GetAI(Creature* creature) const override
+    CreatureAI* GetAI(Creature* pCreature) const
     {
-        return GetBlackfathomDeepsAI<npc_morriduneAI>(creature);
+        return new npc_blackfathom_deeps_eventAI(pCreature);
     }
+};
+
+enum eMorridune
+{
+    SAY_MORRIDUNE_1 = -1048003,
+    SAY_MORRIDUNE_2 = -1048004
+};
+
+class npc_morridune : CreatureScript
+{
+public:
+    npc_morridune() : CreatureScript("npc_morridune") {}
+
+    bool OnGossipHello(Player* player, Creature* creature)
+    {
+        player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_MORRIDUNE, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
+
+        player->SEND_GOSSIP_MENU(player->GetGossipTextId(creature), player->GetGUID());
+        return true;
+    }
+
+    bool OnGossipSelect(Player* player, Creature* creature, uint32 sender, uint32 action)
+    {
+        switch (action)
+        {
+        case GOSSIP_ACTION_INFO_DEF + 1:
+            player->TeleportTo(1, 9952.239f, 2284.277f, 1341.394f, 1.595f);
+            player->CLOSE_GOSSIP_MENU();
+            break;
+        }
+        return true;
+    }
+
+    struct npc_morriduneAI : public npc_escortAI
+    {
+        npc_morriduneAI(Creature* pCreature) : npc_escortAI(pCreature)
+        {
+            DoScriptText(SAY_MORRIDUNE_1, pCreature);
+            me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
+            Start(false, false, 0);
+        }
+
+        void WaypointReached(uint32 uiPoint)
+        {
+            switch (uiPoint)
+            {
+            case 4:
+                SetEscortPaused(true);
+                me->SetOrientation(1.775791f);
+                me->SendMovementFlagUpdate();
+                me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
+                DoScriptText(SAY_MORRIDUNE_2, me);
+                break;
+            }
+        }
+    };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return new npc_morriduneAI(pCreature);
+    }
+
 };
 
 void AddSC_blackfathom_deeps()
 {
     new go_blackfathom_altar();
     new go_blackfathom_fire();
-    RegisterBlackfathomDeepsCreatureAI(npc_blackfathom_deeps_event);
+    new npc_blackfathom_deeps_event();
     new npc_morridune();
 }

@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -28,12 +28,15 @@ namespace VMAP
 {
     //===========================================================
 
-    class TC_COMMON_API VMapFactory
-    {
-        public:
-            static IVMapManager* createOrGetVMapManager();
-            static void clear();
-    };
+class VMapFactory
+{
+    public:
+        static IVMapManager* createOrGetVMapManager();
+        static void clear();
+
+        static void preventSpellsFromBeingTestedForLoS(const char* pSpellIdString);
+        static bool checkSpellForLoS(unsigned int pSpellId);
+};
 
 }
 #endif

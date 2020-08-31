@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,126 +15,131 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: boss_postmaster_malown
-SD%Complete: 50
-SDComment:
-SDCategory: Stratholme
-EndScriptData */
+ /* ScriptData
+ SDName: boss_postmaster_malown
+ SD%Complete: 50
+ SDComment:
+ SDCategory: Stratholme
+ EndScriptData */
 
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
-#include "stratholme.h"
 
-//Spell ID to summon this guy is 24627 "Summon Postmaster Malown"
-//He should be spawned along with three other elites once the third postbox has been opened
+ //Spell ID to summon this guy is 24627 "Summon Postmaster Malown"
+ //He should be spawned along with three other elites once the third postbox has been opened
 
-enum Says
-{
-    SAY_KILL                    = 0
-};
+#define SAY_MALOWNED    "You just got MALOWNED!"
 
-enum Spells
-{
-    SPELL_WAILINGDEAD           = 7713,
-    SPELL_BACKHAND              = 6253,
-    SPELL_CURSEOFWEAKNESS       = 8552,
-    SPELL_CURSEOFTONGUES        = 12889,
-    SPELL_CALLOFTHEGRAVE        = 17831
-};
-
-enum Events
-{
-    EVENT_WAILINGDEAD          = 1,
-    EVENT_BACKHAND             = 2,
-    EVENT_CURSEOFWEAKNESS      = 3,
-    EVENT_CURSEOFTONGUES       = 4,
-    EVENT_CALLOFTHEGRAVE       = 5
-};
+#define SPELL_WAILINGDEAD    7713
+#define SPELL_BACKHAND    6253
+#define SPELL_CURSEOFWEAKNESS    8552
+#define SPELL_CURSEOFTONGUES    12889
+#define SPELL_CALLOFTHEGRAVE    17831
 
 class boss_postmaster_malown : public CreatureScript
 {
-    public:
-        boss_postmaster_malown() : CreatureScript("boss_postmaster_malown") { }
+public:
+    boss_postmaster_malown() : CreatureScript("boss_postmaster_malown") { }
 
-        struct boss_postmaster_malownAI : public BossAI
+    struct boss_postmaster_malownAI : public ScriptedAI
+    {
+        boss_postmaster_malownAI(Creature* c) : ScriptedAI(c) {}
+
+        uint32 WailingDead_Timer;
+        uint32 Backhand_Timer;
+        uint32 CurseOfWeakness_Timer;
+        uint32 CurseOfTongues_Timer;
+        uint32 CallOfTheGrave_Timer;
+        bool HasYelled;
+
+        void Reset()
         {
-            boss_postmaster_malownAI(Creature* creature) : BossAI(creature, TYPE_MALOWN) { }
-
-            void Reset() override { }
-
-            void JustEngagedWith(Unit* /*who*/) override
-            {
-                events.ScheduleEvent(EVENT_WAILINGDEAD, 19s);     // lasts 6 sec
-                events.ScheduleEvent(EVENT_BACKHAND, 8s);         // 2 sec stun
-                events.ScheduleEvent(EVENT_CURSEOFWEAKNESS, 20s); // lasts 2 mins
-                events.ScheduleEvent(EVENT_CURSEOFTONGUES, 22s);
-                events.ScheduleEvent(EVENT_CALLOFTHEGRAVE, 25s);
-            }
-
-            void KilledUnit(Unit* /*victim*/) override
-            {
-                Talk(SAY_KILL);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_WAILINGDEAD:
-                            if (rand32() % 100 < 65) //65% chance to cast
-                                DoCastVictim(SPELL_WAILINGDEAD, true);
-                            events.ScheduleEvent(EVENT_WAILINGDEAD, 19s);
-                            break;
-                        case EVENT_BACKHAND:
-                            if (rand32() % 100 < 45) //45% chance to cast
-                                DoCastVictim(SPELL_BACKHAND, true);
-                            events.ScheduleEvent(EVENT_WAILINGDEAD, 8s);
-                            break;
-                        case EVENT_CURSEOFWEAKNESS:
-                            if (rand32() % 100 < 3) //3% chance to cast
-                                DoCastVictim(SPELL_CURSEOFWEAKNESS, true);
-                            events.ScheduleEvent(EVENT_WAILINGDEAD, 20s);
-                            break;
-                        case EVENT_CURSEOFTONGUES:
-                            if (rand32() % 100 < 3) //3% chance to cast
-                                DoCastVictim(SPELL_CURSEOFTONGUES, true);
-                            events.ScheduleEvent(EVENT_WAILINGDEAD, 22s);
-                            break;
-                        case EVENT_CALLOFTHEGRAVE:
-                            if (rand32() % 100 < 5) //5% chance to cast
-                                DoCastVictim(SPELL_CALLOFTHEGRAVE, true);
-                            events.ScheduleEvent(EVENT_WAILINGDEAD, 25s);
-                            break;
-                        default:
-                            break;
-                    }
-
-                    if (me->HasUnitState(UNIT_STATE_CASTING))
-                        return;
-                }
-
-                DoMeleeAttackIfReady();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetStratholmeAI<boss_postmaster_malownAI>(creature);
+            WailingDead_Timer = 19000; //lasts 6 sec
+            Backhand_Timer = 8000; //2 sec stun
+            CurseOfWeakness_Timer = 20000; //lasts 2 mins
+            CurseOfTongues_Timer = 22000;
+            CallOfTheGrave_Timer = 25000;
+            HasYelled = false;
         }
+
+        void EnterCombat(Unit* /*who*/)
+        {
+        }
+
+        void UpdateAI(const uint32 diff)
+        {
+            //Return since we have no target
+            if (!UpdateVictim())
+                return;
+
+            //WailingDead
+            if (WailingDead_Timer <= diff)
+            {
+                //Cast
+                if (rand() % 100 < 65) //65% chance to cast
+                    DoCastVictim(SPELL_WAILINGDEAD);
+                //19 seconds until we should cast this again
+                WailingDead_Timer = 19000;
+            }
+            else WailingDead_Timer -= diff;
+
+            //Backhand
+            if (Backhand_Timer <= diff)
+            {
+                //Cast
+                if (rand() % 100 < 45) //45% chance to cast
+                    DoCastVictim(SPELL_BACKHAND);
+                //8 seconds until we should cast this again
+                Backhand_Timer = 8000;
+            }
+            else Backhand_Timer -= diff;
+
+            //CurseOfWeakness
+            if (CurseOfWeakness_Timer <= diff)
+            {
+                //Cast
+                if (rand() % 100 < 3) //3% chance to cast
+                    DoCastVictim(SPELL_CURSEOFWEAKNESS);
+                //20 seconds until we should cast this again
+                CurseOfWeakness_Timer = 20000;
+            }
+            else CurseOfWeakness_Timer -= diff;
+
+            //CurseOfTongues
+            if (CurseOfTongues_Timer <= diff)
+            {
+                //Cast
+                if (rand() % 100 < 3) //3% chance to cast
+                    DoCastVictim(SPELL_CURSEOFTONGUES);
+                //22 seconds until we should cast this again
+                CurseOfTongues_Timer = 22000;
+            }
+            else CurseOfTongues_Timer -= diff;
+
+            //CallOfTheGrave
+            if (CallOfTheGrave_Timer <= diff)
+            {
+                //Cast
+                if (rand() % 100 < 5) //5% chance to cast
+                    DoCastVictim(SPELL_CALLOFTHEGRAVE);
+                //25 seconds until we should cast this again
+                CallOfTheGrave_Timer = 25000;
+            }
+            else CallOfTheGrave_Timer -= diff;
+
+            DoMeleeAttackIfReady();
+        }
+    };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return new boss_postmaster_malownAI(pCreature);
+    }
+
 };
 
 void AddSC_boss_postmaster_malown()
 {
     new boss_postmaster_malown();
 }
+

@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,8 +18,10 @@
 #ifndef _FORMATIONS_H
 #define _FORMATIONS_H
 
-#include "Define.h"
-#include "ObjectGuid.h"
+#include "Common.h"
+#include <ace/Basic_Types.h>
+#include <ace/Singleton.h>
+#include <ace/Thread_Mutex.h>
 #include <unordered_map>
 #include <map>
 
@@ -34,69 +36,60 @@ enum GroupAIFlags
 
 class Creature;
 class CreatureGroup;
-class Unit;
-struct Position;
 
 struct FormationInfo
 {
-    ObjectGuid::LowType LeaderSpawnId;
-    float FollowDist;
-    float FollowAngle;
-    uint32 GroupAI;
-    uint32 LeaderWaypointIDs[2];
+    uint32 leaderGUID;
+    float follow_dist;
+    float follow_angle;
+    uint32 groupAI;
+    uint32 point_1;
+    uint32 point_2;
 };
 
-class TC_GAME_API FormationMgr
+typedef std::unordered_map<uint32/*memberDBGUID*/, FormationInfo*>   CreatureGroupInfoType;
+
+class FormationMgr
 {
-    private:
-        FormationMgr();
-        ~FormationMgr();
-
-        std::unordered_map<uint32 /*spawnID*/, FormationInfo> _creatureGroupMap;
-
+        friend class ACE_Singleton<FormationMgr, ACE_Null_Mutex>;
     public:
-        static FormationMgr* instance();
-
-        void AddCreatureToGroup(ObjectGuid::LowType leaderSpawnId, Creature* creature);
+        FormationMgr() { }
+        ~FormationMgr();
+        void AddCreatureToGroup(uint32 group_id, Creature* creature);
         void RemoveCreatureFromGroup(CreatureGroup* group, Creature* creature);
-
         void LoadCreatureFormations();
-        FormationInfo* GetFormationInfo(ObjectGuid::LowType spawnId);
-
-        void AddFormationMember(ObjectGuid::LowType spawnId, float followAng, float followDist, ObjectGuid::LowType leaderSpawnId, uint32 groupAI);
+        CreatureGroupInfoType CreatureGroupMap;
 };
 
-class TC_GAME_API CreatureGroup
+class CreatureGroup
 {
     private:
-        Creature* _leader; //Important do not forget sometimes to work with pointers instead synonims :D:D
-        std::unordered_map<Creature*, FormationInfo*> _members;
+        Creature* m_leader; //Important do not forget sometimes to work with pointers instead synonims :D:D
+        typedef std::map<Creature*, FormationInfo*>  CreatureGroupMemberType;
+        CreatureGroupMemberType m_members;
 
-        ObjectGuid::LowType _leaderSpawnId;
-        bool _formed;
-        bool _engaging;
+        uint32 m_groupID;
+        bool m_Formed;
 
     public:
         //Group cannot be created empty
-        explicit CreatureGroup(ObjectGuid::LowType leaderSpawnId);
-        ~CreatureGroup();
+        explicit CreatureGroup(uint32 id) : m_leader(NULL), m_groupID(id), m_Formed(false) { }
+        ~CreatureGroup() { }
 
-        Creature* GetLeader() const { return _leader; }
-        ObjectGuid::LowType GetLeaderSpawnId() const { return _leaderSpawnId; }
-        bool IsEmpty() const { return _members.empty(); }
-        bool IsFormed() const { return _formed; }
-        bool IsLeader(Creature const* creature) const { return _leader == creature; }
+        Creature* getLeader() const { return m_leader; }
+        uint32 GetId() const { return m_groupID; }
+        bool isEmpty() const { return m_members.empty(); }
+        bool isFormed() const { return m_Formed; }
 
-        bool HasMember(Creature* member) const { return _members.count(member) > 0; }
         void AddMember(Creature* member);
         void RemoveMember(Creature* member);
         void FormationReset(bool dismiss);
 
-        void LeaderStartedMoving();
-        void MemberEngagingTarget(Creature* member, Unit* target);
-        bool CanLeaderStartMoving() const;
+        void LeaderMoveTo(float x, float y, float z);
+        void MemberAttackStart(Creature* member, Unit* target);
 };
 
-#define sFormationMgr FormationMgr::instance()
+#define sFormationMgr Oregon::Singleton<FormationMgr>::Instance()
 
 #endif
+

@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,19 +15,18 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "GossipDef.h"
-#include "Log.h"
-#include "ObjectMgr.h"
-#include "Player.h"
 #include "QuestDef.h"
-#include "World.h"
+#include "GossipDef.h"
+#include "ObjectMgr.h"
+#include "Opcodes.h"
+#include "WorldPacket.h"
 #include "WorldSession.h"
+#include "Formulas.h"
 
 GossipMenu::GossipMenu()
 {
-    _menuId = 0;
-    _locale = DEFAULT_LOCALE;
-    _senderGUID.Clear();
+    m_gItems.reserve(16);                                   // can be set for max from most often sizes to speedup push_back and less memory use
+    m_gMenuId = 0;
 }
 
 GossipMenu::~GossipMenu()
@@ -35,145 +34,78 @@ GossipMenu::~GossipMenu()
     ClearMenu();
 }
 
-void GossipMenu::AddMenuItem(int32 menuItemId, uint8 icon, std::string const& message, uint32 sender, uint32 action, std::string const& boxMessage, uint32 boxMoney, bool coded /*= false*/)
+void GossipMenu::AddMenuItem(uint8 Icon, const std::string& Message, uint32 dtSender, uint32 dtAction, const std::string& BoxMessage, uint32 BoxMoney, bool Coded)
 {
-    ASSERT(_menuItems.size() <= GOSSIP_MAX_MENU_ITEMS);
+    ASSERT(m_gItems.size() <= GOSSIP_MAX_MENU_ITEMS);
 
-    // Find a free new id - script case
-    if (menuItemId == -1)
-    {
-        menuItemId = 0;
-        if (!_menuItems.empty())
-        {
-            for (GossipMenuItemContainer::const_iterator itr = _menuItems.begin(); itr != _menuItems.end(); ++itr)
-            {
-                if (int32(itr->first) > menuItemId)
-                    break;
+    GossipMenuItem gItem;
 
-                menuItemId = itr->first + 1;
-            }
-        }
-    }
+    gItem.m_gIcon       = Icon;
+    gItem.m_gMessage    = Message;
+    gItem.m_gCoded      = Coded;
+    gItem.m_gSender     = dtSender;
+    gItem.m_gOptionId   = dtAction;
+    gItem.m_gBoxMessage = BoxMessage;
+    gItem.m_gBoxMoney   = BoxMoney;
 
-    GossipMenuItem& menuItem = _menuItems[menuItemId];
-
-    menuItem.MenuItemIcon    = icon;
-    menuItem.Message         = message;
-    menuItem.IsCoded         = coded;
-    menuItem.Sender          = sender;
-    menuItem.OptionType      = action;
-    menuItem.BoxMessage      = boxMessage;
-    menuItem.BoxMoney        = boxMoney;
+    m_gItems.push_back(gItem);
 }
 
-/**
- * @name AddMenuItem
- * @brief Adds a localized gossip menu item from db by menu id and menu item id.
- * @param menuId Gossip menu id.
- * @param menuItemId Gossip menu item id.
- * @param sender Identifier of the current menu.
- * @param action Custom action given to OnGossipHello.
- */
-void GossipMenu::AddMenuItem(uint32 menuId, uint32 menuItemId, uint32 sender, uint32 action)
+void GossipMenu::AddGossipMenuItemData(uint32 action_menu, uint32 action_poi, uint32 action_script)
 {
-    /// Find items for given menu id.
-    GossipMenuItemsMapBounds bounds = sObjectMgr->GetGossipMenuItemsMapBounds(menuId);
-    /// Return if there are none.
-    if (bounds.first == bounds.second)
-        return;
+    GossipMenuItemData pItemData;
 
-    /// Iterate over each of them.
-    for (GossipMenuItemsContainer::const_iterator itr = bounds.first; itr != bounds.second; ++itr)
-    {
-        /// Find the one with the given menu item id.
-        if (itr->second.OptionID != menuItemId)
-            continue;
+    pItemData.m_gAction_menu    = action_menu;
+    pItemData.m_gAction_poi     = action_poi;
+    pItemData.m_gAction_script  = action_script;
 
-        /// Store texts for localization.
-        std::string strOptionText, strBoxText;
-        BroadcastText const* optionBroadcastText = sObjectMgr->GetBroadcastText(itr->second.OptionBroadcastTextID);
-        BroadcastText const* boxBroadcastText = sObjectMgr->GetBroadcastText(itr->second.BoxBroadcastTextID);
-
-        /// OptionText
-        if (optionBroadcastText)
-            strOptionText = optionBroadcastText->GetText(GetLocale());
-        else
-            strOptionText = itr->second.OptionText;
-
-        /// BoxText
-        if (boxBroadcastText)
-            strBoxText = boxBroadcastText->GetText(GetLocale());
-        else
-            strBoxText = itr->second.BoxText;
-
-        /// Check need of localization.
-        if (GetLocale() != DEFAULT_LOCALE)
-        {
-            if (!optionBroadcastText)
-            {
-                /// Find localizations from database.
-                if (GossipMenuItemsLocale const* gossipMenuLocale = sObjectMgr->GetGossipMenuItemsLocale(MAKE_PAIR32(menuId, menuItemId)))
-                    ObjectMgr::GetLocaleString(gossipMenuLocale->OptionText, GetLocale(), strOptionText);
-            }
-
-            if (!boxBroadcastText)
-            {
-                /// Find localizations from database.
-                if (GossipMenuItemsLocale const* gossipMenuLocale = sObjectMgr->GetGossipMenuItemsLocale(MAKE_PAIR32(menuId, menuItemId)))
-                    ObjectMgr::GetLocaleString(gossipMenuLocale->BoxText, GetLocale(), strBoxText);
-            }
-        }
-
-        /// Add menu item with existing method. Menu item id -1 is also used in ADD_GOSSIP_ITEM macro.
-        AddMenuItem(-1, itr->second.OptionIcon, strOptionText, sender, action, strBoxText, itr->second.BoxMoney, itr->second.BoxCoded);
-    }
+    m_gItemsData.push_back(pItemData);
 }
 
-void GossipMenu::AddGossipMenuItemData(uint32 menuItemId, uint32 gossipActionMenuId, uint32 gossipActionPoi)
+void GossipMenu::AddMenuItem(uint8 Icon, const std::string& Message, bool Coded)
 {
-    GossipMenuItemData& itemData = _menuItemData[menuItemId];
-
-    itemData.GossipActionMenuId  = gossipActionMenuId;
-    itemData.GossipActionPoi     = gossipActionPoi;
+    AddMenuItem(Icon, Message, 0, 0, "", 0, Coded);
 }
 
-uint32 GossipMenu::GetMenuItemSender(uint32 menuItemId) const
+void GossipMenu::AddMenuItem(uint8 Icon, char const* Message, bool Coded)
 {
-    GossipMenuItemContainer::const_iterator itr = _menuItems.find(menuItemId);
-    if (itr == _menuItems.end())
-        return 0;
-
-    return itr->second.Sender;
+    AddMenuItem(Icon, std::string(Message ? Message : ""), Coded);
 }
 
-uint32 GossipMenu::GetMenuItemAction(uint32 menuItemId) const
+void GossipMenu::AddMenuItem(uint8 Icon, char const* Message, uint32 dtSender, uint32 dtAction, char const* BoxMessage, uint32 BoxMoney, bool Coded)
 {
-    GossipMenuItemContainer::const_iterator itr = _menuItems.find(menuItemId);
-    if (itr == _menuItems.end())
-        return 0;
-
-    return itr->second.OptionType;
+    AddMenuItem(Icon, std::string(Message ? Message : ""), dtSender, dtAction, std::string(BoxMessage ? BoxMessage : ""), BoxMoney, Coded);
 }
 
-bool GossipMenu::IsMenuItemCoded(uint32 menuItemId) const
+uint32 GossipMenu::MenuItemSender(unsigned int ItemId)
 {
-    GossipMenuItemContainer::const_iterator itr = _menuItems.find(menuItemId);
-    if (itr == _menuItems.end())
-        return false;
+    if (ItemId >= m_gItems.size()) return 0;
 
-    return itr->second.IsCoded;
+    return m_gItems[ ItemId ].m_gSender;
+}
+
+uint32 GossipMenu::MenuItemAction(unsigned int ItemId)
+{
+    if (ItemId >= m_gItems.size()) return 0;
+
+    return m_gItems[ ItemId ].m_gOptionId;
+}
+
+bool GossipMenu::MenuItemCoded(unsigned int ItemId)
+{
+    if (ItemId >= m_gItems.size()) return 0;
+
+    return m_gItems[ ItemId ].m_gCoded;
 }
 
 void GossipMenu::ClearMenu()
 {
-    _menuItems.clear();
-    _menuItemData.clear();
+    m_gItems.clear();
+    m_gItemsData.clear();
 }
 
-PlayerMenu::PlayerMenu(WorldSession* session) : _session(session)
+PlayerMenu::PlayerMenu(WorldSession* session) : pSession(session)
 {
-    if (_session)
-        _gossipMenu.SetLocale(_session->GetSessionDbLocaleIndex());
 }
 
 PlayerMenu::~PlayerMenu()
@@ -183,109 +115,201 @@ PlayerMenu::~PlayerMenu()
 
 void PlayerMenu::ClearMenus()
 {
-    _gossipMenu.ClearMenu();
-    _questMenu.ClearMenu();
+    mGossipMenu.ClearMenu();
+    mQuestMenu.ClearMenu();
 }
 
-void PlayerMenu::SendGossipMenu(uint32 titleTextId, ObjectGuid objectGUID)
+uint32 PlayerMenu::GossipOptionSender(unsigned int Selection)
 {
-    _gossipMenu.SetSenderGUID(objectGUID);
+    return mGossipMenu.MenuItemSender(Selection);
+}
 
-    WorldPacket data(SMSG_GOSSIP_MESSAGE, 100);         // guess size
+uint32 PlayerMenu::GossipOptionAction(unsigned int Selection)
+{
+    return mGossipMenu.MenuItemAction(Selection);
+}
+
+bool PlayerMenu::GossipOptionCoded(unsigned int Selection)
+{
+    return mGossipMenu.MenuItemCoded(Selection);
+}
+
+void PlayerMenu::SendGossipMenu(uint32 TitleTextId, uint64 objectGUID)
+{
+    WorldPacket data(SMSG_GOSSIP_MESSAGE, (100));           // guess size
     data << uint64(objectGUID);
-    data << uint32(_gossipMenu.GetMenuId());            // new 2.4.0
-    data << uint32(titleTextId);
-    data << uint32(_gossipMenu.GetMenuItemCount());     // max count 0x10
+    data << uint32(mGossipMenu.GetMenuId());                // new 2.4.0
+    data << uint32(TitleTextId);
+    data << uint32(mGossipMenu.MenuItemCount());            // max count 0x20
 
-    for (GossipMenuItemContainer::const_iterator itr = _gossipMenu.GetMenuItems().begin(); itr != _gossipMenu.GetMenuItems().end(); ++itr)
+    for (uint32 iI = 0; iI < mGossipMenu.MenuItemCount(); ++iI)
     {
-        GossipMenuItem const& item = itr->second;
-        data << uint32(itr->first);
-        data << uint8(item.MenuItemIcon);
-        data << uint8(item.IsCoded);                    // makes pop up box password
-        data << uint32(item.BoxMoney);                  // money required to open menu, 2.0.3
-        data << item.Message;                           // text for gossip item
-        data << item.BoxMessage;                        // accept text (related to money) pop up box, 2.0.3
+        GossipMenuItem const& gItem = mGossipMenu.GetItem(iI);
+        data << uint32(iI);
+        data << uint8(gItem.m_gIcon);
+        data << uint8(gItem.m_gCoded);                      // makes pop up box password
+        data << uint32(gItem.m_gBoxMoney);                  // money required to open menu, 2.0.3
+        data << gItem.m_gMessage;                           // text for gossip item, max 0x800
+        data << gItem.m_gBoxMessage;                        // accept text (related to money) pop up box, 2.0.3, max 0x800
     }
 
-    size_t count_pos = data.wpos();
-    data << uint32(0);                                  // max count 0x20
-    uint32 count = 0;
+    data << uint32(mQuestMenu.MenuItemCount());           // max count 0x20
 
     // Store this instead of checking the Singleton every loop iteration
-    bool questLevelInTitle = sWorld->getBoolConfig(CONFIG_UI_QUESTLEVELS_IN_DIALOGS);
+    bool questLevelInTitle = sWorld.getConfig(CONFIG_UI_QUESTLEVELS_IN_DIALOGS);
 
-    for (uint8 i = 0; i < _questMenu.GetMenuItemCount(); ++i)
+    for (uint32 iI = 0; iI < mQuestMenu.MenuItemCount(); ++iI)
     {
-        QuestMenuItem const& item = _questMenu.GetItem(i);
-        uint32 questID = item.QuestId;
-        if (Quest const* quest = sObjectMgr->GetQuestTemplate(questID))
+        QuestMenuItem const& qItem = mQuestMenu.GetItem(iI);
+        uint32 questID = qItem.m_qId;
+        Quest const* pQuest = sObjectMgr.GetQuestTemplate(questID);
+
+        data << uint32(questID);
+        data << uint32(qItem.m_qIcon);
+        data << int32(pQuest->GetQuestLevel());
+        std::string Title = pQuest->GetTitle();
+
+        int loc_idx = pSession->GetSessionDbLocaleIndex();
+        if (loc_idx >= 0)
+            if (QuestLocale const* ql = sObjectMgr.GetQuestLocale(questID))
+                if (ql->Title.size() > uint32(loc_idx) && !ql->Title[loc_idx].empty())
+                    Title = ql->Title[loc_idx];
+
+        if (questLevelInTitle)
+            AddQuestLevelToTitle(Title, pQuest->GetQuestLevel());
+
+        data << Title;
+    }
+
+    pSession->SendPacket(&data);
+}
+
+void PlayerMenu::CloseGossip()
+{
+    WorldPacket data(SMSG_GOSSIP_COMPLETE, 0);
+    pSession->SendPacket(&data);
+}
+
+void PlayerMenu::SendPointOfInterest(float X, float Y, uint32 Icon, uint32 Flags, uint32 Data, char const* locName)
+{
+    WorldPacket data(SMSG_GOSSIP_POI, (4 + 4 + 4 + 4 + 4 + 10)); // guess size
+    data << uint32(Flags);
+    data << float(X);
+    data << float(Y);
+    data << uint32(Icon);
+    data << uint32(Data);
+    data << locName;
+
+    pSession->SendPacket(&data);
+    //sLog.outDebug("WORLD: Sent SMSG_GOSSIP_POI");
+}
+
+void PlayerMenu::SendTalking(uint32 textID)
+{
+    GossipText const* pGossip = sObjectMgr.GetGossipText(textID);
+
+    WorldPacket data(SMSG_NPC_TEXT_UPDATE, 100);          // guess size
+    data << textID;                                         // can be < 0
+
+    if (!pGossip)
+    {
+        for (uint32 i = 0; i < 8; ++i)
         {
-            ++count;
-            data << uint32(questID);
-            data << uint32(item.QuestIcon);
-            data << int32(quest->GetQuestLevel());
-            data << uint32(quest->GetFlags()); // 3.3.3 quest flags
-            data << uint8(quest->IsAutoComplete() && quest->IsRepeatable() && !quest->IsDailyOrWeekly() && !quest->IsMonthly()); // 3.3.3 icon changes - 0: yellow exclapamtion mark, 1: blue question mark
-            std::string title = quest->GetTitle();
-
-            LocaleConstant localeConstant = _session->GetSessionDbLocaleIndex();
-            if (localeConstant != LOCALE_enUS)
-                if (QuestLocale const* localeData = sObjectMgr->GetQuestLocale(questID))
-                    ObjectMgr::GetLocaleString(localeData->Title, localeConstant, title);
-
-            if (questLevelInTitle)
-                Quest::AddQuestLevelToTitle(title, quest->GetQuestLevel());
-
-            data << title;                                  // max 0x200
+            data << float(0);
+            data << "Greetings $N";
+            data << "Greetings $N";
+            data << uint32(0);
+            data << uint32(0);
+            data << uint32(0);
+            data << uint32(0);
+            data << uint32(0);
+            data << uint32(0);
+            data << uint32(0);
         }
     }
-
-    data.put<uint8>(count_pos, count);
-    _session->SendPacket(&data);
-}
-
-void PlayerMenu::SendCloseGossip()
-{
-    _gossipMenu.SetSenderGUID(ObjectGuid::Empty);
-
-    WorldPacket data(SMSG_GOSSIP_COMPLETE, 0);
-    _session->SendPacket(&data);
-}
-
-void PlayerMenu::SendPointOfInterest(uint32 id) const
-{
-    PointOfInterest const* poi = sObjectMgr->GetPointOfInterest(id);
-    if (!poi)
+    else
     {
-        TC_LOG_ERROR("sql.sql", "Request to send non-existing POI (Id: %u), ignored.", id);
-        return;
+        std::string Text_0[8], Text_1[8];
+        for (int i = 0; i < 8; ++i)
+        {
+            Text_0[i] = pGossip->Options[i].Text_0;
+            Text_1[i] = pGossip->Options[i].Text_1;
+        }
+        int loc_idx = pSession->GetSessionDbLocaleIndex();
+        if (loc_idx >= 0)
+        {
+            if (NpcTextLocale const* nl = sObjectMgr.GetNpcTextLocale(textID))
+            {
+                for (int i = 0; i < 8; ++i)
+                {
+                    if (nl->Text_0[i].size() > uint32(loc_idx) && !nl->Text_0[i][loc_idx].empty())
+                        Text_0[i] = nl->Text_0[i][loc_idx];
+                    if (nl->Text_1[i].size() > uint32(loc_idx) && !nl->Text_1[i][loc_idx].empty())
+                        Text_1[i] = nl->Text_1[i][loc_idx];
+                }
+            }
+        }
+        for (int i = 0; i < 8; ++i)
+        {
+            data << pGossip->Options[i].Probability;
+
+            if (Text_0[i].empty())
+                data << Text_1[i];
+            else
+                data << Text_0[i];
+
+            if (Text_1[i].empty())
+                data << Text_0[i];
+            else
+                data << Text_1[i];
+
+            data << pGossip->Options[i].Language;
+
+            data << pGossip->Options[i].Emotes[0]._Delay;
+            data << pGossip->Options[i].Emotes[0]._Emote;
+
+            data << pGossip->Options[i].Emotes[1]._Delay;
+            data << pGossip->Options[i].Emotes[1]._Emote;
+
+            data << pGossip->Options[i].Emotes[2]._Delay;
+            data << pGossip->Options[i].Emotes[2]._Emote;
+        }
+    }
+    pSession->SendPacket(&data);
+
+    sLog.outDebug("WORLD: Sent SMSG_NPC_TEXT_UPDATE ");
+}
+
+void PlayerMenu::SendTalking(char const* title, char const* text)
+{
+    WorldPacket data(SMSG_NPC_TEXT_UPDATE, 50);           // guess size
+    data << uint32(0);
+    for (uint32 i = 0; i < 8; ++i)
+    {
+        data << float(0);
+        data << title;
+        data << text;
+        data << uint32(0);
+        data << uint32(0);
+        data << uint32(0);
+        data << uint32(0);
+        data << uint32(0);
+        data << uint32(0);
+        data << uint32(0);
     }
 
-    std::string name = poi->Name;
-    LocaleConstant localeConstant = _session->GetSessionDbLocaleIndex();
-    if (localeConstant != LOCALE_enUS)
-        if (PointOfInterestLocale const* localeData = sObjectMgr->GetPointOfInterestLocale(id))
-            ObjectMgr::GetLocaleString(localeData->Name, localeConstant, name);
+    pSession->SendPacket(&data);
 
-    WorldPacket data(SMSG_GOSSIP_POI, 4 + 4 + 4 + 4 + 4 + 10);  // guess size
-    data << uint32(poi->Flags);
-    data << float(poi->PositionX);
-    data << float(poi->PositionY);
-    data << uint32(poi->Icon);
-    data << uint32(poi->Importance);
-    data << name;
-
-    _session->SendPacket(&data);
+    sLog.outDebug("WORLD: Sent SMSG_NPC_TEXT_UPDATE ");
 }
 
 /*********************************************************/
-/***                    QUEST SYSTEM                   ***/
+/***                   QUEST SYSTEM                   ***/
 /*********************************************************/
 
 QuestMenu::QuestMenu()
 {
-    _questMenuItems.reserve(16);                                   // can be set for max from most often sizes to speedup push_back and less memory use
+    m_qItems.reserve(16);                                   // can be set for max from most often sizes to speedup push_back and less memory use
 }
 
 QuestMenu::~QuestMenu()
@@ -295,389 +319,458 @@ QuestMenu::~QuestMenu()
 
 void QuestMenu::AddMenuItem(uint32 QuestId, uint8 Icon)
 {
-    if (!sObjectMgr->GetQuestTemplate(QuestId))
-        return;
+    Quest const* qinfo = sObjectMgr.GetQuestTemplate(QuestId);
+    if (!qinfo) return;
 
-    ASSERT(_questMenuItems.size() <= GOSSIP_MAX_MENU_ITEMS);
+    ASSERT(m_qItems.size() <= GOSSIP_MAX_MENU_ITEMS);
 
-    QuestMenuItem questMenuItem;
+    QuestMenuItem qItem;
 
-    questMenuItem.QuestId        = QuestId;
-    questMenuItem.QuestIcon      = Icon;
+    qItem.m_qId        = QuestId;
+    qItem.m_qIcon      = Icon;
 
-    _questMenuItems.push_back(questMenuItem);
+    m_qItems.push_back(qItem);
 }
 
-bool QuestMenu::HasItem(uint32 questId) const
+bool QuestMenu::HasItem(uint32 questid)
 {
-    for (QuestMenuItemList::const_iterator i = _questMenuItems.begin(); i != _questMenuItems.end(); ++i)
-        if (i->QuestId == questId)
+    for (QuestMenuItemList::iterator i = m_qItems.begin(); i != m_qItems.end(); ++i)
+        if (i->m_qId == questid)
             return true;
-
     return false;
 }
 
 void QuestMenu::ClearMenu()
 {
-    _questMenuItems.clear();
+    m_qItems.clear();
 }
 
-void PlayerMenu::SendQuestGiverQuestList(QEmote const& eEmote, const std::string& Title, ObjectGuid guid)
+void PlayerMenu::SendQuestGiverQuestList(QEmote eEmote, const std::string& Title, uint64 npcGUID)
 {
     WorldPacket data(SMSG_QUESTGIVER_QUEST_LIST, 100);    // guess size
-    data << uint64(guid);
-
-    if (QuestGreeting const* questGreeting = sObjectMgr->GetQuestGreeting(guid))
-    {
-        std::string strGreeting = questGreeting->greeting;
-
-        LocaleConstant localeConstant = _session->GetSessionDbLocaleIndex();
-        if (localeConstant != LOCALE_enUS)
-            if (QuestGreetingLocale const* questGreetingLocale = sObjectMgr->GetQuestGreetingLocale(MAKE_PAIR32(guid.GetEntry(), guid.GetTypeId())))
-                ObjectMgr::GetLocaleString(questGreetingLocale->greeting, localeConstant, strGreeting);
-
-        data << strGreeting;
-        data << uint32(questGreeting->greetEmoteDelay);
-        data << uint32(questGreeting->greetEmoteType);
-    }
-    else
-    {
-        data << Title;
-        data << uint32(eEmote._Delay);                         // player emote
-        data << uint32(eEmote._Emote);                         // NPC emote
-    }
-
-    size_t count_pos = data.wpos();
-    data << uint8(0);
-    uint32 count = 0;
+    data << uint64(npcGUID);
+    data << Title;
+    data << uint32(eEmote._Delay);                         // player emote
+    data << uint32(eEmote._Emote);                         // NPC emote
+    data << uint8 (mQuestMenu.MenuItemCount());
 
     // Store this instead of checking the Singleton every loop iteration
-    bool questLevelInTitle = sWorld->getBoolConfig(CONFIG_UI_QUESTLEVELS_IN_DIALOGS);
+    bool questLevelInTitle = sWorld.getConfig(CONFIG_UI_QUESTLEVELS_IN_DIALOGS);
 
-    for (uint32 i = 0; i < _questMenu.GetMenuItemCount(); ++i)
+    for (uint32 iI = 0; iI < mQuestMenu.MenuItemCount(); iI++)
     {
-        QuestMenuItem const& questMenuItem = _questMenu.GetItem(i);
+        QuestMenuItem const& qmi = mQuestMenu.GetItem(iI);
 
-        uint32 questID = questMenuItem.QuestId;
+        uint32 questID = qmi.m_qId;
+        Quest const* pQuest = sObjectMgr.GetQuestTemplate(questID);
 
-        if (Quest const* quest = sObjectMgr->GetQuestTemplate(questID))
+        std::string title = pQuest ? pQuest->GetTitle() : "";
+
+        int loc_idx = pSession->GetSessionDbLocaleIndex();
+        if (loc_idx >= 0)
         {
-            ++count;
-            std::string title = quest->GetTitle();
-
-            LocaleConstant localeConstant = _session->GetSessionDbLocaleIndex();
-            if (localeConstant != LOCALE_enUS)
-                if (QuestLocale const* questTemplateLocaleData = sObjectMgr->GetQuestLocale(questID))
-                    ObjectMgr::GetLocaleString(questTemplateLocaleData->Title, localeConstant, title);
-
-            if (questLevelInTitle)
-                Quest::AddQuestLevelToTitle(title, quest->GetQuestLevel());
-
-            data << uint32(questID);
-            data << uint32(questMenuItem.QuestIcon);
-            data << int32(quest->GetQuestLevel());
-            data << uint32(quest->GetFlags()); // 3.3.3 quest flags
-            data << uint8(quest->IsAutoComplete() && quest->IsRepeatable() && !quest->IsDailyOrWeekly() && !quest->IsMonthly()); // 3.3.3 icon changes - 0: yellow exclapamtion mark, 1: blue question mark
-            data << title;
+            if (QuestLocale const* ql = sObjectMgr.GetQuestLocale(questID))
+            {
+                if (ql->Title.size() > uint32(loc_idx) && !ql->Title[loc_idx].empty())
+                    title = ql->Title[loc_idx];
+            }
         }
+
+        if (questLevelInTitle)
+            AddQuestLevelToTitle(title, pQuest->GetQuestLevel());
+
+        data << uint32(questID);
+        data << uint32(qmi.m_qIcon);
+        data << int32(pQuest->GetQuestLevel());
+        data << title;
     }
-
-    data.put<uint8>(count_pos, count);
-    _session->SendPacket(&data);
-
-    TC_LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTGIVER_QUEST_LIST (QuestGiver: %s)", guid.ToString().c_str());
+    pSession->SendPacket(&data);
+    DEBUG_LOG("WORLD: Sent SMSG_QUESTGIVER_QUEST_LIST NPC Guid=%u", GUID_LOPART(npcGUID));
 }
 
-void PlayerMenu::SendQuestGiverStatus(uint8 questStatus, ObjectGuid npcGUID) const
+void PlayerMenu::SendQuestGiverStatus(uint8 questStatus, uint64 npcGUID)
 {
     WorldPacket data(SMSG_QUESTGIVER_STATUS, 9);
     data << uint64(npcGUID);
     data << uint8(questStatus);
 
-    _session->SendPacket(&data);
-    TC_LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTGIVER_STATUS NPC=%s, status=%u", npcGUID.ToString().c_str(), questStatus);
+    pSession->SendPacket(&data);
+    DEBUG_LOG("WORLD: Sent SMSG_QUESTGIVER_STATUS NPC Guid=%u, status=%u", GUID_LOPART(npcGUID), questStatus);
 }
 
-void PlayerMenu::SendQuestGiverQuestDetails(Quest const* quest, ObjectGuid npcGUID, bool activateAccept) const
+void PlayerMenu::SendQuestGiverQuestDetails(Quest const* pQuest, uint64 npcGUID, bool ActivateAccept)
 {
-    std::string questTitle            = quest->GetTitle();
-    std::string questDetails          = quest->GetDetails();
-    std::string questObjectives       = quest->GetObjectives();
-    std::string questAreaDescription  = quest->GetAreaDescription();
+    std::string Title      = pQuest->GetTitle();
+    std::string Details    = pQuest->GetDetails();
+    std::string Objectives = pQuest->GetObjectives();
+    std::string EndText    = pQuest->GetEndText();
 
-    LocaleConstant localeConstant = _session->GetSessionDbLocaleIndex();
-    if (localeConstant != LOCALE_enUS)
+    int loc_idx = pSession->GetSessionDbLocaleIndex();
+    if (loc_idx >= 0)
     {
-        if (QuestLocale const* localeData = sObjectMgr->GetQuestLocale(quest->GetQuestId()))
+        QuestLocale const* ql = sObjectMgr.GetQuestLocale(pQuest->GetQuestId());
+        if (ql)
         {
-            ObjectMgr::GetLocaleString(localeData->Title,           localeConstant, questTitle);
-            ObjectMgr::GetLocaleString(localeData->Details,         localeConstant, questDetails);
-            ObjectMgr::GetLocaleString(localeData->Objectives,      localeConstant, questObjectives);
-            ObjectMgr::GetLocaleString(localeData->AreaDescription, localeConstant, questAreaDescription);
+            if (ql->Title.size() > uint32(loc_idx) && !ql->Title[loc_idx].empty())
+                Title = ql->Title[loc_idx];
+            if (ql->Details.size() > uint32(loc_idx) && !ql->Details[loc_idx].empty())
+                Details = ql->Details[loc_idx];
+            if (ql->Objectives.size() > uint32(loc_idx) && !ql->Objectives[loc_idx].empty())
+                Objectives = ql->Objectives[loc_idx];
+            if (ql->EndText.size() > uint32(loc_idx) && !ql->EndText[loc_idx].empty())
+                EndText = ql->EndText[loc_idx];
         }
     }
 
-    if (sWorld->getBoolConfig(CONFIG_UI_QUESTLEVELS_IN_DIALOGS))
-        Quest::AddQuestLevelToTitle(questTitle, quest->GetQuestLevel());
+    if (sWorld.getConfig(CONFIG_UI_QUESTLEVELS_IN_DIALOGS))
+        AddQuestLevelToTitle(Title, pQuest->GetQuestLevel());
 
     WorldPacket data(SMSG_QUESTGIVER_QUEST_DETAILS, 100);   // guess size
     data << uint64(npcGUID);
-    data << uint64(_session->GetPlayer()->GetPlayerSharingQuest());
-    data << uint32(quest->GetQuestId());
-    data << questTitle;
-    data << questDetails;
-    data << questObjectives;
-    data << uint8(activateAccept ? 1 : 0);                  // CGQuestInfo::m_autoLaunched
-    data << uint32(quest->GetFlags() & (sWorld->getBoolConfig(CONFIG_QUEST_IGNORE_AUTO_ACCEPT) ? ~QUEST_FLAGS_AUTO_ACCEPT : ~0)); // 3.3.3 questFlags
-    data << uint32(quest->GetSuggestedPlayers());
-    data << uint8(0);                                       // CGQuestInfo::m_startQuestCheat
+    data << uint32(pQuest->GetQuestId());
+    data << Title;
+    data << Details;
+    data << Objectives;
+    data << uint32(ActivateAccept);
+    data << uint32(pQuest->GetSuggestedPlayers());
 
-    if (quest->HasFlag(QUEST_FLAGS_HIDDEN_REWARDS))
+    if (pQuest->HasFlag(QUEST_FLAGS_HIDDEN_REWARDS))
     {
         data << uint32(0);                                  // Rewarded chosen items hidden
         data << uint32(0);                                  // Rewarded items hidden
         data << uint32(0);                                  // Rewarded money hidden
-        data << uint32(0);                                  // Rewarded XP hidden
     }
     else
     {
-        data << uint32(quest->GetRewChoiceItemsCount());
-        for (uint32 i=0; i < QUEST_REWARD_CHOICES_COUNT; ++i)
+        ItemTemplate const* IProto;
+
+        data << uint32(pQuest->GetRewChoiceItemsCount());
+        for (uint32 i = 0; i < QUEST_REWARD_CHOICES_COUNT; ++i)
         {
-            if (!quest->RewardChoiceItemId[i])
+            if (!pQuest->RewChoiceItemId[i])
                 continue;
 
-            data << uint32(quest->RewardChoiceItemId[i]);
-            data << uint32(quest->RewardChoiceItemCount[i]);
+            data << uint32(pQuest->RewChoiceItemId[i]);
+            data << uint32(pQuest->RewChoiceItemCount[i]);
 
-            if (ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(quest->RewardChoiceItemId[i]))
-                data << uint32(itemTemplate->DisplayInfoID);
+            IProto = sObjectMgr.GetItemTemplate(pQuest->RewChoiceItemId[i]);
+            if (IProto)
+                data << uint32(IProto->DisplayInfoID);
             else
                 data << uint32(0x00);
         }
 
-        data << uint32(quest->GetRewItemsCount());
+        data << uint32(pQuest->GetRewItemsCount());
 
-        for (uint32 i=0; i < QUEST_REWARDS_COUNT; ++i)
+        for (uint32 i = 0; i < QUEST_REWARDS_COUNT; ++i)
         {
-            if (!quest->RewardItemId[i])
+            if (!pQuest->RewItemId[i])
                 continue;
 
-            data << uint32(quest->RewardItemId[i]);
-            data << uint32(quest->RewardItemIdCount[i]);
+            data << uint32(pQuest->RewItemId[i]);
+            data << uint32(pQuest->RewItemCount[i]);
 
-            if (ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(quest->RewardItemId[i]))
-                data << uint32(itemTemplate->DisplayInfoID);
+            IProto = sObjectMgr.GetItemTemplate(pQuest->RewItemId[i]);
+            if (IProto)
+                data << uint32(IProto->DisplayInfoID);
             else
                 data << uint32(0);
         }
 
-        data << uint32(quest->GetRewOrReqMoney(_session->GetPlayer()));
-        data << uint32(quest->GetXPReward(_session->GetPlayer()) * sWorld->getRate(RATE_XP_QUEST));
+        data << uint32(pQuest->GetRewOrReqMoney());
     }
 
     // rewarded honor points. Multiply with 10 to satisfy client
-    data << uint32(10 * quest->CalculateHonorGain(_session->GetPlayer()->GetQuestLevel(quest)));
-    data << float(0.0f);                                    // unk, honor multiplier?
-    data << uint32(quest->GetRewSpell());                   // reward spell, this spell will display (icon) (cast if RewSpellCast == 0)
-    data << int32(quest->GetRewSpellCast());                // cast spell
-    data << uint32(quest->GetCharTitleId());                // CharTitleId, new 2.4.0, player gets this title (id from CharTitles)
-    data << uint32(quest->GetBonusTalents());               // bonus talents
-    data << uint32(quest->GetRewArenaPoints());             // reward arena points
-    data << uint32(0);                                      // unk
-
-    for (uint32 i = 0; i < QUEST_REPUTATIONS_COUNT; ++i)
-        data << uint32(quest->RewardFactionId[i]);
-
-    for (uint32 i = 0; i < QUEST_REPUTATIONS_COUNT; ++i)
-        data << int32(quest->RewardFactionValueId[i]);
-
-    for (uint32 i = 0; i < QUEST_REPUTATIONS_COUNT; ++i)
-        data << int32(quest->RewardFactionValueIdOverride[i]);
+    data << uint32(10 * Oregon::Honor::hk_honor_at_level(pSession->GetPlayer()->getLevel(), pQuest->GetRewHonorableKills()));
+    data << uint32(pQuest->GetRewSpell());                  // reward spell, this spell will display (icon) (casted if RewSpellCast == 0)
+    data << uint32(pQuest->GetRewSpellCast());              // casted spell
+    data << uint32(pQuest->GetCharTitleId());               // CharTitleId, new 2.4.0, player gets this title (id from CharTitles)
 
     data << uint32(QUEST_EMOTE_COUNT);
     for (uint32 i = 0; i < QUEST_EMOTE_COUNT; ++i)
     {
-        data << uint32(quest->DetailsEmote[i]);
-        data << uint32(quest->DetailsEmoteDelay[i]);       // DetailsEmoteDelay (in ms)
+        data << uint32(pQuest->DetailsEmote[i]);
+        data << uint32(0);                                  // DetailsEmoteDelay
     }
-    _session->SendPacket(&data);
+    pSession->SendPacket(&data);
 
-    TC_LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTGIVER_QUEST_DETAILS NPC=%s, questid=%u", npcGUID.ToString().c_str(), quest->GetQuestId());
+    DEBUG_LOG("WORLD: Sent SMSG_QUESTGIVER_QUEST_DETAILS NPCGuid=%u, questid=%u", GUID_LOPART(npcGUID), pQuest->GetQuestId());
 }
 
-void PlayerMenu::SendQuestQueryResponse(Quest const* quest) const
+void PlayerMenu::SendQuestQueryResponse(Quest const* pQuest)
 {
-    if (sWorld->getBoolConfig(CONFIG_CACHE_DATA_QUERIES))
-        _session->SendPacket(&quest->QueryData[static_cast<uint32>(_session->GetSessionDbLocaleIndex())]);
+    std::string Title, Details, Objectives, EndText;
+    std::string ObjectiveText[QUEST_OBJECTIVES_COUNT];
+    Title = pQuest->GetTitle();
+    Details = pQuest->GetDetails();
+    Objectives = pQuest->GetObjectives();
+    EndText = pQuest->GetEndText();
+    for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
+        ObjectiveText[i] = pQuest->ObjectiveText[i];
+
+    int loc_idx = pSession->GetSessionDbLocaleIndex();
+    if (loc_idx >= 0)
+    {
+        if (QuestLocale const* ql = sObjectMgr.GetQuestLocale(pQuest->GetQuestId()))
+        {
+            if (ql->Title.size() > uint32(loc_idx) && !ql->Title[loc_idx].empty())
+                Title = ql->Title[loc_idx];
+            if (ql->Details.size() > uint32(loc_idx) && !ql->Details[loc_idx].empty())
+                Details = ql->Details[loc_idx];
+            if (ql->Objectives.size() > uint32(loc_idx) && !ql->Objectives[loc_idx].empty())
+                Objectives = ql->Objectives[loc_idx];
+            if (ql->EndText.size() > uint32(loc_idx) && !ql->EndText[loc_idx].empty())
+                EndText = ql->EndText[loc_idx];
+
+            for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
+                if (ql->ObjectiveText[i].size() > loc_idx && !ql->ObjectiveText[i][loc_idx].empty())
+                    ObjectiveText[i] = ql->ObjectiveText[i][loc_idx];
+        }
+    }
+
+    WorldPacket data(SMSG_QUEST_QUERY_RESPONSE, 100);     // guess size
+
+    data << uint32(pQuest->GetQuestId());                   // quest id
+    data << uint32(pQuest->GetQuestMethod());               // Accepted values: 0, 1 or 2. 0 == IsAutoComplete() (skip objectives/details)
+    data << int32(pQuest->GetQuestLevel());                 // may be 0, -1, static data, in other cases must be used dynamic level: Player::GetQuestLevelForPlayer
+    data << uint32(pQuest->GetZoneOrSort());                // zone or sort to display in quest log
+
+    data << uint32(pQuest->GetType());                      // quest type
+    data << uint32(pQuest->GetSuggestedPlayers());          // suggested players count
+
+    data << uint32(pQuest->GetRepObjectiveFaction());       // shown in quest log as part of quest objective
+    data << uint32(pQuest->GetRepObjectiveValue());         // shown in quest log as part of quest objective
+
+    data << uint32(0);                                      // RequiredOpositeRepFaction
+    data << uint32(0);                                      // RequiredOpositeRepValue, required faction value with another (oposite) faction (objective)
+
+    data << uint32(pQuest->GetNextQuestInChain());          // client will request this quest from NPC, if not 0
+
+    if (pQuest->HasFlag(QUEST_FLAGS_HIDDEN_REWARDS))
+        data << uint32(0);                                  // Hide money rewarded
+    else
+        data << uint32(pQuest->GetRewOrReqMoney());         // reward money (below max lvl)
+
+    data << uint32(pQuest->GetRewMoneyMaxLevel());          // used in XP calculation at client
+    data << uint32(pQuest->GetRewSpell());                  // reward spell, this spell will display (icon) (casted if RewSpellCast == 0)
+    data << uint32(pQuest->GetRewSpellCast());              // casted spell
+
+    // rewarded honor points
+    data << uint32(Oregon::Honor::hk_honor_at_level(pSession->GetPlayer()->getLevel(), pQuest->GetRewHonorableKills()));
+    data << uint32(pQuest->GetSrcItemId());
+    data << uint32(pQuest->GetFlags() & 0xFFFF);
+    data << uint32(pQuest->GetCharTitleId());               // CharTitleId, new 2.4.0, player gets this title (id from CharTitles)
+
+    int iI;
+
+    if (pQuest->HasFlag(QUEST_FLAGS_HIDDEN_REWARDS))
+    {
+        for (iI = 0; iI < QUEST_REWARDS_COUNT; ++iI)
+            data << uint32(0) << uint32(0);
+        for (iI = 0; iI < QUEST_REWARD_CHOICES_COUNT; ++iI)
+            data << uint32(0) << uint32(0);
+    }
     else
     {
-        WorldPacket queryPacket = quest->BuildQueryData(_session->GetSessionDbLocaleIndex());
-        _session->SendPacket(&queryPacket);
+        for (iI = 0; iI < QUEST_REWARDS_COUNT; ++iI)
+        {
+            data << uint32(pQuest->RewItemId[iI]);
+            data << uint32(pQuest->RewItemCount[iI]);
+        }
+        for (iI = 0; iI < QUEST_REWARD_CHOICES_COUNT; ++iI)
+        {
+            data << uint32(pQuest->RewChoiceItemId[iI]);
+            data << uint32(pQuest->RewChoiceItemCount[iI]);
+        }
     }
 
-    TC_LOG_DEBUG("network", "WORLD: Sent SMSG_QUEST_QUERY_RESPONSE questid=%u", quest->GetQuestId());
+    data << pQuest->GetPointMapId();
+    data << pQuest->GetPointX();
+    data << pQuest->GetPointY();
+    data << pQuest->GetPointOpt();
+
+    data << Title;
+    data << Objectives;
+    data << Details;
+    data << EndText;
+
+    for (iI = 0; iI < QUEST_OBJECTIVES_COUNT; ++iI)
+    {
+        if (pQuest->ReqCreatureOrGOId[iI] < 0)
+        {
+            // client expected gameobject template id in form (id|0x80000000)
+            data << uint32((pQuest->ReqCreatureOrGOId[iI] * (-1)) | 0x80000000);
+        }
+        else
+            data << uint32(pQuest->ReqCreatureOrGOId[iI]);
+        data << uint32(pQuest->ReqCreatureOrGOCount[iI]);
+        data << uint32(pQuest->ReqItemId[iI]);
+        data << uint32(pQuest->ReqItemCount[iI]);
+    }
+
+    for (iI = 0; iI < QUEST_OBJECTIVES_COUNT; ++iI)
+        data << ObjectiveText[iI];
+
+    pSession->SendPacket(&data);
+    DEBUG_LOG("WORLD: Sent SMSG_QUEST_QUERY_RESPONSE questid=%u", pQuest->GetQuestId());
 }
 
-void PlayerMenu::SendQuestGiverOfferReward(Quest const* quest, ObjectGuid npcGUID, bool enableNext) const
+void PlayerMenu::SendQuestGiverOfferReward(Quest const* pQuest, uint64 npcGUID, bool EnableNext)
 {
-    std::string questTitle = quest->GetTitle();
-    std::string RewardText = quest->GetOfferRewardText();
+    std::string Title = pQuest->GetTitle();
+    std::string OfferRewardText = pQuest->GetOfferRewardText();
 
-    LocaleConstant localeConstant = _session->GetSessionDbLocaleIndex();
-    if (localeConstant != LOCALE_enUS)
+    int loc_idx = pSession->GetSessionDbLocaleIndex();
+    if (loc_idx >= 0)
     {
-        if (QuestLocale const* localeData = sObjectMgr->GetQuestLocale(quest->GetQuestId()))
-            ObjectMgr::GetLocaleString(localeData->Title,           localeConstant, questTitle);
-
-        if (QuestOfferRewardLocale const* questOfferRewardLocale = sObjectMgr->GetQuestOfferRewardLocale(quest->GetQuestId()))
-            ObjectMgr::GetLocaleString(questOfferRewardLocale->RewardText, localeConstant, RewardText);
+        if (QuestLocale const* ql = sObjectMgr.GetQuestLocale(pQuest->GetQuestId()))
+        {
+            if (ql->Title.size() > uint32(loc_idx) && !ql->Title[loc_idx].empty())
+                Title = ql->Title[loc_idx];
+            if (ql->OfferRewardText.size() > uint32(loc_idx) && !ql->OfferRewardText[loc_idx].empty())
+                OfferRewardText = ql->OfferRewardText[loc_idx];
+        }
     }
 
-    if (sWorld->getBoolConfig(CONFIG_UI_QUESTLEVELS_IN_DIALOGS))
-        Quest::AddQuestLevelToTitle(questTitle, quest->GetQuestLevel());
+    WorldPacket data(SMSG_QUESTGIVER_OFFER_REWARD, 50);   // guess size
 
-    WorldPacket data(SMSG_QUESTGIVER_OFFER_REWARD, 50);     // guess size
     data << uint64(npcGUID);
-    data << uint32(quest->GetQuestId());
-    data << questTitle;
-    data << RewardText;
+    data << uint32(pQuest->GetQuestId());
+    data << Title;
+    data << OfferRewardText;
 
-    data << uint8(enableNext ? 1 : 0);                      // Auto Finish
-    data << uint32(quest->GetFlags());                      // 3.3.3 questFlags
-    data << uint32(quest->GetSuggestedPlayers());           // SuggestedGroupNum
+    data << uint32(EnableNext);
+    data << uint32(0);                                      // unk
 
-    uint32 emoteCount = 0;
-    for (uint8 i = 0; i < QUEST_EMOTE_COUNT; ++i)
+    uint32 EmoteCount = 0;
+    for (uint32 i = 0; i < QUEST_EMOTE_COUNT; ++i)
     {
-        if (quest->OfferRewardEmote[i] <= 0)
+        if (pQuest->OfferRewardEmote[i] <= 0)
             break;
-        ++emoteCount;
+        ++EmoteCount;
     }
 
-    data << emoteCount;                                     // Emote Count
-    for (uint8 i = 0; i < emoteCount; ++i)
+    data << EmoteCount;                                     // Emote Count
+    for (uint32 i = 0; i < EmoteCount; ++i)
     {
-        data << uint32(quest->OfferRewardEmoteDelay[i]);    // Delay Emote
-        data << uint32(quest->OfferRewardEmote[i]);
+        data << uint32(0);                                  // Delay Emote
+        data << uint32(pQuest->OfferRewardEmote[i]);
     }
 
-    data << uint32(quest->GetRewChoiceItemsCount());
-    for (uint32 i=0; i < quest->GetRewChoiceItemsCount(); ++i)
-    {
-        data << uint32(quest->RewardChoiceItemId[i]);
-        data << uint32(quest->RewardChoiceItemCount[i]);
+    ItemTemplate const* pItem;
 
-        if (ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(quest->RewardChoiceItemId[i]))
-            data << uint32(itemTemplate->DisplayInfoID);
+    data << uint32(pQuest->GetRewChoiceItemsCount());
+    for (uint32 i = 0; i < pQuest->GetRewChoiceItemsCount(); ++i)
+    {
+        pItem = sObjectMgr.GetItemTemplate(pQuest->RewChoiceItemId[i]);
+
+        data << uint32(pQuest->RewChoiceItemId[i]);
+        data << uint32(pQuest->RewChoiceItemCount[i]);
+
+        if (pItem)
+            data << uint32(pItem->DisplayInfoID);
         else
             data << uint32(0);
     }
 
-    data << uint32(quest->GetRewItemsCount());
-    for (uint32 i = 0; i < quest->GetRewItemsCount(); ++i)
+    data << uint32(pQuest->GetRewItemsCount());
+    for (uint32 i = 0; i < pQuest->GetRewItemsCount(); ++i)
     {
-        data << uint32(quest->RewardItemId[i]);
-        data << uint32(quest->RewardItemIdCount[i]);
+        pItem = sObjectMgr.GetItemTemplate(pQuest->RewItemId[i]);
+        data << uint32(pQuest->RewItemId[i]);
+        data << uint32(pQuest->RewItemCount[i]);
 
-        if (ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(quest->RewardItemId[i]))
-            data << uint32(itemTemplate->DisplayInfoID);
+        if (pItem)
+            data << uint32(pItem->DisplayInfoID);
         else
             data << uint32(0);
     }
 
-    data << uint32(quest->GetRewOrReqMoney(_session->GetPlayer()));
-    data << uint32(quest->GetXPReward(_session->GetPlayer()) * sWorld->getRate(RATE_XP_QUEST));
+    data << uint32(pQuest->GetRewOrReqMoney());
 
     // rewarded honor points. Multiply with 10 to satisfy client
-    data << uint32(10 * quest->CalculateHonorGain(_session->GetPlayer()->GetQuestLevel(quest)));
-    data << float(0.0f);                                    // unk, honor multiplier?
+    data << uint32(10 * Oregon::Honor::hk_honor_at_level(pSession->GetPlayer()->getLevel(), pQuest->GetRewHonorableKills()));
     data << uint32(0x08);                                   // unused by client?
-    data << uint32(quest->GetRewSpell());                   // reward spell, this spell will display (icon) (cast if RewSpellCast == 0)
-    data << int32(quest->GetRewSpellCast());                // cast spell
-    data << uint32(quest->GetCharTitleId());                // CharTitleId, new 2.4.0, player gets this title (id from CharTitles)
-    data << uint32(quest->GetBonusTalents());               // bonus talents
-    data << uint32(quest->GetRewArenaPoints());             // arena points
-    data << uint32(0);
-
-    for (uint32 i = 0; i < QUEST_REPUTATIONS_COUNT; ++i)    // reward factions ids
-        data << uint32(quest->RewardFactionId[i]);
-
-    for (uint32 i = 0; i < QUEST_REPUTATIONS_COUNT; ++i)    // columnid in QuestFactionReward.dbc (zero based)?
-        data << int32(quest->RewardFactionValueId[i]);
-
-    for (uint32 i = 0; i < QUEST_REPUTATIONS_COUNT; ++i)    // reward reputation override?
-        data << uint32(quest->RewardFactionValueIdOverride[i]);
-
-    _session->SendPacket(&data);
-    TC_LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTGIVER_OFFER_REWARD NPC=%s, questid=%u", npcGUID.ToString().c_str(), quest->GetQuestId());
+    data << uint32(pQuest->GetRewSpell());                  // reward spell, this spell will display (icon) (casted if RewSpellCast == 0)
+    data << uint32(pQuest->GetRewSpellCast());              // casted spell
+    data << uint32(0);                                      // unknown
+    pSession->SendPacket(&data);
+    sLog.outDebug("WORLD: Sent SMSG_QUESTGIVER_OFFER_REWARD NPCGuid=%u, questid=%u", GUID_LOPART(npcGUID), pQuest->GetQuestId());
 }
 
-void PlayerMenu::SendQuestGiverRequestItems(Quest const* quest, ObjectGuid npcGUID, bool canComplete, bool closeOnCancel) const
+void PlayerMenu::SendQuestGiverRequestItems(Quest const* pQuest, uint64 npcGUID, bool Completable, bool CloseOnCancel)
 {
     // We can always call to RequestItems, but this packet only goes out if there are actually
     // items.  Otherwise, we'll skip straight to the OfferReward
 
-    std::string questTitle = quest->GetTitle();
-    std::string requestItemsText = quest->GetRequestItemsText();
+    std::string Title = pQuest->GetTitle();
+    std::string RequestItemsText = pQuest->GetRequestItemsText();
 
-    LocaleConstant localeConstant = _session->GetSessionDbLocaleIndex();
-    if (localeConstant != LOCALE_enUS)
+    int loc_idx = pSession->GetSessionDbLocaleIndex();
+    if (loc_idx >= 0)
     {
-        if (QuestLocale const* localeData = sObjectMgr->GetQuestLocale(quest->GetQuestId()))
-            ObjectMgr::GetLocaleString(localeData->Title,            localeConstant, questTitle);
-
-        if (QuestRequestItemsLocale const* questRequestItemsLocale = sObjectMgr->GetQuestRequestItemsLocale(quest->GetQuestId()))
-            ObjectMgr::GetLocaleString(questRequestItemsLocale->CompletionText, localeConstant, requestItemsText);
+        if (QuestLocale const* ql = sObjectMgr.GetQuestLocale(pQuest->GetQuestId()))
+        {
+            if (ql->Title.size() > uint32(loc_idx) && !ql->Title[loc_idx].empty())
+                Title = ql->Title[loc_idx];
+            if (ql->RequestItemsText.size() > uint32(loc_idx) && !ql->RequestItemsText[loc_idx].empty())
+                RequestItemsText = ql->RequestItemsText[loc_idx];
+        }
     }
 
-    if (!quest->GetReqItemsCount() && canComplete)
+    // We may wish a better check, perhaps checking the real quest requirements
+    if (pQuest->GetRequestItemsText().empty() && Completable)
     {
-        SendQuestGiverOfferReward(quest, npcGUID, true);
+        SendQuestGiverOfferReward(pQuest, npcGUID, true);
         return;
     }
 
-    if (sWorld->getBoolConfig(CONFIG_UI_QUESTLEVELS_IN_DIALOGS))
-        Quest::AddQuestLevelToTitle(questTitle, quest->GetQuestLevel());
+    if (sWorld.getConfig(CONFIG_UI_QUESTLEVELS_IN_DIALOGS))
+        AddQuestLevelToTitle(Title, pQuest->GetQuestLevel());
 
-    WorldPacket data(SMSG_QUESTGIVER_REQUEST_ITEMS, 50);    // guess size
+    WorldPacket data(SMSG_QUESTGIVER_REQUEST_ITEMS, 50);  // guess size
     data << uint64(npcGUID);
-    data << uint32(quest->GetQuestId());
-    data << questTitle;
-    data << requestItemsText;
+    data << uint32(pQuest->GetQuestId());
+    data << Title;
+    data << RequestItemsText;
 
-    data << uint32(0);                                   // unknown
+    data << uint32(0x00);                                   // unknown
 
-    if (canComplete)
-        data << quest->GetCompleteEmote();
+    if (Completable)
+        data << pQuest->GetCompleteEmote();
     else
-        data << quest->GetIncompleteEmote();
+        data << pQuest->GetIncompleteEmote();
 
     // Close Window after cancel
-    data << uint32(closeOnCancel);
+    if (CloseOnCancel)
+        data << uint32(0x01);
+    else
+        data << uint32(0x00);
 
-    data << uint32(quest->GetFlags());                      // 3.3.3 questFlags
-    data << uint32(quest->GetSuggestedPlayers());           // SuggestedGroupNum
+    data << uint32(0x00);                                   // unknown
 
     // Required Money
-    data << uint32(quest->GetRewOrReqMoney() < 0 ? -quest->GetRewOrReqMoney() : 0);
+    data << uint32(pQuest->GetRewOrReqMoney() < 0 ? -pQuest->GetRewOrReqMoney() : 0);
 
-    data << uint32(quest->GetReqItemsCount());
-    for (int i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; ++i)
+    data << uint32(pQuest->GetReqItemsCount());
+    ItemTemplate const* pItem;
+    for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
     {
-        if (!quest->RequiredItemId[i])
+        if (!pQuest->ReqItemId[i])
             continue;
 
-        data << uint32(quest->RequiredItemId[i]);
-        data << uint32(quest->RequiredItemCount[i]);
+        pItem = sObjectMgr.GetItemTemplate(pQuest->ReqItemId[i]);
 
-        if (ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(quest->RequiredItemId[i]))
-            data << uint32(itemTemplate->DisplayInfoID);
+        data << uint32(pQuest->ReqItemId[i]);
+        data << uint32(pQuest->ReqItemCount[i]);
+
+        if (pItem)
+            data << uint32(pItem->DisplayInfoID);
         else
             data << uint32(0);
     }
 
-    if (!canComplete)
+    if (!Completable)
         data << uint32(0x00);
     else
         data << uint32(0x03);
@@ -686,6 +779,17 @@ void PlayerMenu::SendQuestGiverRequestItems(Quest const* quest, ObjectGuid npcGU
     data << uint32(0x08);
     data << uint32(0x10);
 
-    _session->SendPacket(&data);
-    TC_LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTGIVER_REQUEST_ITEMS NPC=%s, questid=%u", npcGUID.ToString().c_str(), quest->GetQuestId());
+    pSession->SendPacket(&data);
+    sLog.outDebug("WORLD: Sent SMSG_QUESTGIVER_REQUEST_ITEMS NPCGuid=%u, questid=%u", GUID_LOPART(npcGUID), pQuest->GetQuestId());
 }
+
+void PlayerMenu::AddQuestLevelToTitle(std::string& title, int32 level)
+{
+    // Adds the quest level to the front of the quest title
+    // example: [13] Westfall Stew
+
+    std::stringstream questTitlePretty;
+    questTitlePretty << "[" << level << "] " << title;
+    title = questTitlePretty.str();
+}
+

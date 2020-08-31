@@ -1,4 +1,4 @@
-# This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+# This file is part of the OregonCore Project. See AUTHORS file for Copyright information
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without
@@ -8,10 +8,10 @@
 # WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
+
 set(g3dlib_STAT_SRCS
   source/AABox.cpp
   source/Any.cpp
-  source/AnyTableReader.cpp
   source/BinaryFormat.cpp
   source/BinaryInput.cpp
   source/BinaryOutput.cpp
@@ -27,7 +27,6 @@ set(g3dlib_STAT_SRCS
   source/format.cpp
   source/g3dfnmatch.cpp
   source/g3dmath.cpp
-  source/GThread.cpp
   source/Line.cpp
   source/LineSegment.cpp
   source/Log.cpp
@@ -40,6 +39,7 @@ set(g3dlib_STAT_SRCS
   source/Quat.cpp
   source/Random.cpp
   source/Ray.cpp
+  source/ReferenceCount.cpp
   source/RegistryUtil.cpp
   source/Sphere.cpp
   source/stringutils.cpp
@@ -54,20 +54,19 @@ set(g3dlib_STAT_SRCS
   source/Vector4.cpp
 )
 
+if(WIN32)
+  include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/dep/zlib
+  )
+else()
+  include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+  )
+endif()
+
 add_library(g3dlib STATIC ${g3dlib_STAT_SRCS})
 
-target_include_directories(g3dlib
-  PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include)
-
 target_link_libraries(g3dlib
-  PRIVATE
-    trinity-dependency-interface
-  PUBLIC
-    zlib
-    threads)
-
-set_target_properties(g3dlib
-    PROPERTIES
-      FOLDER
-        "dep")
+  ${ZLIB_LIBRARIES}
+)

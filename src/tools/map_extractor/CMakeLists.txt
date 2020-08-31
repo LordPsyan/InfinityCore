@@ -1,4 +1,4 @@
-# This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+# This file is part of the OregonCore Project. See AUTHORS file for Copyright information
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without
@@ -8,47 +8,42 @@
 # WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-CollectSourceFiles(
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  PRIVATE_SOURCES)
+file(GLOB_RECURSE sources *.cpp *.h)
 
-if(WIN32)
-  list(APPEND PRIVATE_SOURCES ${sources_windows})
+if( UNIX )
+  include_directories (
+    ${CMAKE_SOURCE_DIR}/src/server/shared
+    ${CMAKE_SOURCE_DIR}/dep/libmpq
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/loadlib
+    ${CMAKE_SOURCE_DIR}/dep/zlib
+  )
+elseif( WIN32 )
+  include_directories (
+    ${CMAKE_SOURCE_DIR}/src/server/shared
+    ${CMAKE_SOURCE_DIR}/dep/libmpq
+    ${CMAKE_SOURCE_DIR}/dep/libmpq/win
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/loadlib
+    ${CMAKE_SOURCE_DIR}/dep/zlib
+  )
 endif()
 
-add_executable(mapextractor
-  ${PRIVATE_SOURCES}
+add_executable(map_extractor
+  ${sources}
 )
 
-target_include_directories(mapextractor
-  PUBLIC
-    ${CMAKE_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/loadlib)
+target_link_libraries(map_extractor
+  ${JEMALLOC_LIBRARY}
+  mpq
+  ${BZIP2_LIBRARIES}
+  ${ZLIB_LIBRARIES}
+)
 
-target_link_libraries(mapextractor
-  PRIVATE
-    trinity-core-interface
-  PUBLIC
-    common
-    mpq)
+add_dependencies(map_extractor mpq)
 
-CollectIncludeDirectories(
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  PUBLIC_INCLUDES)
-
-target_include_directories(mapextractor
-  PUBLIC
-    ${PUBLIC_INCLUDES}
-  PRIVATE
-    ${CMAKE_CURRENT_BINARY_DIR})
-
-set_target_properties(mapextractor
-    PROPERTIES
-      FOLDER
-        "tools")
-
-if(UNIX)
-  install(TARGETS mapextractor DESTINATION bin)
-elseif(WIN32)
-  install(TARGETS mapextractor DESTINATION "${CMAKE_INSTALL_PREFIX}")
+if( UNIX )
+  install(TARGETS map_extractor DESTINATION bin)
+elseif( WIN32 )
+  install(TARGETS map_extractor DESTINATION "${CMAKE_INSTALL_PREFIX}") 
 endif()

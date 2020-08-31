@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,93 +15,79 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITYCORE_GOSSIP_H
-#define TRINITYCORE_GOSSIP_H
+#ifndef OREGONCORE_GOSSIP_H
+#define OREGONCORE_GOSSIP_H
 
 #include "Common.h"
-#include "ObjectGuid.h"
+#include "QuestDef.h"
 #include "NPCHandler.h"
-#include <map>
 
-class Quest;
 class WorldSession;
 
-#define GOSSIP_MAX_MENU_ITEMS               32
+#define GOSSIP_MAX_MENU_ITEMS 64                            // client supported items unknown, but provided number must be enough
 #define DEFAULT_GOSSIP_MESSAGE              0xffffff
 
 enum Gossip_Option
 {
-    GOSSIP_OPTION_NONE              = 0,                    //UNIT_NPC_FLAG_NONE                (0)
-    GOSSIP_OPTION_GOSSIP            = 1,                    //UNIT_NPC_FLAG_GOSSIP              (1)
-    GOSSIP_OPTION_QUESTGIVER        = 2,                    //UNIT_NPC_FLAG_QUESTGIVER          (2)
-    GOSSIP_OPTION_VENDOR            = 3,                    //UNIT_NPC_FLAG_VENDOR              (128)
-    GOSSIP_OPTION_TAXIVENDOR        = 4,                    //UNIT_NPC_FLAG_TAXIVENDOR          (8192)
-    GOSSIP_OPTION_TRAINER           = 5,                    //UNIT_NPC_FLAG_TRAINER             (16)
-    GOSSIP_OPTION_SPIRITHEALER      = 6,                    //UNIT_NPC_FLAG_SPIRITHEALER        (16384)
-    GOSSIP_OPTION_SPIRITGUIDE       = 7,                    //UNIT_NPC_FLAG_SPIRITGUIDE         (32768)
-    GOSSIP_OPTION_INNKEEPER         = 8,                    //UNIT_NPC_FLAG_INNKEEPER           (65536)
-    GOSSIP_OPTION_BANKER            = 9,                    //UNIT_NPC_FLAG_BANKER              (131072)
-    GOSSIP_OPTION_PETITIONER        = 10,                   //UNIT_NPC_FLAG_PETITIONER          (262144)
-    GOSSIP_OPTION_TABARDDESIGNER    = 11,                   //UNIT_NPC_FLAG_TABARDDESIGNER      (524288)
-    GOSSIP_OPTION_BATTLEFIELD       = 12,                   //UNIT_NPC_FLAG_BATTLEFIELDPERSON   (1048576)
-    GOSSIP_OPTION_AUCTIONEER        = 13,                   //UNIT_NPC_FLAG_AUCTIONEER          (2097152)
-    GOSSIP_OPTION_STABLEPET         = 14,                   //UNIT_NPC_FLAG_STABLE              (4194304)
-    GOSSIP_OPTION_ARMORER           = 15,                   //UNIT_NPC_FLAG_ARMORER             (4096)
-    GOSSIP_OPTION_UNLEARNTALENTS    = 16,                   //UNIT_NPC_FLAG_TRAINER             (16) (bonus option for GOSSIP_OPTION_TRAINER)
-    GOSSIP_OPTION_UNLEARNPETTALENTS = 17,                   //UNIT_NPC_FLAG_TRAINER             (16) (bonus option for GOSSIP_OPTION_TRAINER)
-    GOSSIP_OPTION_LEARNDUALSPEC     = 18,                   //UNIT_NPC_FLAG_TRAINER             (16) (bonus option for GOSSIP_OPTION_TRAINER)
-    GOSSIP_OPTION_OUTDOORPVP        = 19,                   //added by code (option for outdoor pvp creatures)
-    GOSSIP_OPTION_DUALSPEC_INFO     = 20,                   //UNIT_NPC_FLAG_TRAINER             (16) (bonus option for GOSSIP_OPTION_TRAINER)
+    GOSSIP_OPTION_NONE              = 0,                    //UNIT_NPC_FLAG_NONE              = 0,
+    GOSSIP_OPTION_GOSSIP            = 1,                    //UNIT_NPC_FLAG_GOSSIP            = 1,
+    GOSSIP_OPTION_QUESTGIVER        = 2,                    //UNIT_NPC_FLAG_QUESTGIVER        = 2,
+    GOSSIP_OPTION_VENDOR            = 3,                    //UNIT_NPC_FLAG_VENDOR            = 4,
+    GOSSIP_OPTION_TAXIVENDOR        = 4,                    //UNIT_NPC_FLAG_TAXIVENDOR        = 8,
+    GOSSIP_OPTION_TRAINER           = 5,                    //UNIT_NPC_FLAG_TRAINER           = 16,
+    GOSSIP_OPTION_SPIRITHEALER      = 6,                    //UNIT_NPC_FLAG_SPIRITHEALER      = 32,
+    GOSSIP_OPTION_SPIRITGUIDE       = 7,                    //UNIT_NPC_FLAG_SPIRITGUIDE       = 64,
+    GOSSIP_OPTION_INNKEEPER         = 8,                    //UNIT_NPC_FLAG_INNKEEPER         = 128,
+    GOSSIP_OPTION_BANKER            = 9,                    //UNIT_NPC_FLAG_BANKER            = 256,
+    GOSSIP_OPTION_PETITIONER        = 10,                   //UNIT_NPC_FLAG_PETITIONER        = 512,
+    GOSSIP_OPTION_TABARDDESIGNER    = 11,                   //UNIT_NPC_FLAG_TABARDDESIGNER    = 1024,
+    GOSSIP_OPTION_BATTLEFIELD       = 12,                   //UNIT_NPC_FLAG_BATTLEFIELDPERSON = 2048,
+    GOSSIP_OPTION_AUCTIONEER        = 13,                   //UNIT_NPC_FLAG_AUCTIONEER        = 4096,
+    GOSSIP_OPTION_STABLEPET         = 14,                   //UNIT_NPC_FLAG_STABLE            = 8192,
+    GOSSIP_OPTION_ARMORER           = 15,                   //UNIT_NPC_FLAG_ARMORER           = 16384,
+    GOSSIP_OPTION_UNLEARNTALENTS    = 16,                   //UNIT_NPC_FLAG_TRAINER (bonus option for GOSSIP_OPTION_TRAINER)
+    GOSSIP_OPTION_UNLEARNPETSKILLS  = 17,                   //UNIT_NPC_FLAG_TRAINER (bonus option for GOSSIP_OPTION_TRAINER)
+    GOSSIP_OPTION_OUTDOORPVP        = 18,                   //added by code (option for outdoor pvp creatures)
     GOSSIP_OPTION_MAX
 };
 
 enum GossipOptionIcon
 {
-    GOSSIP_ICON_CHAT                = 0,                    // white chat bubble
-    GOSSIP_ICON_VENDOR              = 1,                    // brown bag
-    GOSSIP_ICON_TAXI                = 2,                    // flightmarker (paperplane)
-    GOSSIP_ICON_TRAINER             = 3,                    // brown book (trainer)
-    GOSSIP_ICON_INTERACT_1          = 4,                    // golden interaction wheel
-    GOSSIP_ICON_INTERACT_2          = 5,                    // golden interaction wheel
-    GOSSIP_ICON_MONEY_BAG           = 6,                    // brown bag (with gold coin in lower corner)
-    GOSSIP_ICON_TALK                = 7,                    // white chat bubble (with "..." inside)
-    GOSSIP_ICON_TABARD              = 8,                    // white tabard
-    GOSSIP_ICON_BATTLE              = 9,                    // two crossed swords
-    GOSSIP_ICON_DOT                 = 10,                   // yellow dot/point
-    GOSSIP_ICON_CHAT_11             = 11,                   // white chat bubble
-    GOSSIP_ICON_CHAT_12             = 12,                   // white chat bubble
-    GOSSIP_ICON_CHAT_13             = 13,                   // white chat bubble
-    GOSSIP_ICON_UNK_14              = 14,                   // INVALID - DO NOT USE
-    GOSSIP_ICON_UNK_15              = 15,                   // INVALID - DO NOT USE
-    GOSSIP_ICON_CHAT_16             = 16,                   // white chat bubble
-    GOSSIP_ICON_CHAT_17             = 17,                   // white chat bubble
-    GOSSIP_ICON_CHAT_18             = 18,                   // white chat bubble
-    GOSSIP_ICON_CHAT_19             = 19,                   // white chat bubble
-    GOSSIP_ICON_CHAT_20             = 20,                   // white chat bubble
+    GOSSIP_ICON_CHAT                = 0,                    //white chat bubble
+    GOSSIP_ICON_VENDOR              = 1,                    //brown bag
+    GOSSIP_ICON_TAXI                = 2,                    //flight
+    GOSSIP_ICON_TRAINER             = 3,                    //book
+    GOSSIP_ICON_INTERACT_1          = 4,                    //interaction wheel
+    GOSSIP_ICON_INTERACT_2          = 5,                    //interaction wheel
+    GOSSIP_ICON_MONEY_BAG           = 6,                    //brown bag with yellow dot
+    GOSSIP_ICON_TALK                = 7,                    //white chat bubble with black dots
+    GOSSIP_ICON_TABARD              = 8,                    //tabard
+    GOSSIP_ICON_BATTLE              = 9,                    //two swords
+    GOSSIP_ICON_DOT                 = 10,                   //yellow dot
     GOSSIP_ICON_MAX
 };
 
-//POI icons. Many more exist, list not complete.
+//POI defines
 enum Poi_Icon
 {
-    ICON_POI_BLANK              =   0,                      // Blank (not visible)
-    ICON_POI_GREY_AV_MINE       =   1,                      // Grey mine lorry
-    ICON_POI_RED_AV_MINE        =   2,                      // Red mine lorry
-    ICON_POI_BLUE_AV_MINE       =   3,                      // Blue mine lorry
-    ICON_POI_BWTOMB             =   4,                      // Blue and White Tomb Stone
-    ICON_POI_SMALL_HOUSE        =   5,                      // Small house
-    ICON_POI_GREYTOWER          =   6,                      // Grey Tower
-    ICON_POI_REDFLAG            =   7,                      // Red Flag w/Yellow !
-    ICON_POI_TOMBSTONE          =   8,                      // Normal tomb stone (brown)
-    ICON_POI_BWTOWER            =   9,                      // Blue and White Tower
-    ICON_POI_REDTOWER           =   10,                     // Red Tower
-    ICON_POI_BLUETOWER          =   11,                     // Blue Tower
-    ICON_POI_RWTOWER            =   12,                     // Red and White Tower
-    ICON_POI_REDTOMB            =   13,                     // Red Tomb Stone
-    ICON_POI_RWTOMB             =   14,                     // Red and White Tomb Stone
-    ICON_POI_BLUETOMB           =   15,                     // Blue Tomb Stone
-    ICON_POI_16                 =   16,                     // Grey ?
-    ICON_POI_17                 =   17,                     // Blue/White ?
+    ICON_POI_0                  =   0,                      // Grey ?
+    ICON_POI_1                  =   1,                      // Red ?
+    ICON_POI_2                  =   2,                      // Blue ?
+    ICON_POI_BWTOMB             =   3,                      // Blue and White Tomb Stone
+    ICON_POI_HOUSE              =   4,                      // House
+    ICON_POI_TOWER              =   5,                      // Tower
+    ICON_POI_REDFLAG            =   6,                      // Red Flag with Yellow !
+    ICON_POI_TOMB               =   7,                      // Tomb Stone
+    ICON_POI_BWTOWER            =   8,                      // Blue and White Tower
+    ICON_POI_REDTOWER           =   9,                      // Red Tower
+    ICON_POI_BLUETOWER          =   10,                     // Blue Tower
+    ICON_POI_RWTOWER            =   11,                     // Red and White Tower
+    ICON_POI_REDTOMB            =   12,                     // Red Tomb Stone
+    ICON_POI_RWTOMB             =   13,                     // Red and White Tomb Stone
+    ICON_POI_BLUETOMB           =   14,                     // Blue Tomb Stone
+    ICON_POI_NOTHING            =   15,                     // NOTHING
+    ICON_POI_16                 =   16,                     // Red ?
+    ICON_POI_17                 =   17,                     // Grey ?
     ICON_POI_18                 =   18,                     // Blue ?
     ICON_POI_19                 =   19,                     // Red and White ?
     ICON_POI_20                 =   20,                     // Red ?
@@ -129,101 +115,92 @@ enum Poi_Icon
 
 struct GossipMenuItem
 {
-    uint8       MenuItemIcon;
-    bool        IsCoded;
-    std::string Message;
-    uint32      Sender;
-    uint32      OptionType;
-    std::string BoxMessage;
-    uint32      BoxMoney;
+    uint8       m_gIcon;
+    bool        m_gCoded;
+    std::string m_gMessage;
+    uint32      m_gSender;
+    uint32      m_gOptionId;
+    std::string m_gBoxMessage;
+    uint32      m_gBoxMoney;
 };
 
-// need an ordered container
-typedef std::map<uint32, GossipMenuItem> GossipMenuItemContainer;
+typedef std::vector<GossipMenuItem> GossipMenuItemList;
 
 struct GossipMenuItemData
 {
-    uint32 GossipActionMenuId;  // MenuId of the gossip triggered by this action
-    uint32 GossipActionPoi;
+    uint32 m_gAction_menu;
+    uint32 m_gAction_poi;
+    uint32 m_gAction_script;
 };
 
-// need an ordered container
-typedef std::map<uint32, GossipMenuItemData> GossipMenuItemDataContainer;
+typedef std::vector<GossipMenuItemData> GossipMenuItemDataList;
 
 struct QuestMenuItem
 {
-    uint32  QuestId;
-    uint8   QuestIcon;
+    uint32      m_qId;
+    uint8       m_qIcon;
 };
 
 typedef std::vector<QuestMenuItem> QuestMenuItemList;
 
-class TC_GAME_API GossipMenu
+class GossipMenu
 {
     public:
         GossipMenu();
         ~GossipMenu();
 
-        void AddMenuItem(int32 menuItemId, uint8 icon, std::string const& message, uint32 sender, uint32 action, std::string const& boxMessage, uint32 boxMoney, bool coded = false);
-        void AddMenuItem(uint32 menuId, uint32 menuItemId, uint32 sender, uint32 action);
+        void AddMenuItem(uint8 Icon, const std::string& Message, bool Coded = false);
+        void AddMenuItem(uint8 Icon, const std::string& Message, uint32 dtSender, uint32 dtAction, const std::string& BoxMessage, uint32 BoxMoney, bool Coded = false);
 
-        void SetMenuId(uint32 menu_id) { _menuId = menu_id; }
-        uint32 GetMenuId() const { return _menuId; }
-        void SetSenderGUID(ObjectGuid guid) { _senderGUID = guid; }
-        ObjectGuid GetSenderGUID() const { return _senderGUID; }
-        void SetLocale(LocaleConstant locale) { _locale = locale; }
-        LocaleConstant GetLocale() const { return _locale; }
+        // for using from scripts, don't must be inlined
+        void AddMenuItem(uint8 Icon, char const* Message, bool Coded = false);
+        void AddMenuItem(uint8 Icon, char const* Message, uint32 dtSender, uint32 dtAction, char const* BoxMessage, uint32 BoxMoney, bool Coded = false);
 
-        void AddGossipMenuItemData(uint32 menuItemId, uint32 gossipActionMenuId, uint32 gossipActionPoi);
-
-        uint32 GetMenuItemCount() const
+        void SetMenuId(uint32 menu_id)
         {
-            return _menuItems.size();
+            m_gMenuId = menu_id;
+        }
+        uint32 GetMenuId()
+        {
+            return m_gMenuId;
+        }
+
+        void AddGossipMenuItemData(uint32 action_menu, uint32 action_poi, uint32 action_script);
+
+        unsigned int MenuItemCount() const
+        {
+            return m_gItems.size();
         }
 
         bool Empty() const
         {
-            return _menuItems.empty();
+            return m_gItems.empty();
         }
 
-        GossipMenuItem const* GetItem(uint32 id) const
+        GossipMenuItem const& GetItem(unsigned int Id)
         {
-            GossipMenuItemContainer::const_iterator itr = _menuItems.find(id);
-            if (itr != _menuItems.end())
-                return &itr->second;
-
-            return nullptr;
+            return m_gItems[ Id ];
         }
 
-        GossipMenuItemData const* GetItemData(uint32 indexId) const
+        GossipMenuItemData const& GetItemData(unsigned int indexId)
         {
-            GossipMenuItemDataContainer::const_iterator itr = _menuItemData.find(indexId);
-            if (itr != _menuItemData.end())
-                return &itr->second;
-
-            return nullptr;
+            return m_gItemsData[indexId];
         }
 
-        uint32 GetMenuItemSender(uint32 menuItemId) const;
-        uint32 GetMenuItemAction(uint32 menuItemId) const;
-        bool IsMenuItemCoded(uint32 menuItemId) const;
+        uint32 MenuItemSender(unsigned int ItemId);
+        uint32 MenuItemAction(unsigned int ItemId);
+        bool MenuItemCoded(unsigned int ItemId);
 
         void ClearMenu();
 
-        GossipMenuItemContainer const& GetMenuItems() const
-        {
-            return _menuItems;
-        }
+    protected:
+        GossipMenuItemList      m_gItems;
+        GossipMenuItemDataList  m_gItemsData;
 
-    private:
-        GossipMenuItemContainer _menuItems;
-        GossipMenuItemDataContainer _menuItemData;
-        uint32 _menuId;
-        ObjectGuid _senderGUID;
-        LocaleConstant _locale;
+        uint32 m_gMenuId;
 };
 
-class TC_GAME_API QuestMenu
+class QuestMenu
 {
     public:
         QuestMenu();
@@ -232,63 +209,77 @@ class TC_GAME_API QuestMenu
         void AddMenuItem(uint32 QuestId, uint8 Icon);
         void ClearMenu();
 
-        uint8 GetMenuItemCount() const
+        uint8 MenuItemCount() const
         {
-            return _questMenuItems.size();
+            return m_qItems.size();
         }
 
         bool Empty() const
         {
-            return _questMenuItems.empty();
+            return m_qItems.empty();
         }
 
-        bool HasItem(uint32 questId) const;
+        bool HasItem(uint32 questid);
 
-        QuestMenuItem const& GetItem(uint16 index) const
+        QuestMenuItem const& GetItem(uint16 Id)
         {
-            return _questMenuItems[index];
+            return m_qItems[ Id ];
         }
 
-    private:
-        QuestMenuItemList _questMenuItems;
+    protected:
+        QuestMenuItemList m_qItems;
 };
 
-class TC_GAME_API PlayerMenu
+class PlayerMenu
 {
+    private:
+        GossipMenu mGossipMenu;
+        QuestMenu  mQuestMenu;
+        WorldSession* pSession;
+
     public:
-        explicit PlayerMenu(WorldSession* session);
+        PlayerMenu(WorldSession* Session);
         ~PlayerMenu();
 
-        GossipMenu& GetGossipMenu() { return _gossipMenu; }
-        QuestMenu& GetQuestMenu() { return _questMenu; }
+        GossipMenu& GetGossipMenu()
+        {
+            return mGossipMenu;
+        }
+        QuestMenu& GetQuestMenu()
+        {
+            return mQuestMenu;
+        }
 
-        bool Empty() const { return _gossipMenu.Empty() && _questMenu.Empty(); }
+        bool Empty() const
+        {
+            return mGossipMenu.Empty() && mQuestMenu.Empty();
+        }
 
         void ClearMenus();
-        uint32 GetGossipOptionSender(uint32 selection) const { return _gossipMenu.GetMenuItemSender(selection); }
-        uint32 GetGossipOptionAction(uint32 selection) const { return _gossipMenu.GetMenuItemAction(selection); }
-        bool IsGossipOptionCoded(uint32 selection) const { return _gossipMenu.IsMenuItemCoded(selection); }
+        uint32 GossipOptionSender(unsigned int Selection);
+        uint32 GossipOptionAction(unsigned int Selection);
+        bool GossipOptionCoded(unsigned int Selection);
 
-        void SendGossipMenu(uint32 titleTextId, ObjectGuid objectGUID);
-        void SendCloseGossip();
-        void SendPointOfInterest(uint32 poiId) const;
+        void SendGossipMenu(uint32 TitleTextId, uint64 npcGUID);
+        void CloseGossip();
+        void SendPointOfInterest(float X, float Y, uint32 Icon, uint32 Flags, uint32 Data, const char* locName);
+        void SendTalking(uint32 textID);
+        void SendTalking(char const* title, char const* text);
+
+        void AddQuestLevelToTitle(std::string& title, int32 level);
 
         /*********************************************************/
-        /***                    QUEST SYSTEM                   ***/
+        /***                   QUEST SYSTEM                   ***/
         /*********************************************************/
-        void SendQuestGiverStatus(uint8 questStatus, ObjectGuid npcGUID) const;
+        void SendQuestGiverStatus(uint8 questStatus, uint64 npcGUID);
 
-        void SendQuestGiverQuestList(QEmote const& eEmote, const std::string& Title, ObjectGuid npcGUID);
+        void SendQuestGiverQuestList(QEmote eEmote, const std::string& Title, uint64 npcGUID);
 
-        void SendQuestQueryResponse(Quest const* quest) const;
-        void SendQuestGiverQuestDetails(Quest const* quest, ObjectGuid npcGUID, bool activateAccept) const;
+        void SendQuestQueryResponse (Quest const* pQuest);
+        void SendQuestGiverQuestDetails(Quest const* pQuest, uint64 npcGUID, bool ActivateAccept);
 
-        void SendQuestGiverOfferReward(Quest const* quest, ObjectGuid npcGUID, bool enableNext) const;
-        void SendQuestGiverRequestItems(Quest const* quest, ObjectGuid npcGUID, bool canComplete, bool closeOnCancel) const;
-
-    private:
-        GossipMenu _gossipMenu;
-        QuestMenu  _questMenu;
-        WorldSession* _session;
+        void SendQuestGiverOfferReward(Quest const* pQuest, uint64 npcGUID, bool EnbleNext);
+        void SendQuestGiverRequestItems(Quest const* pQuest, uint64 npcGUID, bool Completable, bool CloseOnCancel);
 };
 #endif
+

@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,104 +15,111 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "scarlet_monastery.h"
-#include "InstanceScript.h"
-#include "ScriptedCreature.h"
+ /* ScriptData
+ SDName: Boss_Interrogator_Vishas
+ SD%Complete: 100
+ SDComment:
+ SDCategory: Scarlet Monastery
+ EndScriptData */
+
 #include "ScriptMgr.h"
+#include "ScriptedCreature.h"
+#include "scarlet_monastery.h"
 
-enum InterrogatorVishasSays
+enum eEnums
 {
-    SAY_AGGRO = 0,
-    SAY_HEALTH1 = 1,
-    SAY_HEALTH2 = 2,
-    SAY_KILL = 3,
-    SAY_TRIGGER_VORREL = 0
+    SAY_AGGRO = -1189011,
+    SAY_HEALTH1 = -1189012,
+    SAY_HEALTH2 = -1189013,
+    SAY_KILL = -1189014,
+    SAY_TRIGGER_VORREL = -1189015,
+
+    SPELL_SHADOWWORDPAIN = 2767,
 };
 
-enum InterrogatorVishasSpells
+
+class boss_interrogator_vishas : public CreatureScript
 {
-    SPELL_SHADOW_WORD_PAIN = 2767
-};
+public:
+    boss_interrogator_vishas() : CreatureScript("boss_interrogator_vishas") { }
 
-enum InterrogatorVishasEvents
-{
-    EVENT_SHADOW_WORD_PAIN = 1
-};
-
-struct boss_interrogator_vishas : public BossAI
-{
-    boss_interrogator_vishas(Creature* creature) : BossAI(creature, DATA_INTERROGATOR_VISHAS)
+    struct boss_interrogator_vishasAI : public ScriptedAI
     {
-        Initialize();
-    }
-
-    void Initialize()
-    {
-        _yellCount = 0;
-    }
-
-    void Reset() override
-    {
-        Initialize();
-        _Reset();
-    }
-
-    void JustEngagedWith(Unit* who) override
-    {
-        Talk(SAY_AGGRO);
-        BossAI::JustEngagedWith(who);
-        events.ScheduleEvent(EVENT_SHADOW_WORD_PAIN, 5s);
-    }
-
-    void KilledUnit(Unit* victim) override
-    {
-        if (victim->GetTypeId() == TYPEID_PLAYER)
-            Talk(SAY_KILL);
-    }
-
-    void JustDied(Unit* /*killer*/) override
-    {
-        _JustDied();
-        if (Creature* vorrel = instance->GetCreature(DATA_VORREL))
+        boss_interrogator_vishasAI(Creature* c) : ScriptedAI(c)
         {
-            if (vorrel->AI())
-                vorrel->AI()->Talk(SAY_TRIGGER_VORREL);
-        }
-    }
-
-    void DamageTaken(Unit* /*attacker*/, uint32 &damage) override
-    {
-        if (me->HealthBelowPctDamaged(60, damage) && _yellCount < 1)
-        {
-            Talk(SAY_HEALTH1);
-            ++_yellCount;
+            pInstance = (ScriptedInstance*)me->GetInstanceData();
         }
 
-        if (me->HealthBelowPctDamaged(30, damage) && _yellCount < 2)
-        {
-            Talk(SAY_HEALTH2);
-            ++_yellCount;
-        }
-    }
+        ScriptedInstance* pInstance;
 
-    void ExecuteEvent(uint32 eventId) override
+        bool Yell30;
+        bool Yell60;
+        uint32 ShadowWordPain_Timer;
+
+        void Reset()
+        {
+            ShadowWordPain_Timer = 5000;
+        }
+
+        void EnterCombat(Unit* /*who*/)
+        {
+            DoScriptText(SAY_AGGRO, me);
+        }
+
+        void KilledUnit(Unit* /*Victim*/)
+        {
+            DoScriptText(SAY_KILL, me);
+        }
+
+        void JustDied(Unit* /*Killer*/)
+        {
+            if (!pInstance)
+                return;
+
+            //Any other actions to do with vorrel? setStandState?
+            if (Unit* vorrel = Unit::GetUnit(*me, pInstance->GetData64(DATA_VORREL)))
+                DoScriptText(SAY_TRIGGER_VORREL, vorrel);
+        }
+
+        void UpdateAI(const uint32 diff)
+        {
+            if (!UpdateVictim())
+                return;
+
+            //If we are low on hp Do sayings
+            if (!Yell60 && ((me->GetHealth() * 100) / me->GetMaxHealth() <= 60))
+            {
+                DoScriptText(SAY_HEALTH1, me);
+                Yell60 = true;
+            }
+
+            if (!Yell30 && ((me->GetHealth() * 100) / me->GetMaxHealth() <= 30))
+            {
+                DoScriptText(SAY_HEALTH2, me);
+                Yell30 = true;
+            }
+
+            //ShadowWordPain_Timer
+            if (ShadowWordPain_Timer <= diff)
+            {
+                DoCastVictim(SPELL_SHADOWWORDPAIN);
+                ShadowWordPain_Timer = 5000 + rand() % 10000;
+            }
+            else ShadowWordPain_Timer -= diff;
+
+            DoMeleeAttackIfReady();
+        }
+    };
+
+    CreatureAI* GetAI(Creature* pCreature) const
     {
-        switch (eventId)
-        {
-            case EVENT_SHADOW_WORD_PAIN:
-                DoCastVictim(SPELL_SHADOW_WORD_PAIN);
-                events.ScheduleEvent(EVENT_SHADOW_WORD_PAIN, 5s, 15s);
-                break;
-            default:
-                break;
-        }
+        return new boss_interrogator_vishasAI(pCreature);
     }
 
-private:
-    uint8 _yellCount;
 };
 
 void AddSC_boss_interrogator_vishas()
 {
-    RegisterScarletMonasteryCreatureAI(boss_interrogator_vishas);
+    new boss_interrogator_vishas();
 }
+

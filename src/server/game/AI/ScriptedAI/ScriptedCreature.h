@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,398 +15,260 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_SCRIPTEDCREATURE_H
-#define TRINITY_SCRIPTEDCREATURE_H
+#ifndef SC_CREATURE_H
+#define SC_CREATURE_H
 
-#include "Creature.h"  // convenience include for scripts, all uses of ScriptedCreature also need Creature (except ScriptedCreature itself doesn't need Creature)
+#include "Creature.h"
 #include "CreatureAI.h"
-#include "DBCEnums.h"
-#include "TaskScheduler.h"
+#include "CreatureAIImpl.h"
+#include "ScriptedInstance.h"
 
-class InstanceScript;
+#define SCRIPT_CAST_TYPE dynamic_cast
 
-class TC_GAME_API SummonList
+#define CAST_PLR(a)     (SCRIPT_CAST_TYPE<Player*>(a))
+#define CAST_CRE(a)     (SCRIPT_CAST_TYPE<Creature*>(a))
+#define CAST_SUM(a)     (SCRIPT_CAST_TYPE<TempSummon*>(a))
+#define CAST_PET(a)     (SCRIPT_CAST_TYPE<Pet*>(a))
+#define CAST_AI(a,b)    (SCRIPT_CAST_TYPE<a*>(b))
+
+/* GET_SPELL is DEPRECATED and shouldn't be used anymore,
+   if you need to modify spell's data see SpellMgr::LoadSpellCustomAttr()
+   and modify it there. This function needs to be removed (TODO). */
+
+#if COMPILER == COMPILER_MICROSOFT
+__declspec(deprecated) inline SpellEntry* GET_SPELL(uint32 Id);
+#elif COMPILER == COMPILER_GNU
+inline SpellEntry* GET_SPELL(uint32 Id) __attribute__((deprecated));
+#endif
+
+inline SpellEntry* GET_SPELL(uint32 Id)
 {
-public:
-    typedef GuidList StorageType;
-    typedef StorageType::iterator iterator;
-    typedef StorageType::const_iterator const_iterator;
-    typedef StorageType::size_type size_type;
-    typedef StorageType::value_type value_type;
+    return const_cast<SpellEntry*>(GetSpellStore()->LookupEntry(Id));
+}
 
-    explicit SummonList(Creature* creature) : _me(creature) { }
+class ScriptedInstance;
 
-    // And here we see a problem of original inheritance approach. People started
-    // to exploit presence of std::list members, so I have to provide wrappers
-
-    iterator begin()
-    {
-        return _storage.begin();
-    }
-
-    const_iterator begin() const
-    {
-        return _storage.begin();
-    }
-
-    iterator end()
-    {
-        return _storage.end();
-    }
-
-    const_iterator end() const
-    {
-        return _storage.end();
-    }
-
-    iterator erase(iterator i)
-    {
-        return _storage.erase(i);
-    }
-
-    bool empty() const
-    {
-        return _storage.empty();
-    }
-
-    size_type size() const
-    {
-        return _storage.size();
-    }
-
-    // Clear the underlying storage. This does NOT despawn the creatures - use DespawnAll for that!
-    void clear()
-    {
-        _storage.clear();
-    }
-
-    void Summon(Creature const* summon);
-    void Despawn(Creature const* summon);
-    void DespawnEntry(uint32 entry);
-    void DespawnAll();
-
-    template <typename T>
-    void DespawnIf(T const& predicate)
-    {
-        _storage.remove_if(predicate);
-    }
-
-    template <class Predicate>
-    void DoAction(int32 info, Predicate&& predicate, uint16 max = 0)
-    {
-        // We need to use a copy of SummonList here, otherwise original SummonList would be modified
-        StorageType listCopy = _storage;
-        Trinity::Containers::RandomResize<StorageType, Predicate>(listCopy, std::forward<Predicate>(predicate), max);
-        DoActionImpl(info, listCopy);
-    }
-
-    void DoZoneInCombat(uint32 entry = 0);
-    void RemoveNotExisting();
-    bool HasEntry(uint32 entry) const;
-
-private:
-    void DoActionImpl(int32 action, StorageType const& summons);
-
-    Creature* _me;
-    StorageType _storage;
-};
-
-class TC_GAME_API EntryCheckPredicate
+class SummonList : public std::list<uint64>
 {
     public:
-        EntryCheckPredicate(uint32 entry) : _entry(entry) { }
-        bool operator()(ObjectGuid guid) { return guid.GetEntry() == _entry; }
+        explicit SummonList(Creature* creature) : me(creature) {}
+        void Summon(Creature* summon)
+        {
+            push_back(summon->GetGUID());
+        }
+        void Despawn(Creature* summon)
+        {
+            remove(summon->GetGUID());
+        }
+        void DespawnEntry(uint32 entry);
+        void DespawnAll();
+        void DoAction(uint32 entry, uint32 info);
+        bool HasEntry(uint32 entry) const;
+        Creature* GetCreatureWithEntry(uint32 entry) const;
 
+        void DoZoneInCombat(uint32 entry = 0);
     private:
-        uint32 _entry;
+        Creature* me;
 };
 
-class TC_GAME_API DummyEntryCheckPredicate
+struct ScriptedAI : public CreatureAI
 {
-    public:
-        bool operator()(ObjectGuid) { return true; }
-};
+        explicit ScriptedAI(Creature* pCreature);
+        virtual ~ScriptedAI() {}
 
-struct TC_GAME_API ScriptedAI : public CreatureAI
-{
-    public:
-        explicit ScriptedAI(Creature* creature);
-        virtual ~ScriptedAI() { }
+        //*************
+        //CreatureAI Functions
+        //*************
 
-        // *************
-        // CreatureAI Functions
-        // *************
+        void AttackStartNoMove(Unit* pTarget);
 
-        void AttackStartNoMove(Unit* target);
+        // Called at any Damage from any attacker (before damage apply)
+        void DamageTaken(Unit* /*pDone_by*/, uint32& /*uiDamage*/) {}
 
-        // Called at World update tick
-        virtual void UpdateAI(uint32 diff) override;
+        //Called at World update tick
+        void UpdateAI(const uint32);
 
-        // *************
+        //Called at creature death
+        void JustDied(Unit* /*who*/) {}
+
+        //Called at creature killing another unit
+        void KilledUnit(Unit* /*who*/) {}
+
+        // Called when the creature summon successfully other creature
+        void JustSummoned(Creature*) {}
+
+        // Called when a summoned creature is despawned
+        void SummonedCreatureDespawn(Creature*) {}
+
+        // Called when hit by a spell
+        void SpellHit(Unit* /*caster*/, const SpellEntry* /*spell*/) {}
+
+        // Called when spell hits a target
+        void SpellHitTarget(Unit* /*pTarget*/, const SpellEntry* /*spell*/) {}
+
+        //Called at waypoint reached or PointMovement end
+        void MovementInform(uint32 /*type*/, uint32 /*id*/) {}
+
+        // Called when AI is temporarily replaced or put back when possess is applied or removed
+        void OnPossess(bool /*apply*/) {}
+
+        //*************
         // Variables
-        // *************
+        //*************
 
-        // For fleeing
+        //Pointer to creature we are manipulating
+        Creature* me;
+
+        //For fleeing
         bool IsFleeing;
 
-        // *************
-        // Pure virtual functions
-        // *************
+        bool HeroicMode;
 
-        // Called before JustEngagedWith even before the creature is in combat.
-        void AttackStart(Unit* /*target*/) override;
+        //*************
+        //Pure virtual functions
+        //*************
 
-        // *************
-        // AI Helper Functions
-        // *************
+        //Called at creature reset either by death or evade
+        void Reset() {}
 
-        // Start movement toward victim
-        void DoStartMovement(Unit* target, float distance = 0.0f, float angle = 0.0f);
+        //Called at creature aggro either by MoveInLOS or Attack Start
+        void EnterCombat(Unit* /*who*/) {}
 
-        // Start no movement on victim
-        void DoStartNoMovement(Unit* target);
+        //*************
+        //AI Helper Functions
+        //*************
 
-        // Stop attack of current victim
+        //Start movement toward victim
+        void DoStartMovement(Unit* pVictim, float fDistance = 0, float fAngle = 0);
+
+        //Start no movement on victim
+        void DoStartNoMovement(Unit* pVictim);
+
+        //Stop attack of current victim
         void DoStopAttack();
 
-        // Cast spell by spell info
-        void DoCastSpell(Unit* target, SpellInfo const* spellInfo, bool triggered = false);
+        //Cast spell by spell info
+        void DoCastSpell(Unit* pTarget, SpellEntry const* pSpellInfo, bool bTriggered = false);
 
-        // Plays a sound to all nearby players
-        void DoPlaySoundToSet(WorldObject* source, uint32 soundId);
+        //Plays a sound to all nearby players
+        void DoPlaySoundToSet(WorldObject* pSource, uint32 sound);
 
-        // Add specified amount of threat directly to victim (ignores redirection effects) - also puts victim in combat and engages them if necessary
-        void AddThreat(Unit* victim, float amount, Unit* who = nullptr);
-        // Adds/removes the specified percentage from the specified victim's threat (to who, or me if not specified)
-        void ModifyThreatByPercent(Unit* victim, int32 pct, Unit* who = nullptr);
-        // Resets the victim's threat level to who (or me if not specified) to zero
-        void ResetThreat(Unit* victim, Unit* who = nullptr);
-        // Resets the specified unit's threat list (me if not specified) - does not delete entries, just sets their threat to zero
-        void ResetThreatList(Unit* who = nullptr);
-        // Returns the threat level of victim towards who (or me if not specified)
-        float GetThreat(Unit const* victim, Unit const* who = nullptr);
-        // Stops combat, ignoring restrictions, for the given creature
-        void ForceCombatStop(Creature* who, bool reset = true);
-        // Stops combat, ignoring restrictions, for the found creatures
-        void ForceCombatStopForCreatureEntry(uint32 entry, float maxSearchRange = 250.0f, bool samePhase = true, bool reset = true);
-        // Stops combat, ignoring restrictions, for the found creatures
-        void ForceCombatStopForCreatureEntry(std::vector<uint32> creatureEntries, float maxSearchRange = 250.0f, bool samePhase = true, bool reset = true);
+        //Drops all threat to 0%. Does not remove players from the threat list
+        void DoResetThreat();
 
-        void DoTeleportTo(float x, float y, float z, uint32 time = 0);
-        void DoTeleportTo(float const pos[4]);
+        float DoGetThreat(Unit* u);
+        void DoModifyThreatPercent(Unit* pUnit, int32 pct);
 
-        // Teleports a player without dropping threat (only teleports to same map)
-        void DoTeleportPlayer(Unit* unit, float x, float y, float z, float o);
-        void DoTeleportAll(float x, float y, float z, float o);
+        void DoTeleportTo(float fX, float fY, float fZ, uint32 uiTime = 0);
+        void DoTeleportTo(const float pos[4]);
 
-        // Returns friendly unit with the most amount of hp missing from max hp
-        Unit* DoSelectLowestHpFriendly(float range, uint32 minHPDiff = 1);
+        void DoAction(const int32 /*param*/) {}
 
-        // Returns friendly unit with hp pct below specified and with specified entry
-        Unit* DoSelectBelowHpPctFriendlyWithEntry(uint32 entry, float range, uint8 hpPct = 1, bool excludeSelf = true);
+        //Teleports a player without dropping threat (only teleports to same map)
+        void DoTeleportPlayer(Unit* pUnit, float fX, float fY, float fZ, float fO);
+        void DoTeleportAll(float fX, float fY, float fZ, float fO);
 
-        // Returns a list of friendly CC'd units within range
-        std::list<Creature*> DoFindFriendlyCC(float range);
+        //Returns friendly unit with the most amount of hp missing from max hp
+        Unit* DoSelectLowestHpFriendly(float fRange, uint32 uiMinHPDiff = 1);
 
-        // Returns a list of all friendly units missing a specific buff within range
-        std::list<Creature*> DoFindFriendlyMissingBuff(float range, uint32 spellId);
+        //Returns a list of friendly CC'd units within range
+        std::list<Creature*> DoFindFriendlyCC(float fRange);
 
-        // Return a player with at least minimumRange from me
-        Player* GetPlayerAtMinimumRange(float minRange);
+        //Returns a list of all friendly units missing a specific buff within range
+        std::list<Creature*> DoFindFriendlyMissingBuff(float fRange, uint32 uiSpellId);
 
-        // Spawns a creature relative to me
-        Creature* DoSpawnCreature(uint32 entry, float offsetX, float offsetY, float offsetZ, float angle, uint32 type, uint32 despawntime);
+        //Return a player with at least minimumRange from me
+        Player* GetPlayerAtMinimumRange(float fMinimumRange);
 
-        bool HealthBelowPct(uint32 pct) const;
-        bool HealthAbovePct(uint32 pct) const;
+        //Spawns a creature relative to me
+        Creature* DoSpawnCreature(uint32 uiId, float fX, float fY, float fZ, float fAngle, uint32 uiType, uint32 uiDespawntime);
 
-        // Returns spells that meet the specified criteria from the creatures spell list
-        SpellInfo const* SelectSpell(Unit* target, uint32 school, uint32 mechanic, SelectTargetType targets, uint32 powerCostMin, uint32 powerCostMax, float rangeMin, float rangeMax, SelectEffect effect);
+        //Selects a unit from the creature's current aggro list
+        Unit* SelectUnit(SelectAggroTarget pTarget, uint32 uiPosition);
 
-        void SetEquipmentSlots(bool loadDefault, int32 mainHand = EQUIP_NO_CHANGE, int32 offHand = EQUIP_NO_CHANGE, int32 ranged = EQUIP_NO_CHANGE);
+        bool HealthBelowPct(uint32 pct) const { return me->HealthBelowPct(pct); }
+        bool HealthAbovePct(uint32 pct) const { return me->HealthAbovePct(pct); }
 
-        // Used to control if MoveChase() is to be used or not in AttackStart(). Some creatures does not chase victims
-        // NOTE: If you use SetCombatMovement while the creature is in combat, it will do NOTHING - This only affects AttackStart
-        //       You should make the necessary to make it happen so.
-        //       Remember that if you modified _isCombatMovementAllowed (e.g: using SetCombatMovement) it will not be reset at Reset().
-        //       It will keep the last value you set.
-        void SetCombatMovement(bool allowMovement);
-        bool IsCombatMovementAllowed() const { return _isCombatMovementAllowed; }
+        //Returns spells that meet the specified criteria from the creatures spell list
+        SpellEntry const* SelectSpell(Unit* Target, uint32 School, uint32 Mechanic, SelectTargetType Targets,  uint32 PowerCostMin, uint32 PowerCostMax, float RangeMin, float RangeMax, SelectEffect Effect);
 
-        // return true for heroic mode. i.e.
-        //   - for dungeon in mode 10-heroic,
-        //   - for raid in mode 10-Heroic
-        //   - for raid in mode 25-heroic
-        // DO NOT USE to check raid in mode 25-normal.
-        bool IsHeroic() const { return _isHeroic; }
+        //Checks if you can cast the specified spell
+        bool CanCast(Unit* pTarget, SpellEntry const* pSpell, bool bTriggered = false);
 
-        // return the dungeon or raid difficulty
-        Difficulty GetDifficulty() const { return _difficulty; }
+        void SetEquipmentSlots(bool bLoadDefault, int32 uiMainHand = EQUIP_NO_CHANGE, int32 uiOffHand = EQUIP_NO_CHANGE, int32 uiRanged = EQUIP_NO_CHANGE);
 
-        // return true for 25 man or 25 man heroic mode
-        bool Is25ManRaid() const { return _difficulty & RAID_DIFFICULTY_MASK_25MAN; }
-
-        template <class T>
-        inline T const& DUNGEON_MODE(T const& normal5, T const& heroic10) const
+        //Generally used to control if MoveChase() is to be used or not in AttackStart(). Some creatures does not chase victims
+        void SetCombatMovement(bool CombatMove);
+        bool IsCombatMovement()
         {
-            switch (_difficulty)
-            {
-                case DUNGEON_DIFFICULTY_NORMAL:
-                    return normal5;
-                case DUNGEON_DIFFICULTY_HEROIC:
-                    return heroic10;
-                default:
-                    break;
-            }
-
-            return heroic10;
+            return m_bCombatMovement;
         }
 
-        template <class T>
-        inline T const& RAID_MODE(T const& normal10, T const& normal25) const
-        {
-            switch (_difficulty)
-            {
-                case RAID_DIFFICULTY_10MAN_NORMAL:
-                    return normal10;
-                case RAID_DIFFICULTY_25MAN_NORMAL:
-                    return normal25;
-                default:
-                    break;
-            }
+        bool EnterEvadeIfOutOfCombatArea(const uint32 uiDiff);
 
-            return normal25;
-        }
-
-        template <class T>
-        inline T const& RAID_MODE(T const& normal10, T const& normal25, T const& heroic10, T const& heroic25) const
-        {
-            switch (_difficulty)
-            {
-                case RAID_DIFFICULTY_10MAN_NORMAL:
-                    return normal10;
-                case RAID_DIFFICULTY_25MAN_NORMAL:
-                    return normal25;
-                case RAID_DIFFICULTY_10MAN_HEROIC:
-                    return heroic10;
-                case RAID_DIFFICULTY_25MAN_HEROIC:
-                    return heroic25;
-                default:
-                    break;
-            }
-
-            return heroic25;
-        }
+        Player * SelectTargetFromPlayerList(float maxdist, uint32 excludeAura, bool mustBeInLOS) const;
 
     private:
-        Difficulty _difficulty;
-        bool _isCombatMovementAllowed;
-        bool _isHeroic;
+        bool m_bCombatMovement;
+        uint32 m_uiEvadeCheckCooldown;
 };
 
-class TC_GAME_API BossAI : public ScriptedAI
+struct Scripted_NoMovementAI : public ScriptedAI
 {
-    public:
-        BossAI(Creature* creature, uint32 bossId);
-        virtual ~BossAI() { }
+    Scripted_NoMovementAI(Creature* creature) : ScriptedAI(creature) {}
 
-        InstanceScript* const instance;
+    //Called at each attack of me by any victim
+    void AttackStart(Unit* who);
+};
 
-        void JustSummoned(Creature* summon) override;
-        void SummonedCreatureDespawn(Creature* summon) override;
 
-        virtual void UpdateAI(uint32 diff) override;
+struct BossAI : public ScriptedAI
+{
+        BossAI(Creature* c, uint32 id);
+        virtual ~BossAI() {}
 
-        // Hook used to execute events scheduled into EventMap without the need
-        // to override UpdateAI
-        // note: You must re-schedule the event within this method if the event
-        // is supposed to run more than once
-        virtual void ExecuteEvent(uint32 /*eventId*/) { }
+        const uint32 bossId;
+        EventMap events;
+        SummonList summons;
+        InstanceData* const instance;
 
-        virtual void ScheduleTasks() { }
+        void JustSummoned(Creature* summon);
+        void SummonedCreatureDespawn(Creature* summon);
 
-        void Reset() override { _Reset(); }
-        void JustEngagedWith(Unit* who) override { _JustEngagedWith(who); }
-        void JustDied(Unit* /*killer*/) override { _JustDied(); }
-        void JustReachedHome() override { _JustReachedHome(); }
+        void UpdateAI(const uint32 diff) = 0;
 
-        bool CanAIAttack(Unit const* target) const override;
+        void Reset()
+        {
+            _Reset();
+        }
+        void EnterCombat(Unit* /*who*/)
+        {
+            _EnterCombat();
+        }
+        void JustDied(Unit* /*killer*/)
+        {
+            _JustDied();
+        }
+        void JustReachedHome()
+        {
+            me->setActive(false);
+        }
 
     protected:
         void _Reset();
-        void _JustEngagedWith(Unit* who);
+        void _EnterCombat();
         void _JustDied();
-        void _JustReachedHome();
-        void _DespawnAtEvade(Seconds delayToRespawn,  Creature* who = nullptr);
-        void _DespawnAtEvade(uint32 delayToRespawn = 30, Creature* who = nullptr) { _DespawnAtEvade(Seconds(delayToRespawn), who); }
-
-        void TeleportCheaters();
-
-        EventMap events;
-        SummonList summons;
-        TaskScheduler scheduler;
-
-    private:
-        uint32 const _bossId;
-};
-
-class TC_GAME_API WorldBossAI : public ScriptedAI
-{
-    public:
-        WorldBossAI(Creature* creature);
-        virtual ~WorldBossAI() { }
-
-        void JustSummoned(Creature* summon) override;
-        void SummonedCreatureDespawn(Creature* summon) override;
-
-        virtual void UpdateAI(uint32 diff) override;
-
-        // Hook used to execute events scheduled into EventMap without the need
-        // to override UpdateAI
-        // note: You must re-schedule the event within this method if the event
-        // is supposed to run more than once
-        virtual void ExecuteEvent(uint32 /*eventId*/) { }
-
-        void Reset() override { _Reset(); }
-        void JustEngagedWith(Unit* /*who*/) override { _JustEngagedWith(); }
-        void JustDied(Unit* /*killer*/) override { _JustDied(); }
-
-    protected:
-        void _Reset();
-        void _JustEngagedWith();
-        void _JustDied();
-
-        EventMap events;
-        SummonList summons;
+        void _JustReachedHome()
+        {
+            me->setActive(false);
+        }
 };
 
 // SD2 grid searchers.
-inline Creature* GetClosestCreatureWithEntry(WorldObject* source, uint32 entry, float maxSearchRange, bool alive = true)
-{
-    return source->FindNearestCreature(entry, maxSearchRange, alive);
-}
+Creature* GetClosestCreatureWithEntry(WorldObject* pSource, uint32 uiEntry, float fMaxSearchRange, bool bAlive = true);
+GameObject* GetClosestGameObjectWithEntry(WorldObject* pSource, uint32 uiEntry, float fMaxSearchRange);
+void GetCreatureListWithEntryInGrid(std::list<Creature*>& lList, WorldObject* pSource, uint32 uiEntry, float fMaxSearchRange);
+void GetGameObjectListWithEntryInGrid(std::list<GameObject*>& lList, WorldObject* pSource, uint32 uiEntry, float fMaxSearchRange);
 
-inline GameObject* GetClosestGameObjectWithEntry(WorldObject* source, uint32 entry, float maxSearchRange)
-{
-    return source->FindNearestGameObject(entry, maxSearchRange);
-}
+#endif
 
-template <typename Container>
-inline void GetCreatureListWithEntryInGrid(Container& container, WorldObject* source, uint32 entry, float maxSearchRange)
-{
-    source->GetCreatureListWithEntryInGrid(container, entry, maxSearchRange);
-}
-
-template <typename Container>
-inline void GetGameObjectListWithEntryInGrid(Container& container, WorldObject* source, uint32 entry, float maxSearchRange)
-{
-    source->GetGameObjectListWithEntryInGrid(container, entry, maxSearchRange);
-}
-
-template <typename Container>
-inline void GetPlayerListInGrid(Container& container, WorldObject* source, float maxSearchRange)
-{
-    source->GetPlayerListInGrid(container, maxSearchRange);
-}
-
-#endif // TRINITY_SCRIPTEDCREATURE_H

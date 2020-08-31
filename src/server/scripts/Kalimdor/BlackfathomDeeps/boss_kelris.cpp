@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,22 +21,16 @@
 
 enum Spells
 {
-    SPELL_MIND_BLAST             = 15587,
-    SPELL_SLEEP                  = 8399,
-    SPELL_BLACKFATHOM_CHANNELING = 8734
+    SPELL_MIND_BLAST = 15587,
+    SPELL_SLEEP = 8399,
 };
 
-enum Texts
+//Id's from ACID
+enum Yells
 {
-    SAY_AGGRO    = 0,
-    SAY_SLEEP    = 1,
-    SAY_DEATH    = 2
-};
-
-enum Events
-{
-    EVENT_MIND_BLAST = 1,
-    EVENT_SLEEP
+    SAY_AGGRO = -1048002,
+    SAY_SLEEP = -1048001,
+    SAY_DEATH = -1048000
 };
 
 class boss_kelris : public CreatureScript
@@ -44,82 +38,76 @@ class boss_kelris : public CreatureScript
 public:
     boss_kelris() : CreatureScript("boss_kelris") { }
 
-    struct boss_kelrisAI : public BossAI
+    struct boss_kelrisAI : public ScriptedAI
     {
-        boss_kelrisAI(Creature* creature) : BossAI(creature, DATA_KELRIS) { }
-
-        void Reset() override
+        boss_kelrisAI(Creature* c) : ScriptedAI(c)
         {
-            _Reset();
-            DoCastSelf(SPELL_BLACKFATHOM_CHANNELING);
+            pInstance = (ScriptedInstance*)c->GetInstanceData();
         }
 
-        void JustReachedHome() override
+        uint32 uiMindBlastTimer;
+        uint32 uiSleepTimer;
+
+        ScriptedInstance* pInstance;
+
+        void Reset()
         {
-            _JustReachedHome();
-            DoCastSelf(SPELL_BLACKFATHOM_CHANNELING);
+            uiMindBlastTimer = urand(2000, 5000);
+            uiSleepTimer = urand(9000, 12000);
+            if (pInstance)
+                pInstance->SetData(TYPE_KELRIS, NOT_STARTED);
         }
 
-        void JustEngagedWith(Unit* who) override
+        void EnterCombat(Unit* /*who*/)
         {
-            BossAI::JustEngagedWith(who);
-            Talk(SAY_AGGRO);
-            me->RemoveAurasDueToSpell(SPELL_BLACKFATHOM_CHANNELING);
-            events.ScheduleEvent(EVENT_MIND_BLAST, 2s, 5s);
-            events.ScheduleEvent(EVENT_SLEEP, 9s, 12s);
+            DoScriptText(SAY_AGGRO, me);
+            if (pInstance)
+                pInstance->SetData(TYPE_KELRIS, IN_PROGRESS);
         }
 
-        void JustDied(Unit* /*killer*/) override
+        void JustDied(Unit* /*killer*/)
         {
-            Talk(SAY_DEATH);
-            _JustDied();
+            DoScriptText(SAY_DEATH, me);
+            if (pInstance)
+                pInstance->SetData(TYPE_KELRIS, DONE);
         }
 
-        void UpdateAI(uint32 diff) override
+        void UpdateAI(const uint32 diff)
         {
             if (!UpdateVictim())
                 return;
 
-            events.Update(diff);
-
-            if (me->HasUnitState(UNIT_STATE_CASTING))
-                return;
-
-            while (uint32 eventId = events.ExecuteEvent())
+            if (uiMindBlastTimer < diff)
             {
-                switch (eventId)
-                {
-                    case EVENT_MIND_BLAST:
-                        DoCastVictim(SPELL_MIND_BLAST);
-                        events.ScheduleEvent(EVENT_MIND_BLAST, 7s, 9s);
-                        break;
-                    case EVENT_SLEEP:
-                        if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100, true))
-                        {
-                            Talk(SAY_SLEEP);
-                            DoCast(target, SPELL_SLEEP);
-                        }
-                        events.ScheduleEvent(EVENT_SLEEP, 15s, 20s);
-                        break;
-                    default:
-                        break;
-                }
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
+                DoCastVictim(SPELL_MIND_BLAST);
+                uiMindBlastTimer = urand(7000, 9000);
             }
+            else uiMindBlastTimer -= diff;
+
+            if (uiSleepTimer < diff)
+            {
+                if (Unit* pTarget = SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true))
+                {
+                    DoScriptText(SAY_SLEEP, me);
+                    DoCast(pTarget, SPELL_SLEEP);
+                }
+                uiSleepTimer = urand(15000, 20000);
+            }
+            else uiSleepTimer -= diff;
 
             DoMeleeAttackIfReady();
         }
     };
 
-    CreatureAI* GetAI(Creature* creature) const override
+    CreatureAI* GetAI(Creature* pCreature) const
     {
-        return GetBlackfathomDeepsAI<boss_kelrisAI>(creature);
+        return new boss_kelrisAI(pCreature);
     }
+
 };
 
 void AddSC_boss_kelris()
 {
     new boss_kelris();
 }
+

@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,48 +15,51 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_BAG_H
-#define TRINITY_BAG_H
+#ifndef OREGON_BAG_H
+#define OREGON_BAG_H
 
 // Maximum 36 Slots ((CONTAINER_END - CONTAINER_FIELD_SLOT_1)/2
 #define MAX_BAG_SIZE 36                                     // 2.0.12
 
 #include "Item.h"
+#include "ItemPrototype.h"
 
-class TC_GAME_API Bag : public Item
+class Bag : public Item
 {
     public:
+
         Bag();
-        ~Bag();
+        ~Bag() override;
 
         void AddToWorld() override;
         void RemoveFromWorld() override;
 
-        bool Create(ObjectGuid::LowType guidlow, uint32 itemid, Player const* owner) override;
+        bool Create(uint32 guidlow, uint32 itemid, Player const* owner) override;
 
+        void Clear();
         void StoreItem(uint8 slot, Item* pItem, bool update);
         void RemoveItem(uint8 slot, bool update);
 
         Item* GetItemByPos(uint8 slot) const;
-        uint32 GetItemCount(uint32 item, Item* eItem = nullptr) const;
-        uint32 GetItemCountWithLimitCategory(uint32 limitCategory, Item* skipItem = nullptr) const;
+        uint32 GetItemCount(uint32 item, Item* eItem = NULL) const;
 
-        uint8 GetSlotByItemGUID(ObjectGuid guid) const;
+        uint8 GetSlotByItemGUID(uint64 guid) const;
         bool IsEmpty() const;
         uint32 GetFreeSlots() const;
-        uint32 GetBagSize() const { return GetUInt32Value(CONTAINER_FIELD_NUM_SLOTS); }
+        uint32 GetBagSize() const
+        {
+            return GetUInt32Value(CONTAINER_FIELD_NUM_SLOTS);
+        }
 
         // DB operations
         // overwrite virtual Item::SaveToDB
-        void SaveToDB(CharacterDatabaseTransaction& trans) override;
+        void SaveToDB() override;
         // overwrite virtual Item::LoadFromDB
-        bool LoadFromDB(ObjectGuid::LowType guid, ObjectGuid owner_guid, Field* fields, uint32 entry) override;
+        bool LoadFromDB(uint32 guid, uint64 owner_guid, Field* fields) override;
         // overwrite virtual Item::DeleteFromDB
-        void DeleteFromDB(CharacterDatabaseTransaction& trans) override;
+        void DeleteFromDB() override;
 
         void BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) const override;
-
-        std::string GetDebugInfo() const override;
 
     protected:
 
@@ -69,3 +72,4 @@ inline Item* NewItemOrBag(ItemTemplate const* proto)
     return (proto->InventoryType == INVTYPE_BAG) ? new Bag : new Item;
 }
 #endif
+

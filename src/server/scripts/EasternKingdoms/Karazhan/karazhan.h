@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,31 +18,27 @@
 #ifndef DEF_KARAZHAN_H
 #define DEF_KARAZHAN_H
 
-#include "CreatureAIImpl.h"
-
-#define KZScriptName "instance_karazhan"
-#define DataHeader "KZ"
-
-uint32 const EncounterCount = 12;
-
-enum KZDataTypes
+enum eEnums
 {
-    DATA_ATTUMEN                    = 0,
-    DATA_MOROES                     = 1,
-    DATA_MAIDEN_OF_VIRTUE           = 2,
-    DATA_OPTIONAL_BOSS              = 3,
-    DATA_OPERA_PERFORMANCE          = 4,
-    DATA_CURATOR                    = 5,
-    DATA_ARAN                       = 6,
-    DATA_TERESTIAN                  = 7,
-    DATA_NETHERSPITE                = 8,
-    DATA_CHESS                      = 9,
-    DATA_MALCHEZZAR                 = 10,
-    DATA_NIGHTBANE                  = 11,
+    TYPE_ATTUMEN                    = 1,
+    TYPE_MOROES                     = 2,
+    TYPE_MAIDEN                     = 3,
+    TYPE_OPTIONAL_BOSS              = 4,
+    TYPE_OPERA                      = 5,
+    TYPE_CURATOR                    = 6,
+    TYPE_ARAN                       = 7,
+    TYPE_TERESTIAN                  = 8,
+    TYPE_NETHERSPITE                = 9,
+    TYPE_CHESS                      = 10,
+    TYPE_MALCHEZZAR                 = 11,
+    TYPE_NIGHTBANE                  = 12,
 
+    DATA_OPERA_PERFORMANCE          = 13,
     DATA_OPERA_OZ_DEATHCOUNT        = 14,
 
     DATA_KILREK                     = 15,
+    DATA_TERESTIAN                  = 16,
+    DATA_MOROES                     = 17,
     DATA_GO_CURTAINS                = 18,
     DATA_GO_STAGEDOORLEFT           = 19,
     DATA_GO_STAGEDOORRIGHT          = 20,
@@ -56,27 +52,23 @@ enum KZDataTypes
     DATA_MASTERS_TERRACE_DOOR_1     = 27,
     DATA_MASTERS_TERRACE_DOOR_2     = 28,
     DATA_GO_SIDE_ENTRANCE_DOOR      = 29,
-    DATA_GO_BLACKENED_URN           = 30
+    DATA_NIGHTBANE                  = 30,
+    DATA_ECHO_OF_MEDIVH             = 31,
+    DATA_NPC_RELAY                  = 32
 };
 
-enum KZOperaEvents
+enum OperaEvents
 {
     EVENT_OZ                        = 1,
     EVENT_HOOD                      = 2,
     EVENT_RAJ                       = 3
 };
 
-enum KZMiscCreatures
+enum MiscCreatures
 {
     NPC_HYAKISS_THE_LURKER          = 16179,
     NPC_ROKAD_THE_RAVAGER           = 16181,
     NPC_SHADIKITH_THE_GLIDER        = 16180,
-    NPC_TERESTIAN_ILLHOOF           = 15688,
-    NPC_MOROES                      = 15687,
-    NPC_NIGHTBANE                   = 17225,
-    NPC_ATTUMEN_UNMOUNTED           = 15550,
-    NPC_ATTUMEN_MOUNTED             = 16152,
-    NPC_MIDNIGHT                    = 16151,
 
     // Trash
     NPC_COLDMIST_WIDOW              = 16171,
@@ -87,35 +79,9 @@ enum KZMiscCreatures
     NPC_PHASE_HOUND                 = 16178,
     NPC_DREADBEAST                  = 16177,
     NPC_SHADOWBEAST                 = 16176,
-    NPC_KILREK                      = 17229
+    NPC_RELAY                       = 17645
 };
-
-enum KZGameObjectIds
-{
-    GO_STAGE_CURTAIN                = 183932,
-    GO_STAGE_DOOR_LEFT              = 184278,
-    GO_STAGE_DOOR_RIGHT             = 184279,
-    GO_PRIVATE_LIBRARY_DOOR         = 184517,
-    GO_MASSIVE_DOOR                 = 185521,
-    GO_GAMESMAN_HALL_DOOR           = 184276,
-    GO_GAMESMAN_HALL_EXIT_DOOR      = 184277,
-    GO_NETHERSPACE_DOOR             = 185134,
-    GO_MASTERS_TERRACE_DOOR         = 184274,
-    GO_MASTERS_TERRACE_DOOR2        = 184280,
-    GO_SIDE_ENTRANCE_DOOR           = 184275,
-    GO_DUST_COVERED_CHEST           = 185119,
-    GO_BLACKENED_URN                = 194092
-};
-
-enum KZMisc
-{
-    OPTIONAL_BOSS_REQUIRED_DEATH_COUNT = 50
-};
-
-template <class AI, class T>
-inline AI* GetKarazhanAI(T* obj)
-{
-    return GetInstanceAI<AI>(obj, KZScriptName);
-}
-
+ 
+#define ERROR_INST_DATA(a)          error_log("OSCR: Instance Data for Karazhan not set properly. Encounter for Creature Entry %u may not work properly.", a->GetEntry());
 #endif
+

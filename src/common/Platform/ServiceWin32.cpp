@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -23,6 +23,11 @@
 #include <windows.h>
 #include <winsvc.h>
 
+// stupid ACE define
+#ifdef main
+#undef main
+#endif //main
+
 #if !defined(WINADVAPI)
 #if !defined(_ADVAPI32_)
 #define WINADVAPI DECLSPEC_IMPORT
@@ -31,7 +36,7 @@
 #endif
 #endif
 
-extern int main(int argc, char ** argv);
+extern int main(int argc, char** argv);
 extern char serviceLongName[];
 extern char serviceName[];
 extern char serviceDescription[];
@@ -42,36 +47,38 @@ SERVICE_STATUS serviceStatus;
 
 SERVICE_STATUS_HANDLE serviceStatusHandle = 0;
 
-typedef WINADVAPI BOOL (WINAPI *CSD_T)(SC_HANDLE, DWORD, LPCVOID);
+typedef WINADVAPI BOOL (WINAPI* CSD_T)(SC_HANDLE, DWORD, LPCVOID);
 
 bool WinServiceInstall()
 {
+    CSD_T ChangeService_Config2;
+    HMODULE advapi32;
     SC_HANDLE serviceControlManager = OpenSCManager(0, 0, SC_MANAGER_CREATE_SERVICE);
 
     if (serviceControlManager)
     {
         char path[_MAX_PATH + 10];
-        if (GetModuleFileName( 0, path, sizeof(path)/sizeof(path[0]) ) > 0)
+        if (GetModuleFileName( 0, path, sizeof(path) / sizeof(path[0]) ) > 0)
         {
             SC_HANDLE service;
-            std::strcat(path, " --service run");
+            std::strcat(path, " -s run");
             service = CreateService(serviceControlManager,
-                serviceName,                                // name of service
-                serviceLongName,                            // service name to display
-                SERVICE_ALL_ACCESS,                         // desired access
-                                                            // service type
-                SERVICE_WIN32_OWN_PROCESS | SERVICE_INTERACTIVE_PROCESS,
-                SERVICE_AUTO_START,                         // start type
-                SERVICE_ERROR_IGNORE,                       // error control type
-                path,                                       // service's binary
-                0,                                          // no load ordering group
-                0,                                          // no tag identifier
-                0,                                          // no dependencies
-                0,                                          // LocalSystem account
-                0);                                         // no password
+                                    serviceName,                                // name of service
+                                    serviceLongName,                            // service name to display
+                                    SERVICE_ALL_ACCESS,                         // desired access
+                                    // service type
+                                    SERVICE_WIN32_OWN_PROCESS | SERVICE_INTERACTIVE_PROCESS,
+                                    SERVICE_AUTO_START,                         // start type
+                                    SERVICE_ERROR_IGNORE,                       // error control type
+                                    path,                                       // service's binary
+                                    0,                                          // no load ordering group
+                                    0,                                          // no tag identifier
+                                    0,                                          // no dependencies
+                                    0,                                          // LocalSystem account
+                                    0);                                         // no password
             if (service)
             {
-                HMODULE advapi32 = GetModuleHandle("ADVAPI32.DLL");
+                advapi32 = GetModuleHandle("ADVAPI32.DLL");
                 if (!advapi32)
                 {
                     CloseServiceHandle(service);
@@ -79,7 +86,7 @@ bool WinServiceInstall()
                     return false;
                 }
 
-                CSD_T ChangeService_Config2 = (CSD_T) GetProcAddress(advapi32, "ChangeServiceConfig2A");
+                ChangeService_Config2 = (CSD_T) GetProcAddress(advapi32, "ChangeServiceConfig2A");
                 if (!ChangeService_Config2)
                 {
                     CloseServiceHandle(service);
@@ -101,7 +108,7 @@ bool WinServiceInstall()
                 ZeroMemory(&sfa, sizeof(SERVICE_FAILURE_ACTIONS));
                 sfa.lpsaActions = _action;
                 sfa.cActions = 1;
-                sfa.dwResetPeriod =INFINITE;
+                sfa.dwResetPeriod = INFINITE;
                 ChangeService_Config2(
                     service,                                // handle to service
                     SERVICE_CONFIG_FAILURE_ACTIONS,         // information level
@@ -113,8 +120,6 @@ bool WinServiceInstall()
         }
         CloseServiceHandle(serviceControlManager);
     }
-
-    printf("Service installed\n");
     return true;
 }
 
@@ -125,7 +130,7 @@ bool WinServiceUninstall()
     if (serviceControlManager)
     {
         SC_HANDLE service = OpenService(serviceControlManager,
-            serviceName, SERVICE_QUERY_STATUS | DELETE);
+                                        serviceName, SERVICE_QUERY_STATUS | DELETE);
         if (service)
         {
             SERVICE_STATUS serviceStatus2;
@@ -139,8 +144,6 @@ bool WinServiceUninstall()
 
         CloseServiceHandle(serviceControlManager);
     }
-
-    printf("Service uninstalled\n");
     return true;
 }
 
@@ -148,42 +151,42 @@ void WINAPI ServiceControlHandler(DWORD controlCode)
 {
     switch (controlCode)
     {
-        case SERVICE_CONTROL_INTERROGATE:
+    case SERVICE_CONTROL_INTERROGATE:
+        break;
+
+    case SERVICE_CONTROL_SHUTDOWN:
+    case SERVICE_CONTROL_STOP:
+        serviceStatus.dwCurrentState = SERVICE_STOP_PENDING;
+        SetServiceStatus(serviceStatusHandle, &serviceStatus);
+
+        m_ServiceStatus = 0;
+        return;
+
+    case SERVICE_CONTROL_PAUSE:
+        m_ServiceStatus = 2;
+        serviceStatus.dwCurrentState = SERVICE_PAUSED;
+        SetServiceStatus(serviceStatusHandle, &serviceStatus);
+        break;
+
+    case SERVICE_CONTROL_CONTINUE:
+        serviceStatus.dwCurrentState = SERVICE_RUNNING;
+        SetServiceStatus(serviceStatusHandle, &serviceStatus);
+        m_ServiceStatus = 1;
+        break;
+
+    default:
+        if ( controlCode >= 128 && controlCode <= 255 )
+            // user defined control code
             break;
-
-        case SERVICE_CONTROL_SHUTDOWN:
-        case SERVICE_CONTROL_STOP:
-            serviceStatus.dwCurrentState = SERVICE_STOP_PENDING;
-            SetServiceStatus(serviceStatusHandle, &serviceStatus);
-
-            m_ServiceStatus = 0;
-            return;
-
-        case SERVICE_CONTROL_PAUSE:
-            m_ServiceStatus = 2;
-            serviceStatus.dwCurrentState = SERVICE_PAUSED;
-            SetServiceStatus(serviceStatusHandle, &serviceStatus);
+        else
+            // unrecognized control code
             break;
-
-        case SERVICE_CONTROL_CONTINUE:
-            serviceStatus.dwCurrentState = SERVICE_RUNNING;
-            SetServiceStatus(serviceStatusHandle, &serviceStatus);
-            m_ServiceStatus = 1;
-            break;
-
-        default:
-            if ( controlCode >= 128 && controlCode <= 255 )
-                // user defined control code
-                break;
-            else
-                // unrecognized control code
-                break;
     }
 
     SetServiceStatus(serviceStatusHandle, &serviceStatus);
 }
 
-void WINAPI ServiceMain(DWORD argc, char *argv[])
+void WINAPI ServiceMain(DWORD argc, char* argv[])
 {
     // initialise service status
     serviceStatus.dwServiceType = SERVICE_WIN32;
@@ -201,10 +204,9 @@ void WINAPI ServiceMain(DWORD argc, char *argv[])
         char path[_MAX_PATH + 1];
         unsigned int i, last_slash = 0;
 
-        GetModuleFileName(0, path, sizeof(path)/sizeof(path[0]));
+        GetModuleFileName(0, path, sizeof(path) / sizeof(path[0]));
 
-        size_t pathLen = std::strlen(path);
-        for (i = 0; i < pathLen; i++)
+        for (i = 0; i < std::strlen(path); i++)
         {
             if (path[i] == '\\') last_slash = i;
         }
@@ -223,13 +225,11 @@ void WINAPI ServiceMain(DWORD argc, char *argv[])
         serviceStatus.dwCurrentState = SERVICE_RUNNING;
         SetServiceStatus( serviceStatusHandle, &serviceStatus );
 
-        ////////////////////////
-        // service main cycle //
-        ////////////////////////
+        // service main cycle
 
         m_ServiceStatus = 1;
         argc = 1;
-        main(argc, argv);
+        main(argc , argv);
 
         // service was stopped
         serviceStatus.dwCurrentState = SERVICE_STOP_PENDING;
@@ -254,9 +254,10 @@ bool WinServiceRun()
 
     if (!StartServiceCtrlDispatcher(serviceTable))
     {
-        TC_LOG_ERROR("server.worldserver", "StartService Failed. Error [%u]", uint32(::GetLastError()));
+        sLog.outError("StartService Failed. Error [%u]", ::GetLastError());
         return false;
     }
     return true;
 }
 #endif
+

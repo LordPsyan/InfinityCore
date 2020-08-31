@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,43 +20,58 @@
 
 #include "loadlib/loadlib.h"
 #include "vec3d.h"
+//#include "mpq.h"
 #include "modelheaders.h"
 #include <vector>
+#include "vmapexport.h"
 
+class WMOInstance;
 class MPQFile;
-struct WMODoodadData;
-namespace ADT { struct MDDF; struct MODF; }
 
-Vec3D fixCoordSystem(Vec3D const& v);
+Vec3D fixCoordSystem(Vec3D v);
 
 class Model
 {
-private:
+    public:
+        ModelHeader header;
+        ModelBoundingVertex* boundingVertices;
+        Vec3D* vertices;
+        uint16* indices;
+        size_t nIndices;
+
+        bool open(StringSet& failedPaths);
+    bool ConvertToVMAPModel(const char * outfilename);
+
+        bool ok;
+
+        Model(std::string& filename);
+    ~Model() {_unload();}
+
+    private:
     void _unload()
     {
         delete[] vertices;
         delete[] indices;
-        vertices = nullptr;
-        indices = nullptr;
+        vertices = NULL;
+        indices = NULL;
     }
-    std::string filename;
-public:
-    ModelHeader header;
-    Vec3D* vertices;
-    uint16* indices;
-
-    bool open();
-    bool ConvertToVMAPModel(char const* outfilename);
-
-    Model(std::string& filename);
-    ~Model() { _unload(); }
+        std::string filename;
+        char outfilename;
 };
 
-namespace Doodad
+class ModelInstance
 {
-    void Extract(ADT::MDDF const& doodadDef, char const* ModelInstName, uint32 mapID, uint32 tileX, uint32 tileY, FILE* pDirfile);
+    public:
+        Model* model;
 
-    void ExtractSet(WMODoodadData const& doodadData, ADT::MODF const& wmo, uint32 mapID, uint32 tileX, uint32 tileY, FILE* pDirfile);
-}
+        uint32 id;
+        uint16 scale;
+        Vec3D pos, rot;
+        float sc;
+
+        ModelInstance() {}
+        ModelInstance(MPQFile& f, const char* ModelInstName, uint32 mapID, uint32 tileX, uint32 tileY, FILE* pDirfile);
+
+};
 
 #endif

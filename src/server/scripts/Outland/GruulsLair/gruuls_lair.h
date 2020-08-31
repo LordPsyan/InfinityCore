@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,42 +15,18 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef GRUULS_LAIR_H_
-#define GRUULS_LAIR_H_
+#ifndef DEF_GRUULS_LAIR_H
+#define DEF_GRUULS_LAIR_H
 
-#include "CreatureAIImpl.h"
+#define DATA_BLINDEYETHESEER 1
+#define DATA_GRUULEVENT 2
+#define DATA_KIGGLERTHECRAZED 3
+#define DATA_KROSHFIREHAND 4
+#define DATA_MAULGAREVENT 5
+#define DATA_MAULGAREVENT_TANK 6
+#define DATA_OLMTHESUMMONER 7
+#define DATA_MAULGARDOOR 8
+#define DATA_GRUULDOOR 9
+#define DATA_MAULGAR 10
+#endif
 
-#define GLScriptName "instance_gruuls_lair"
-#define DataHeader   "GL"
-
-uint32 const EncounterCount = 2;
-
-enum GLDataTypes
-{
-    // Encounter States/Boss GUIDs
-    DATA_MAULGAR                = 0,
-    DATA_GRUUL                  = 1
-};
-
-enum GLCreatureIds
-{
-    NPC_MAULGAR                 = 18831,
-    NPC_KROSH_FIREHAND          = 18832,
-    NPC_OLM_THE_SUMMONER        = 18834,
-    NPC_KIGGLER_THE_CRAZED      = 18835,
-    NPC_BLINDEYE_THE_SEER       = 18836
-};
-
-enum GLGameObjectIds
-{
-    GO_MAULGAR_DOOR             = 184468,
-    GO_GRUUL_DOOR               = 184662
-};
-
-template <class AI, class T>
-inline AI* GetGruulsLairAI(T* obj)
-{
-    return GetInstanceAI<AI>(obj, GLScriptName);
-}
-
-#endif // GRUULS_LAIR_H_

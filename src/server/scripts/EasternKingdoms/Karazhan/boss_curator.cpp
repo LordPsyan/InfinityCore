@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,177 +15,160 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+ /* ScriptData
+ SDName: Boss_Curator
+ SD%Complete: 100
+ SDComment:
+ SDCategory: Karazhan
+ EndScriptData */
+
 #include "ScriptMgr.h"
-#include "karazhan.h"
 #include "ScriptedCreature.h"
 
-enum CuratorSays
+enum CuratorInfo
 {
-    SAY_AGGRO                    = 0,
-    SAY_SUMMON                   = 1,
-    SAY_EVOCATE                  = 2,
-    SAY_ENRAGE                   = 3,
-    SAY_KILL                     = 4,
-    SAY_DEATH                    = 5
+    SAY_AGGRO = -1532057,
+    SAY_SUMMON1 = -1532058,
+    SAY_SUMMON2 = -1532059,
+    SAY_EVOCATE = -1532060,
+    SAY_ENRAGE = -1532061,
+    SAY_KILL1 = -1532062,
+    SAY_KILL2 = -1532063,
+    SAY_DEATH = -1532064,
+
+    SPELL_HATEFUL_BOLT = 30383,
+    SPELL_EVOCATION = 30254,
+    SPELL_ARCANE_INFUSION = 30403,
+    SPELL_ASTRAL_DECONSTRUCTION = 30407,
+
+    EVENT_SPELL_HATEFUL_BOLT = 1,
+    EVENT_SPELL_EVOCATION = 2,
+    EVENT_SPELL_ASTRAL_FLARE = 3,
+    EVENT_SPELL_BERSERK = 4,
+    EVENT_CHECK_HEALTH = 5
+
 };
 
-enum CuratorSpells
-{
-    SPELL_HATEFUL_BOLT           = 30383,
-    SPELL_EVOCATION              = 30254,
-    SPELL_ARCANE_INFUSION        = 30403,
-    SPELL_BERSERK                = 26662,
-    SPELL_SUMMON_ASTRAL_FLARE_NE = 30236,
-    SPELL_SUMMON_ASTRAL_FLARE_NW = 30239,
-    SPELL_SUMMON_ASTRAL_FLARE_SE = 30240,
-    SPELL_SUMMON_ASTRAL_FLARE_SW = 30241
-};
-
-enum CuratorEvents
-{
-    EVENT_HATEFUL_BOLT = 1,
-    EVENT_SUMMON_ASTRAL_FLARE,
-    EVENT_ARCANE_INFUSION,
-    EVENT_BERSERK
-};
 
 class boss_curator : public CreatureScript
 {
 public:
     boss_curator() : CreatureScript("boss_curator") { }
 
-    struct boss_curatorAI : public BossAI
+    struct boss_curatorAI : public ScriptedAI
     {
-        boss_curatorAI(Creature* creature) : BossAI(creature, DATA_CURATOR), _infused(false) { }
+        boss_curatorAI(Creature* c) : ScriptedAI(c), summons(me) {}
 
-        void Reset() override
+        SummonList summons;
+        EventMap events;
+
+        void Reset()
         {
-            _Reset();
-            _infused = false;
             me->ApplySpellImmune(0, IMMUNITY_DAMAGE, SPELL_SCHOOL_MASK_ARCANE, true);
+            summons.DespawnAll();
         }
 
-        void KilledUnit(Unit* victim) override
+        void KilledUnit(Unit* /*victim*/)
         {
-            if (victim->GetTypeId() == TYPEID_PLAYER)
-                Talk(SAY_KILL);
+            DoScriptText(RAND(SAY_KILL1, SAY_KILL2), me);
         }
 
-        void JustDied(Unit* /*killer*/) override
+        void JustDied(Unit* /*victim*/)
         {
-            _JustDied();
-            Talk(SAY_DEATH);
+            DoScriptText(SAY_DEATH, me);
         }
 
-        void JustEngagedWith(Unit* who) override
+        void EnterCombat(Unit* /*who*/)
         {
-            BossAI::JustEngagedWith(who);
-            Talk(SAY_AGGRO);
-
-            events.ScheduleEvent(EVENT_HATEFUL_BOLT, 12s);
-            events.ScheduleEvent(EVENT_SUMMON_ASTRAL_FLARE, 10s);
-            events.ScheduleEvent(EVENT_BERSERK, 12min);
+            DoScriptText(SAY_AGGRO, me);
+            events.ScheduleEvent(EVENT_SPELL_HATEFUL_BOLT, 10000);
+            events.ScheduleEvent(EVENT_SPELL_ASTRAL_FLARE, 6000);
+            events.ScheduleEvent(EVENT_SPELL_BERSERK, 600000);
+            events.ScheduleEvent(EVENT_CHECK_HEALTH, 1000);
+            DoZoneInCombat();
         }
 
-        void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
+        void JustSummoned(Creature* summon)
         {
-            if (!HealthAbovePct(15) && !_infused)
+            summons.Summon(summon);
+            if (Unit* target = summon->SelectNearbyTarget(nullptr, 40.0f))
             {
-                _infused = true;
-                events.ScheduleEvent(EVENT_ARCANE_INFUSION, Milliseconds(1));
-                events.CancelEvent(EVENT_SUMMON_ASTRAL_FLARE);
+                summon->AI()->AttackStart(target);
+                summon->AddThreat(target, 1000.0f);
             }
+            summon->SetInCombatWithZone();
         }
 
-        void ExecuteEvent(uint32 eventId) override
+        void UpdateAI(const uint32 diff)
         {
-            switch (eventId)
+            if (!UpdateVictim())
+                return;
+
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
+
+            if (me->HasAura(SPELL_EVOCATION, 0))
+                return;
+
+            events.Update(diff);
+
+            switch (events.ExecuteEvent())
             {
-                case EVENT_HATEFUL_BOLT:
-                    if (Unit* target = SelectTarget(SelectTargetMethod::MaxThreat, 1))
-                        DoCast(target, SPELL_HATEFUL_BOLT);
-                    events.Repeat(Seconds(7), Seconds(15));
+            case EVENT_CHECK_HEALTH:
+                if (me->HealthBelowPct(16))
+                {
+                    events.CancelEvent(EVENT_SPELL_ASTRAL_FLARE);
+                    me->CastSpell(me, SPELL_ARCANE_INFUSION, true);
+                    DoScriptText(SAY_ENRAGE, me, nullptr);
                     break;
-                case EVENT_ARCANE_INFUSION:
-                    DoCastSelf(SPELL_ARCANE_INFUSION, true);
-                    break;
-                case EVENT_SUMMON_ASTRAL_FLARE:
+                }
+                events.ScheduleEvent(EVENT_CHECK_HEALTH, 1000);
+                break;
+            case EVENT_SPELL_BERSERK:
+                DoScriptText(SAY_ENRAGE, me, nullptr);
+                me->InterruptNonMeleeSpells(true);
+                me->CastSpell(me, SPELL_ASTRAL_DECONSTRUCTION, true);
+                break;
+            case EVENT_SPELL_HATEFUL_BOLT:
+                if (Unit* target = SelectTarget(SELECT_TARGET_TOPAGGRO, urand(1, 2), 40.0f))
+                    me->CastSpell(target, SPELL_HATEFUL_BOLT, false);
+                events.ScheduleEvent(EVENT_SPELL_HATEFUL_BOLT, urand(5000, 7500) * (events.GetNextEventTime(EVENT_SPELL_BERSERK) == 0 ? 1 : 2));
+                break;
+            case EVENT_SPELL_ASTRAL_FLARE:
+            {
+                int32 mana = CalculatePct(me->GetMaxPower(POWER_MANA), 10);
+                me->ModifyPower(POWER_MANA, -mana);
+                if (me->GetPower(POWER_MANA) < 10.0f)
+                {
+                    DoScriptText(SAY_EVOCATE, me, nullptr);
+                    me->CastSpell(me, SPELL_EVOCATION, false);
+                    events.DelayEvents(20000);
+                    events.ScheduleEvent(EVENT_SPELL_ASTRAL_FLARE, 20000);
+                }
+                else
+                {
                     if (roll_chance_i(50))
-                        Talk(SAY_SUMMON);
+                        DoScriptText(RAND(SAY_SUMMON1, SAY_SUMMON2), me, nullptr);
+                    Creature* AstralFlare = DoSpawnCreature(17096, rand() % 37, rand() % 37, 0, 0, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 5000);
+                    events.ScheduleEvent(EVENT_SPELL_ASTRAL_FLARE, 10000);
+                }
 
-                    DoCastSelf(RAND(SPELL_SUMMON_ASTRAL_FLARE_NE, SPELL_SUMMON_ASTRAL_FLARE_NW, SPELL_SUMMON_ASTRAL_FLARE_SE, SPELL_SUMMON_ASTRAL_FLARE_SW), true);
-
-                    if (int32 mana = int32(me->GetMaxPower(POWER_MANA) / 10))
-                    {
-                        me->ModifyPower(POWER_MANA, -mana);
-
-                        if (me->GetPower(POWER_MANA) * 100 / me->GetMaxPower(POWER_MANA) < 10)
-                        {
-                            Talk(SAY_EVOCATE);
-                            me->InterruptNonMeleeSpells(false);
-                            DoCastSelf(SPELL_EVOCATION);
-                        }
-                    }
-                    events.Repeat(Seconds(10));
-                    break;
-                case EVENT_BERSERK:
-                    Talk(SAY_ENRAGE);
-                    DoCastSelf(SPELL_BERSERK, true);
-                    break;
-                default:
-                    break;
+                break;
             }
-        }
+            }
 
-    private:
-        bool _infused;
+            DoMeleeAttackIfReady();
+        }
     };
 
-    CreatureAI* GetAI(Creature* creature) const override
+    CreatureAI* GetAI(Creature* pCreature) const
     {
-        return GetKarazhanAI<boss_curatorAI>(creature);
-    }
-};
-
-class npc_curator_astral_flare : public CreatureScript
-{
-public:
-    npc_curator_astral_flare() : CreatureScript("npc_curator_astral_flare") { }
-
-    struct npc_curator_astral_flareAI : public ScriptedAI
-    {
-        npc_curator_astral_flareAI(Creature* creature) : ScriptedAI(creature)
-        {
-            me->SetReactState(REACT_PASSIVE);
-        }
-
-        void Reset() override
-        {
-            _scheduler.Schedule(Seconds(2), [this](TaskContext /*context*/)
-            {
-                me->SetReactState(REACT_AGGRESSIVE);
-                me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-                DoZoneInCombat();
-            });
-        }
-
-        void UpdateAI(uint32 diff) override
-        {
-            _scheduler.Update(diff);
-        }
-
-    private:
-        TaskScheduler _scheduler;
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return GetKarazhanAI<npc_curator_astral_flareAI>(creature);
+        return new boss_curatorAI(pCreature);
     }
 };
 
 void AddSC_boss_curator()
 {
     new boss_curator();
-    new npc_curator_astral_flare();
 }
+

@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,105 +15,58 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_COMBATAI_H
-#define TRINITY_COMBATAI_H
+#ifndef OREGON_COMBATAI_H
+#define OREGON_COMBATAI_H
 
 #include "CreatureAI.h"
+#include "CreatureAIImpl.h"
 
 class Creature;
 
-class TC_GAME_API AggressorAI : public CreatureAI
+class AggressorAI : public CreatureAI
 {
     public:
-        explicit AggressorAI(Creature* creature) : CreatureAI(creature) { }
+        explicit AggressorAI(Creature* c) : CreatureAI(c) {}
 
-        void UpdateAI(uint32) override;
-        static int32 Permissible(Creature const* creature);
+        void UpdateAI(const uint32);
+        static int Permissible(const Creature*);
 };
 
-typedef std::vector<uint32> SpellVector;
+typedef std::vector<uint32> SpellVct;
 
-class TC_GAME_API CombatAI : public CreatureAI
+class CombatAI : public CreatureAI
 {
     public:
-        explicit CombatAI(Creature* creature) : CreatureAI(creature) { }
+        explicit CombatAI(Creature* c) : CreatureAI(c) {}
 
-        void InitializeAI() override;
-        void Reset() override;
-        void JustEngagedWith(Unit* who) override;
-        void JustDied(Unit* killer) override;
-        void UpdateAI(uint32 diff) override;
-        void SpellInterrupted(uint32 spellId, uint32 unTimeMs) override;
-
-        static int Permissible(Creature const* /*creature*/) { return PERMIT_BASE_NO; }
-
+        void InitializeAI();
+        void Reset();
+        void EnterCombat(Unit* who);
+        void JustDied(Unit* killer);
+        void UpdateAI(const uint32 diff);
+        static int Permissible(const Creature*);
     protected:
-        EventMap Events;
-        SpellVector Spells;
+        EventMap events;
+        SpellVct spells;
 };
 
-class TC_GAME_API CasterAI : public CombatAI
+class CasterAI : public CombatAI
 {
     public:
-        explicit CasterAI(Creature* creature) : CombatAI(creature) { _attackDistance = MELEE_RANGE; }
-        void InitializeAI() override;
-        void AttackStart(Unit* victim) override { AttackStartCaster(victim, _attackDistance); }
-        void UpdateAI(uint32 diff) override;
-        void JustEngagedWith(Unit* /*who*/) override;
+        explicit CasterAI(Creature* c) : CombatAI(c)
+        {
+            m_attackDist = MELEE_RANGE;
+        }
+        void InitializeAI();
+        void AttackStart(Unit* victim)
+        {
+            AttackStartCaster(victim, m_attackDist);
+        }
+        void UpdateAI(const uint32 diff);
+        void EnterCombat(Unit* who);
     private:
-        float _attackDistance;
-};
-
-struct TC_GAME_API ArcherAI : public CreatureAI
-{
-    public:
-        explicit ArcherAI(Creature* creature);
-        void AttackStart(Unit* who) override;
-        void UpdateAI(uint32 diff) override;
-
-        static int32 Permissible(Creature const* /*creature*/) { return PERMIT_BASE_NO; }
-
-    protected:
-        float _minimumRange;
-};
-
-struct TC_GAME_API TurretAI : public CreatureAI
-{
-    public:
-        explicit TurretAI(Creature* creature);
-        bool CanAIAttack(Unit const* who) const override;
-        void AttackStart(Unit* who) override;
-        void UpdateAI(uint32 diff) override;
-
-        static int32 Permissible(Creature const* /*creature*/) { return PERMIT_BASE_NO; }
-
-    protected:
-        float _minimumRange;
-};
-
-#define VEHICLE_CONDITION_CHECK_TIME 1000
-#define VEHICLE_DISMISS_TIME 5000
-
-struct TC_GAME_API VehicleAI : public CreatureAI
-{
-    public:
-        explicit VehicleAI(Creature* creature);
-
-        void UpdateAI(uint32 diff) override;
-        void MoveInLineOfSight(Unit*) override { }
-        void AttackStart(Unit*) override { }
-        void OnCharmed(bool isNew) override;
-
-        static int32 Permissible(Creature const* creature);
-
-    private:
-        void LoadConditions();
-        void CheckConditions(uint32 diff);
-
-        bool _hasConditions;
-        uint32 _conditionsTimer;
-        bool _dismiss;
-        uint32 _dismissTimer;
+        float m_attackDist;
 };
 
 #endif
+

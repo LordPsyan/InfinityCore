@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,108 +15,135 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _PREPAREDSTATEMENT_H
-#define _PREPAREDSTATEMENT_H
+#ifndef DATABASE_PREPARED_STATEMENT_H
+#define DATABASE_PREPARED_STATEMENT_H
 
-#include "Define.h"
-#include "SQLOperation.h"
-#include <future>
-#include <vector>
-#include <variant>
+#include "Common.h"
+#include <mysql.h>
 
-struct PreparedStatementData
+struct PreparedStatement
 {
-    std::variant<
-        bool,
-        uint8,
-        uint16,
-        uint32,
-        uint64,
-        int8,
-        int16,
-        int32,
-        int64,
-        float,
-        double,
-        std::string,
-        std::vector<uint8>,
-        std::nullptr_t
-    > data;
-
-    template<typename T>
-    static std::string ToString(T value);
-
-    static std::string ToString(bool value);
-    static std::string ToString(uint8 value);
-    static std::string ToString(int8 value);
-    static std::string ToString(std::string const& value);
-    static std::string ToString(std::vector<uint8> const& value);
-    static std::string ToString(std::nullptr_t);
+    MYSQL_STMT* stmt;
+    std::string types;
 };
 
-//- Upper-level class that is used in code
-class TC_DATABASE_API PreparedStatementBase
+enum PreparedArgType
 {
-    friend class PreparedStatementTask;
+    ARG_TYPE_STRING                = 's', //!< char const*, can be NULL
+    ARG_TYPE_BINARY                = 'b', //!< void const*, can be NULL
+    ARG_TYPE_NUMBER                = 'i', //!< signed int
+    ARG_TYPE_UNSIGNED_NUMBER       = 'u', //!< unsigned int
+    ARG_TYPE_LARGE_NUMBER          = 'I', //!< 64bit signed int
+    ARG_TYPE_LARGE_UNSIGNED_NUMBER = 'U', //!< 64bit unsigned int
+    ARG_TYPE_FLOAT                 = 'f', //!< floating point
+    ARG_TYPE_DOUBLE                = 'F', //!< double
 
-    public:
-        explicit PreparedStatementBase(uint32 index, uint8 capacity);
-        virtual ~PreparedStatementBase();
-
-        void setNull(const uint8 index);
-        void setBool(const uint8 index, const bool value);
-        void setUInt8(const uint8 index, const uint8 value);
-        void setUInt16(const uint8 index, const uint16 value);
-        void setUInt32(const uint8 index, const uint32 value);
-        void setUInt64(const uint8 index, const uint64 value);
-        void setInt8(const uint8 index, const int8 value);
-        void setInt16(const uint8 index, const int16 value);
-        void setInt32(const uint8 index, const int32 value);
-        void setInt64(const uint8 index, const int64 value);
-        void setFloat(const uint8 index, const float value);
-        void setDouble(const uint8 index, const double value);
-        void setString(const uint8 index, const std::string& value);
-        void setBinary(const uint8 index, const std::vector<uint8>& value);
-
-        uint32 GetIndex() const { return m_index; }
-        std::vector<PreparedStatementData> const& GetParameters() const { return statement_data; }
-
-    protected:
-        uint32 m_index;
-
-        //- Buffer of parameters, not tied to MySQL in any way yet
-        std::vector<PreparedStatementData> statement_data;
-
-        PreparedStatementBase(PreparedStatementBase const& right) = delete;
-        PreparedStatementBase& operator=(PreparedStatementBase const& right) = delete;
+    ARG_TYPE_STRING_ALT            = 'S', //!< alias
+    ARG_TYPE_BINARY_ALT            = 'B', //!< alias
+    ARG_TYPE_NUMBER_ALT            = 'd', //!< alias
+    ARG_TYPE_LARGE_NUMBER_ALT      = 'D'  //!< alias
 };
 
-template<typename T>
-class PreparedStatement : public PreparedStatementBase
+union PreparedArgDataUnion
 {
-public:
-    explicit PreparedStatement(uint32 index, uint8 capacity) : PreparedStatementBase(index, capacity)
+    struct
     {
-    }
+        union
+        {
+            const char* string;
+            const void* binary;
+        };
 
-private:
-    PreparedStatement(PreparedStatement const& right) = delete;
-    PreparedStatement& operator=(PreparedStatement const& right) = delete;
+        size_t length;
+    };
+
+    int32 number;
+    uint32 unsignedNumber;
+    
+    int64 largeNumber;
+    uint64 unsignedLargeNumber;
+
+    float float_;
+    double double_;
 };
 
-//- Lower-level class, enqueuable operation
-class TC_DATABASE_API PreparedStatementTask : public SQLOperation
+class PreparedValues
 {
-    public:
-        PreparedStatementTask(PreparedStatementBase* stmt, bool async = false);
-        ~PreparedStatementTask();
-
-        bool Execute() override;
-        PreparedQueryResultFuture GetFuture() { return m_result->get_future(); }
-
     protected:
-        PreparedStatementBase* m_stmt;
-        bool m_has_result;
-        PreparedQueryResultPromise* m_result;
+        friend class Database;
+        struct Value
+        {
+            PreparedArgType type;
+            PreparedArgDataUnion data;
+
+            #define ConstructorImpl(datatype, argtype, section) \
+                Value(datatype param)         \
+                {                             \
+                    type = argtype;           \
+                    data.section = param;     \
+                }
+            ConstructorImpl(int32,       ARG_TYPE_NUMBER,                number);
+            ConstructorImpl(uint32,      ARG_TYPE_UNSIGNED_NUMBER,       unsignedNumber);
+            ConstructorImpl(int64,       ARG_TYPE_LARGE_NUMBER,          largeNumber);
+            ConstructorImpl(uint64,      ARG_TYPE_LARGE_UNSIGNED_NUMBER, unsignedLargeNumber);
+            ConstructorImpl(float,       ARG_TYPE_FLOAT,                 float_);
+            ConstructorImpl(double,      ARG_TYPE_DOUBLE,                double_);
+
+            Value(const char* str)
+            {
+                type = ARG_TYPE_STRING;
+                data.string = str;
+                data.length = strlen(str);
+            }
+
+            Value(std::string const& str)
+            {
+                type = ARG_TYPE_STRING;
+                data.string = str.c_str();
+                data.length = str.length();
+            }
+
+            Value(std::pair<const void*, size_t> binaryData)
+            {
+                type = ARG_TYPE_BINARY;
+                data.binary = binaryData.first;
+                data.length = binaryData.second;
+            }
+            #undef ConstructorImpl
+        };
+
+        std::vector<Value> m_values;
+        #ifdef OREGON_DEBUG
+        size_t m_size;
+        #endif
+    public:
+        explicit PreparedValues(size_t size)
+            #ifdef OREGON_DEBUG
+            : m_size(size)
+            #endif
+        {
+            m_values.reserve(size);
+        }
+
+        template<class T>
+        PreparedValues& operator<<(T data)
+        {
+            #ifdef OREGON_DEBUG
+            ASSERT(m_values.size() + 1 <= m_size);
+            #endif
+            m_values.push_back(data);
+            return *this;
+        }
+
+        size_t size() const
+        {
+            return m_values.size();
+        }
+
+        Value& operator[] (size_t index)
+        {
+            return m_values[index];
+        }
 };
+
 #endif

@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -14,46 +14,92 @@
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef __TRINITY_CHANNELMGR_H
-#define __TRINITY_CHANNELMGR_H
 
-#include "Define.h"
-#include "Hash.h"
+#ifndef OREGONCORE_CHANNELMGR_H
+#define OREGONCORE_CHANNELMGR_H
+
+#include "Channel.h"
+#include "Policies/Singleton.h"
+#include "World.h"
+
+#include <map>
 #include <string>
-#include <unordered_map>
 
-class Channel;
-class Player;
-class WorldPacket;
-struct AreaTableEntry;
+#define MAX_CHANNEL_PASS_STR 31
 
-class TC_GAME_API ChannelMgr
+class ChannelMgr
 {
-    typedef std::unordered_map<std::wstring, Channel*> CustomChannelContainer; // custom channels only differ in name
-    typedef std::unordered_map<std::pair<uint32 /*channelId*/, uint32 /*zoneId*/>, Channel*> BuiltinChannelContainer; //identify builtin (DBC) channels by zoneId instead, since name changes by client locale
-
-    protected:
-        explicit ChannelMgr(uint32 team) : _team(team) { }
-        ~ChannelMgr();
-
     public:
-        static void LoadFromDB();
-        static ChannelMgr* forTeam(uint32 team);
-        static Channel* GetChannelForPlayerByNamePart(std::string const& namePart, Player* playerSearcher);
+        typedef std::map<std::string, Channel*> ChannelMap;
+        ChannelMgr() {}
+        ~ChannelMgr()
+        {
+            for (ChannelMap::iterator itr = channels.begin(); itr != channels.end(); ++itr)
+                delete itr->second;
 
-        void SaveToDB();
-        Channel* GetSystemChannel(uint32 channelId, AreaTableEntry const* zoneEntry = nullptr);
-        Channel* CreateCustomChannel(std::string const& name);
-        Channel* GetCustomChannel(std::string const& name) const;
-        Channel* GetChannel(uint32 channelId, std::string const& name, Player* player, bool pkt = true, AreaTableEntry const* zoneEntry = nullptr) const;
-        void LeftChannel(uint32 channelId, AreaTableEntry const* zoneEntry);
+            channels.clear();
+        }
+        Channel* GetJoinChannel(const std::string& name, uint32 channel_id)
+        {
+            if (channels.count(name) == 0)
+            {
+                Channel* nchan = new Channel(name, channel_id);
+                channels[name] = nchan;
+            }
+            return channels[name];
+        }
+        Channel* GetChannel(const std::string& name, Player* p)
+        {
+            ChannelMap::const_iterator i = channels.find(name);
 
+            if (i == channels.end())
+            {
+                WorldPacket data;
+                MakeNotOnPacket(&data, name);
+                p->GetSession()->SendPacket(&data);
+                return NULL;
+            }
+            else
+                return i->second;
+        }
+        void LeftChannel(const std::string& name)
+        {
+            ChannelMap::const_iterator i = channels.find(name);
+
+            if (i == channels.end())
+                return;
+
+            Channel* channel = i->second;
+
+            if (channel->GetNumPlayers() == 0 && !channel->IsConstant())
+            {
+                channels.erase(name);
+                delete channel;
+            }
+        }
     private:
-        CustomChannelContainer _customChannels;
-        BuiltinChannelContainer _channels;
-        uint32 const _team;
-
-        static void MakeNotOnPacket(WorldPacket* data, std::string const& name);
+        ChannelMap channels;
+        void MakeNotOnPacket(WorldPacket* data, const std::string& name)
+        {
+            data->Initialize(SMSG_CHANNEL_NOTIFY, 1 + name.size());
+            (*data) << uint8(CHAT_NOT_MEMBER_NOTICE) << name;
+        }
 };
 
+class AllianceChannelMgr : public ChannelMgr {};
+class HordeChannelMgr    : public ChannelMgr {};
+
+inline ChannelMgr* channelMgr(uint32 team)
+{
+    if (sWorld.getConfig(CONFIG_ALLOW_TWO_SIDE_INTERACTION_CHANNEL))
+        //For Test,No Seprate Faction
+        return &Oregon::Singleton<AllianceChannelMgr>::Instance();
+
+    if (team == ALLIANCE)
+        return &Oregon::Singleton<AllianceChannelMgr>::Instance();
+    if (team == HORDE)
+        return &Oregon::Singleton<HordeChannelMgr>::Instance();
+    return NULL;
+}
 #endif
+

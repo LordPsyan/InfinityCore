@@ -1,4 +1,4 @@
-# This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+# This file is part of the OregonCore Project. See AUTHORS file for Copyright information
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without
@@ -8,42 +8,68 @@
 # WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-CollectSourceFiles(
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  PRIVATE_SOURCES)
+set(sources
+    IntermediateValues.cpp
+    IntermediateValues.h
+    MapBuilder.cpp
+    MapBuilder.h
+    MMapCommon.h
+    generator.cpp
+    TerrainBuilder.cpp
+    TerrainBuilder.h
+    VMapExtensions.cpp
+)
 
-if(WIN32)
-  list(APPEND PRIVATE_SOURCES ${sources_windows})
-endif()
+# definitions
+add_definitions(-DNO_CORE_FUNCS)
+add_definitions(-DDEBUG)
+add_definitions(-DNO_vsnprintf)
 
-add_executable(mmaps_generator ${PRIVATE_SOURCES})
+include_directories(
+  ${JEMALLOC_LIBRARY}
+  ${ACE_INCLUDE_DIR}
+  ${CMAKE_SOURCE_DIR}/dep/libmpq
+  ${CMAKE_SOURCE_DIR}/dep/zlib
+  ${CMAKE_SOURCE_DIR}/dep/g3dlite/include
+  ${CMAKE_SOURCE_DIR}/dep/recastnavigation/Recast
+  ${CMAKE_SOURCE_DIR}/dep/recastnavigation/Detour
+  ${CMAKE_SOURCE_DIR}/src/server/shared
+  ${CMAKE_SOURCE_DIR}/src/common/Collision
+  ${CMAKE_SOURCE_DIR}/src/common
+  ${CMAKE_SOURCE_DIR}/src/common/Configuration
+  ${CMAKE_SOURCE_DIR}/src/common/Cryptography
+  ${CMAKE_SOURCE_DIR}/src/common/Cryptography/Authentication
+  ${CMAKE_SOURCE_DIR}/src/common/Logging
+  ${CMAKE_SOURCE_DIR}/src/common/Platform
+  ${CMAKE_SOURCE_DIR}/src/common/Threading
+  ${CMAKE_SOURCE_DIR}/src/common/Utilities
+  ${CMAKE_SOURCE_DIR}/src/server/shared/Packets
+  
+  ${CMAKE_SOURCE_DIR}/src/framework
+  ${CMAKE_SOURCE_DIR}/src/server/game
+  ${CMAKE_SOURCE_DIR}/src/server/game/Movement
+  ${CMAKE_SOURCE_DIR}/src/server/game/Movement/MovementGenerators
+  ${CMAKE_SOURCE_DIR}/src/server/game/Movement/Spline
+  ${CMAKE_SOURCE_DIR}/src/server/game/Movement/Waypoints
+)
 
-target_link_libraries(mmaps_generator
-  PRIVATE
-    trinity-core-interface
-  PUBLIC
-    common
-    Recast
-    Detour
-    mpq)
+add_executable(movements_extractor
+    ${sources}
+)
 
-CollectIncludeDirectories(
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  PUBLIC_INCLUDES)
+target_link_libraries(movements_extractor
+  ${JEMALLOC_LIBRARY}
+  ${ACE_LIBRARY}
+  ${BZIP2_LIBRARIES}
+  ${ZLIB_LIBRARIES}
+  Recast
+  Detour
+  collision
+  g3dlib
+)
 
-target_include_directories(mmaps_generator
-  PUBLIC
-    ${PUBLIC_INCLUDES}
-  PRIVATE
-    ${CMAKE_CURRENT_BINARY_DIR})
-
-set_target_properties(mmaps_generator
-    PROPERTIES
-      FOLDER
-        "tools")
-
-if(UNIX)
-  install(TARGETS mmaps_generator DESTINATION bin)
-elseif(WIN32)
-  install(TARGETS mmaps_generator DESTINATION "${CMAKE_INSTALL_PREFIX}")
+if( UNIX )
+  install(TARGETS movements_extractor DESTINATION bin)
+elseif( WIN32 )
+  install(TARGETS movements_extractor DESTINATION "${CMAKE_INSTALL_PREFIX}")
 endif()

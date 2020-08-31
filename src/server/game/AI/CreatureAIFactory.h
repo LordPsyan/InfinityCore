@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,33 +15,70 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_CREATUREAIFACTORY_H
-#define TRINITY_CREATUREAIFACTORY_H
+#ifndef OREGON_CREATUREAIFACTORY_H
+#define OREGON_CREATUREAIFACTORY_H
 
-#include "ObjectRegistry.h"
-#include "SelectableAI.h"
+//#include "Policies/Singleton.h"
+#include "Dynamic/ObjectRegistry.h"
+#include "Dynamic/FactoryHolder.h"
+#include "GameObjectAI.h"
 
-class Creature;
-class CreatureAI;
-
-template <class REAL_AI, bool is_db_allowed = true>
-struct CreatureAIFactory : public SelectableAI<Creature, CreatureAI, is_db_allowed>
+struct SelectableAI : public FactoryHolder<CreatureAI>, public Permissible<Creature>
 {
-    CreatureAIFactory(std::string const& name) : SelectableAI<Creature, CreatureAI, is_db_allowed>(name) { }
+    SelectableAI(const char* id) : FactoryHolder<CreatureAI>(id) {}
+};
 
-    inline CreatureAI* Create(Creature* c) const override
-    {
-        return new REAL_AI(c);
-    }
+template<class REAL_AI>
+struct CreatureAIFactory : public SelectableAI
+{
+    CreatureAIFactory(const char* name) : SelectableAI(name) {}
 
-    int32 Permit(Creature const* c) const override
+    CreatureAI* Create(void*) const;
+
+    int Permit(const Creature* c) const
     {
         return REAL_AI::Permissible(c);
     }
 };
 
-typedef SelectableAI<Creature, CreatureAI>::FactoryHolderRegistry CreatureAIRegistry;
+template<class REAL_AI>
+inline CreatureAI*
+CreatureAIFactory<REAL_AI>::Create(void* data) const
+{
+    Creature* creature = reinterpret_cast<Creature* >(data);
+    return (new REAL_AI(creature));
+}
 
-#define sCreatureAIRegistry CreatureAIRegistry::instance()
+typedef FactoryHolder<CreatureAI> CreatureAICreator;
+typedef FactoryHolder<CreatureAI>::FactoryHolderRegistry CreatureAIRegistry;
+typedef FactoryHolder<CreatureAI>::FactoryHolderRepository CreatureAIRepository;
 
+//GO
+struct SelectableGameObjectAI : public FactoryHolder<GameObjectAI>, public Permissible<GameObject>
+{
+    SelectableGameObjectAI(const char* id) : FactoryHolder<GameObjectAI>(id) { }
+};
+
+template<class REAL_GO_AI>
+struct GameObjectAIFactory : public SelectableGameObjectAI
+{
+    GameObjectAIFactory(const char* name) : SelectableGameObjectAI(name) { }
+
+    GameObjectAI* Create(void*) const override;
+
+    int Permit(const GameObject* g) const override { return REAL_GO_AI::Permissible(g); }
+};
+
+template<class REAL_GO_AI>
+inline GameObjectAI*
+GameObjectAIFactory<REAL_GO_AI>::Create(void* data) const
+{
+    GameObject* go = reinterpret_cast<GameObject*>(data);
+    return (new REAL_GO_AI(go));
+}
+
+typedef FactoryHolder<GameObjectAI> GameObjectAICreator;
+typedef FactoryHolder<GameObjectAI>::FactoryHolderRegistry GameObjectAIRegistry;
+typedef FactoryHolder<GameObjectAI>::FactoryHolderRepository GameObjectAIRepository;
 #endif
+

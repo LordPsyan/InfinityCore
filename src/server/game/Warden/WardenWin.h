@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,13 +18,29 @@
 #ifndef _WARDEN_WIN_H
 #define _WARDEN_WIN_H
 
+#include "SARC4.h"
 #include <map>
-#include "Cryptography/ARC4.h"
-#include "Cryptography/BigNumber.h"
+#include "BigNumber.h"
 #include "ByteBuffer.h"
-#include "Warden.h"
 
-#pragma pack(push, 1)
+enum WardenCheckType
+{
+    MEM_CHECK               = 0xF3,                         // byte moduleNameIndex + uint Offset + byte Len (check to ensure memory isn't modified)
+    PAGE_CHECK_A            = 0xB2,                         // uint Seed + byte[20] SHA1 + uint Addr + byte Len (scans all pages for specified hash)
+    PAGE_CHECK_B            = 0xBF,                         // uint Seed + byte[20] SHA1 + uint Addr + byte Len (scans only pages starts with MZ+PE headers for specified hash)
+    MPQ_CHECK               = 0x98,                         // byte fileNameIndex (check to ensure MPQ file isn't modified)
+    LUA_STR_CHECK           = 0x8B,                         // byte luaNameIndex (check to ensure LUA string isn't used)
+    DRIVER_CHECK            = 0x71,                         // uint Seed + byte[20] SHA1 + byte driverNameIndex (check to ensure driver isn't loaded)
+    TIMING_CHECK            = 0x57,                         // empty (check to ensure GetTickCount() isn't detoured)
+    PROC_CHECK              = 0x7E,                         // uint Seed + byte[20] SHA1 + byte moluleNameIndex + byte procNameIndex + uint Offset + byte Len (check to ensure proc isn't detoured)
+    MODULE_CHECK            = 0xD9,                         // uint Seed + byte[20] SHA1 (check to ensure module isn't injected)
+};
+
+#if defined(__GNUC__)
+#pragma pack(1)
+#else
+#pragma pack(push,1)
+#endif
 
 struct WardenInitModuleRequest
 {
@@ -56,30 +72,33 @@ struct WardenInitModuleRequest
     uint8 Function3_set;
 };
 
+#if defined(__GNUC__)
+#pragma pack()
+#else
 #pragma pack(pop)
+#endif
 
 class WorldSession;
-class Warden;
+class WardenBase;
 
-class TC_GAME_API WardenWin : public Warden
+class WardenWin : WardenBase
 {
     public:
         WardenWin();
         ~WardenWin();
 
-        void Init(WorldSession* session, BigNumber* K) override;
-        ClientWardenModule* GetModuleForClient() override;
-        void InitializeModule() override;
-        void RequestHash() override;
-        void HandleHashResult(ByteBuffer &buff) override;
-        void RequestData() override;
-        void HandleData(ByteBuffer &buff) override;
+        void Init(WorldSession* pClient, BigNumber* K);
+        ClientWardenModule* GetModuleForClient(WorldSession* session);
+        void InitializeModule();
+        void RequestHash();
+        void HandleHashResult(ByteBuffer& buff);
+        void RequestData();
+        void HandleData(ByteBuffer& buff);
 
     private:
-        uint32 _serverTicks;
-        std::list<uint16> _otherChecksTodo;
-        std::list<uint16> _memChecksTodo;
-        std::list<uint16> _currentChecks;
+        uint32 ServerTicks;
+        std::vector<uint32> SendDataId;
+        std::vector<uint32> MemCheck;
 };
 
 #endif

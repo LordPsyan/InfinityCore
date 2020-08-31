@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,134 +18,122 @@
 #ifndef LOCKEDQUEUE_H
 #define LOCKEDQUEUE_H
 
+#include <ace/Guard_T.h>
+#include <ace/Thread_Mutex.h>
 #include <deque>
-#include <mutex>
+#include <assert.h>
+#include "Errors.h"
 
-template <class T, typename StorageType = std::deque<T> >
+namespace ACE_Based
+{
+template <class T, class LockType, typename StorageType = std::deque<T> >
 class LockedQueue
 {
-    //! Lock access to the queue.
-    std::mutex _lock;
+        // Lock access to the queue.
+        LockType _lock;
 
-    //! Storage backing the queue.
-    StorageType _queue;
+        // Storage backing the queue.
+        StorageType _queue;
 
-    //! Cancellation flag.
-    volatile bool _canceled;
+        // Cancellation flag.
+        volatile bool _canceled;
 
-public:
+    public:
 
-    //! Create a LockedQueue.
-    LockedQueue()
-        : _canceled(false)
-    {
-    }
+        // Create a LockedQueue.
+        LockedQueue()
+            : _canceled(false)
+        {
+        }
 
-    //! Destroy a LockedQueue.
-    virtual ~LockedQueue()
-    {
-    }
+        // Destroy a LockedQueue.
+        virtual ~LockedQueue()
+        {
+        }
 
-    //! Adds an item to the queue.
-    void add(const T& item)
-    {
-        lock();
+        // Adds an item to the queue.
+        void add(const T& item)
+        {
+            lock();
 
-        _queue.push_back(item);
+            //ASSERT(!this->_canceled);
+            //throw Cancellation_Exception();
 
-        unlock();
-    }
+            _queue.push_back(item);
 
-    //! Adds items back to front of the queue
-    template<class Iterator>
-    void readd(Iterator begin, Iterator end)
-    {
-        std::lock_guard<std::mutex> lock(_lock);
-        _queue.insert(_queue.begin(), begin, end);
-    }
-
-    //! Gets the next result in the queue, if any.
-    bool next(T& result)
-    {
-        std::lock_guard<std::mutex> lock(_lock);
-
-        if (_queue.empty())
-            return false;
-
-        result = _queue.front();
-        _queue.pop_front();
-
-        return true;
-    }
-
-    template<class Checker>
-    bool next(T& result, Checker& check)
-    {
-        std::lock_guard<std::mutex> lock(_lock);
-
-        if (_queue.empty())
-            return false;
-
-        result = _queue.front();
-        if (!check.Process(result))
-            return false;
-
-        _queue.pop_front();
-        return true;
-    }
-
-    //! Peeks at the top of the queue. Check if the queue is empty before calling! Remember to unlock after use if autoUnlock == false.
-    T& peek(bool autoUnlock = false)
-    {
-        lock();
-
-        T& result = _queue.front();
-
-        if (autoUnlock)
             unlock();
+        }
 
-        return result;
-    }
+        // Gets the next result in the queue, if any.
+        bool next(T& result)
+        {
+            // ACE_Guard<LockType> g(this->_lock);
+            ACE_GUARD_RETURN (LockType, g, this->_lock, false);
 
-    //! Cancels the queue.
-    void cancel()
-    {
-        std::lock_guard<std::mutex> lock(_lock);
+            if (_queue.empty())
+                return false;
 
-        _canceled = true;
-    }
+            //ASSERT (!_queue.empty() || !this->_canceled);
+            //throw Cancellation_Exception();
+            result = _queue.front();
+            _queue.pop_front();
 
-    //! Checks if the queue is cancelled.
-    bool cancelled()
-    {
-        std::lock_guard<std::mutex> lock(_lock);
-        return _canceled;
-    }
+            return true;
+        }
 
-    //! Locks the queue for access.
-    void lock()
-    {
-        this->_lock.lock();
-    }
+        // Peeks at the top of the queue. Remember to unlock after use.
+        T& peek()
+        {
+            lock();
 
-    //! Unlocks the queue.
-    void unlock()
-    {
-        this->_lock.unlock();
-    }
+            T& result = _queue.front();
 
-    ///! Calls pop_front of the queue
-    void pop_front()
-    {
-        std::lock_guard<std::mutex> lock(_lock);
-        _queue.pop_front();
-    }
+            return result;
+        }
 
-    ///! Checks if we're empty or not with locks held
-    bool empty()
-    {
-        std::lock_guard<std::mutex> lock(_lock);
-        return _queue.empty();
-    }
+        // Cancels the queue.
+        void cancel()
+        {
+            lock();
+
+            _canceled = true;
+
+            unlock();
+        }
+
+        // Checks if the queue is cancelled.
+        bool cancelled()
+        {
+            ACE_Guard<LockType> g(this->_lock);
+            return _canceled;
+        }
+
+        // Locks the queue for access.
+        void lock()
+        {
+            this->_lock.acquire();
+        }
+
+        // Unlocks the queue.
+        void unlock()
+        {
+            this->_lock.release();
+        }
+
+        // Calls pop_front of the queue
+        void pop_front()
+        {
+            ACE_GUARD (LockType, g, this->_lock);
+            _queue.pop_front();
+        }
+
+        // Checks if we're empty or not with locks held
+        bool empty()
+        {
+            ACE_GUARD_RETURN (LockType, g, this->_lock, false);
+            return _queue.empty();
+        }
 };
+}
 #endif
+

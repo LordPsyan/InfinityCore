@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,12 +18,7 @@
 #ifndef DEF_DEADMINES_H
 #define DEF_DEADMINES_H
 
-#include "CreatureAIImpl.h"
-
-#define DMScriptName "instance_deadmines"
-#define DataHeader "DM"
-
-enum DMCannonState
+enum CannonState
 {
     CANNON_NOT_USED,
     CANNON_GUNPOWDER_USED,
@@ -33,47 +28,32 @@ enum DMCannonState
     EVENT_DONE
 };
 
-enum DMData
+enum Data
 {
-    EVENT_STATE,
+    EVENT_CANNON,
     EVENT_RHAHKZOR,
-
-    DATA_MR_SMITE = 0,  // not currently used
-    DATA_VANCLEEF = 1
+    EVENT_SNEED,
+    EVENT_GILNID
 };
 
-enum DMData64
-{
-    DATA_SMITE_CHEST
-};
-
-enum DMGameObjects
+enum GameObjects
 {
     GO_FACTORY_DOOR                                        = 13965,
+    GO_MAST_ROOM_DOOR                                      = 16400,
+    GO_FOUNDRY_DOOR                                        = 16399,
     GO_IRONCLAD_DOOR                                       = 16397,
     GO_DEFIAS_CANNON                                       = 16398,
     GO_DOOR_LEVER                                          = 101833,
     GO_MR_SMITE_CHEST                                      = 144111
 };
 
-enum DMCreaturesIds
+enum CreaturesIds
 {
+    NPC_RHAHK_ZOR  = 644, 
     NPC_MR_SMITE   = 646,
-    NPC_BLACKGUARD = 636
+    NPC_OVERSEER   = 634,
+    NPC_EVOKER     = 1729,
+    NPC_TASKMASTER = 4417
 };
-
-enum DMInstanceTexts
-{
-    SAY_ALARM1 = 0,
-    SAY_ALARM2 = 1
-};
-
-template <class AI, class T>
-inline AI* GetDeadminesAI(T* obj)
-{
-    return GetInstanceAI<AI>(obj, DMScriptName);
-}
-
-#define RegisterDeadminesCreatureAI(ai_name) RegisterCreatureAIWithFactory(ai_name, GetDeadminesAI)
 
 #endif

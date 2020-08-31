@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,81 +18,45 @@
 #ifndef _ACCMGR_H
 #define _ACCMGR_H
 
-#include "RBAC.h"
+#include <string>
 
-enum class AccountOpResult : uint8
+#include "Common.h"
+#include "ace/Singleton.h"
+
+enum AccountOpResult
 {
     AOR_OK,
     AOR_NAME_TOO_LONG,
     AOR_PASS_TOO_LONG,
-    AOR_EMAIL_TOO_LONG,
-    AOR_NAME_ALREADY_EXIST,
+    AOR_NAME_ALREDY_EXIST,
     AOR_NAME_NOT_EXIST,
     AOR_DB_INTERNAL_ERROR
 };
 
-enum PasswordChangeSecurity
-{
-    PW_NONE,
-    PW_EMAIL,
-    PW_RBAC
-};
-
-#define MAX_PASS_STR 16
 #define MAX_ACCOUNT_STR 16
-#define MAX_EMAIL_STR 64
 
-namespace rbac
+class AccountMgr
 {
-typedef std::map<uint32, rbac::RBACPermission*> RBACPermissionsContainer;
-typedef std::map<uint8, rbac::RBACPermissionContainer> RBACDefaultPermissionsContainer;
-}
-
-class TC_GAME_API AccountMgr
-{
-    private:
+    public:
         AccountMgr();
         ~AccountMgr();
 
-    public:
-        static AccountMgr* instance();
+        AccountOpResult CreateAccount(std::string username, std::string password);
+        AccountOpResult DeleteAccount(uint32 accid);
+        AccountOpResult ChangeUsername(uint32 accid, std::string new_uname, std::string new_passwd);
+        AccountOpResult ChangePassword(uint32 accid, std::string new_passwd);
+        bool CheckPassword(uint32 accid, std::string passwd);
 
-        AccountOpResult CreateAccount(std::string username, std::string password, std::string email = "");
-        static AccountOpResult DeleteAccount(uint32 accountId);
-        static AccountOpResult ChangeUsername(uint32 accountId, std::string newUsername, std::string newPassword);
-        static AccountOpResult ChangePassword(uint32 accountId, std::string newPassword);
-        static AccountOpResult ChangeEmail(uint32 accountId, std::string newEmail);
-        static AccountOpResult ChangeRegEmail(uint32 accountId, std::string newEmail);
-        static bool CheckPassword(uint32 accountId, std::string password);
-        static bool CheckEmail(uint32 accountId, std::string newEmail);
+        uint32 GetId(std::string username);
+        uint32 GetSecurity(uint32 acc_id);
+        uint32 GetSecurity(uint32 acc_id, int32 realm_id);
+        bool GetName(uint32 acc_id, std::string& name);
+        uint32 GetCharactersCount(uint32 acc_id);
+        static std::string CalculateShaPassHash(std::string& name, std::string& password);
 
-        static uint32 GetId(std::string const& username);
-        static uint32 GetSecurity(uint32 accountId);
-        static uint32 GetSecurity(uint32 accountId, int32 realmId);
-        static bool GetName(uint32 accountId, std::string& name);
-        static bool GetEmail(uint32 accountId, std::string& email);
-        static uint32 GetCharactersCount(uint32 accountId);
-
-        static std::string CalculateShaPassHash(std::string const& name, std::string const& password);
-        static bool IsBannedAccount(std::string const& name);
-        static bool IsPlayerAccount(uint32 gmlevel);
-        static bool IsAdminAccount(uint32 gmlevel);
-        static bool IsConsoleAccount(uint32 gmlevel);
-        static bool HasPermission(uint32 accountId, uint32 permission, uint32 realmId);
-
-        void UpdateAccountAccess(rbac::RBACData* rbac, uint32 accountId, uint8 securityLevel, int32 realmId);
-
-        void LoadRBAC();
-        rbac::RBACPermission const* GetRBACPermission(uint32 permission) const;
-
-        rbac::RBACPermissionsContainer const& GetRBACPermissionList() const { return _permissions; }
-        rbac::RBACPermissionContainer const& GetRBACDefaultPermissions(uint8 secLevel);
-
-    private:
-        void ClearRBAC();
-        rbac::RBACPermissionsContainer _permissions;
-        rbac::RBACDefaultPermissionsContainer _defaultPermissions;
+        static bool normalizeString(std::string& utf8str);
 };
 
-#define sAccountMgr AccountMgr::instance()
+#define sAccountMgr ACE_Singleton<AccountMgr, ACE_Null_Mutex>::instance()
 #endif
+

@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,19 +15,23 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_REACTORAI_H
-#define TRINITY_REACTORAI_H
+#ifndef OREGON_REACTORAI_H
+#define OREGON_REACTORAI_H
 
 #include "CreatureAI.h"
 
-class TC_GAME_API ReactorAI : public CreatureAI
+class Unit;
+
+class ReactorAI : public CreatureAI
 {
     public:
-        explicit ReactorAI(Creature* creature) : CreatureAI(creature) { }
 
-        void MoveInLineOfSight(Unit*) override { }
-        void UpdateAI(uint32 diff) override;
+        explicit ReactorAI(Creature* c) : CreatureAI(c) {}
 
-        static int32 Permissible(Creature const* creature);
+        void MoveInLineOfSight(Unit*);
+
+        void UpdateAI(const uint32);
+        static int Permissible(const Creature*);
 };
 #endif
+

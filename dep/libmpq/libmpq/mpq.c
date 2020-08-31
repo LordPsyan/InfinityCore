@@ -19,7 +19,11 @@
  */
 
 /* mpq-tools configuration includes. */
+#if _WIN32
+#include "win/config.h"
+#else
 #include "config.h"
+#endif
 
 /* libmpq main includes. */
 #include "mpq.h"
@@ -37,23 +41,6 @@
 /* support for platform specific things */
 #include "platform.h"
 
-/* static error constants. */
-static const char *__libmpq_error_strings[] = {
-	"success",
-	"open error on file",
-	"close error on file",
-	"lseek error on file",
-	"read error on file",
-	"write error on file",
-	"memory allocation error",
-	"format errror",
-	"init() wasn't called",
-	"buffer size is to small",
-	"file or block does not exist in archive",
-	"we don't know the decryption seed",
-	"error on unpacking file"
-};
-
 /* this function returns the library version information. */
 const char *libmpq__version(void) {
 
@@ -61,25 +48,40 @@ const char *libmpq__version(void) {
 	return VERSION;
 }
 
-/* this function returns a string message for a return code. */
-const char *libmpq__strerror(int32_t return_code) {
+static const char *__libmpq_error_strings[] = {
+		"success",
+		"open error on file",
+		"close error on file",
+		"lseek error on file",
+		"read error on file",
+		"write error on file",
+		"memory allocation error",
+		"format errror",
+		"init() wasn't called",
+		"buffer size is to small",
+		"file or block does not exist in archive",
+		"we don't know the decryption seed",
+		"error on unpacking file"
+	};
 
+/* this function returns a string message for a return code. */
+const char *libmpq__strerror(int32_t returncode) {
 	/* check for array bounds */
-	if (-return_code < 0 || (size_t)-return_code > sizeof(__libmpq_error_strings)/sizeof(char*))
+	if (-returncode < 0 || -returncode > sizeof(__libmpq_error_strings)/sizeof(char*))
 		return NULL;
 
 	/* return appropriate string */
-	return __libmpq_error_strings[-return_code];
+	return __libmpq_error_strings[-returncode];
 }
 
 /* this function read a file and verify if it is a valid mpq archive, then it read and decrypt the hash table. */
 int32_t libmpq__archive_open(mpq_archive_s **mpq_archive, const char *mpq_filename, libmpq__off_t archive_offset) {
 
 	/* some common variables. */
-	uint32_t i             = 0;
-	uint32_t count         = 0;
-	int32_t result         = 0;
-	uint32_t header_search = FALSE;
+	uint32_t i              = 0;
+	uint32_t count          = 0;
+	int32_t result          = 0;
+	uint32_t header_search	= FALSE;
 
 	if (archive_offset == -1) {
 		archive_offset = 0;
@@ -535,8 +537,8 @@ int32_t libmpq__file_read(mpq_archive_s *mpq_archive, uint32_t file_number, uint
 
 	/* some common variables. */
 	uint32_t i;
-	uint32_t blocks                 = 0;
-	int32_t result                  = 0;
+	uint32_t blocks         = 0;
+	int32_t result          = 0;
 	libmpq__off_t file_offset       = 0;
 	libmpq__off_t unpacked_size     = 0;
 	libmpq__off_t transferred_block = 0;
@@ -611,6 +613,7 @@ int32_t libmpq__block_open_offset(mpq_archive_s *mpq_archive, uint32_t file_numb
 	/* some common variables. */
 	uint32_t i;
 	uint32_t packed_size;
+	int32_t rb     = 0;
 	int32_t result = 0;
 
 	/* check if given file number is not out of range. */
@@ -860,13 +863,13 @@ int32_t libmpq__block_read(mpq_archive_s *mpq_archive, uint32_t file_number, uin
 
 	/* some common variables. */
 	uint8_t *in_buf;
-	uint32_t seed               = 0;
-	uint32_t encrypted          = 0;
-	uint32_t compressed         = 0;
-	uint32_t imploded           = 0;
-	int32_t tb                  = 0;
+	uint32_t seed       = 0;
+	uint32_t encrypted  = 0;
+	uint32_t compressed = 0;
+	uint32_t imploded   = 0;
+	int32_t tb          = 0;
 	libmpq__off_t block_offset  = 0;
-	libmpq__off_t in_size       = 0;
+	off_t in_size       = 0;
 	libmpq__off_t unpacked_size = 0;
 
 	/* check if given file number is not out of range. */
@@ -912,7 +915,7 @@ int32_t libmpq__block_read(mpq_archive_s *mpq_archive, uint32_t file_number, uin
 	}
 
 	/* read block from file. */
-    if ((libmpq__off_t)fread(in_buf, 1, in_size, mpq_archive->fp) != in_size) {
+	if (fread(in_buf, 1, in_size, mpq_archive->fp) != in_size) {
 
 		/* free buffers. */
 		free(in_buf);

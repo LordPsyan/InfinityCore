@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,58 +18,68 @@
 #ifndef DEF_ZULAMAN_H
 #define DEF_ZULAMAN_H
 
-#include "CreatureAIImpl.h"
-
-#define ZulamanScriptName "instance_zulaman"
-#define DataHeader "ZA"
-
-enum ZADataTypes
+enum ZulAmanEncounter
 {
-    BOSS_NALORAKK                       = 0,
-    BOSS_AKILZON                        = 1,
-    BOSS_JANALAI                        = 2,
-    BOSS_HALAZZI                        = 3,
-    BOSS_HEXLORD                        = 4,
-    BOSS_ZULJIN                         = 5,
-    MAX_ENCOUNTER,
+    /* Elite Four */
+    ENCOUNTER_NALORAKK     = 0,
+    ENCOUNTER_AKILZON      = 1,
+    ENCOUNTER_JANALAI      = 2,
+    ENCOUNTER_HALAZZI      = 3,
 
-    DATA_GONGEVENT,
-    DATA_CHESTLOOTED,
-    TYPE_RAND_VENDOR_1,
-    TYPE_RAND_VENDOR_2
+    ENCOUNTER_ELITE_FOUR   = 4, // boundary
+
+    /* After Quest */
+    ENCOUNTER_HEXLORD      = 4,
+    ENCOUNTER_ZULJIN       = 5,
+
+    ENCOUNTER_BOSS         = 6, // boundary
+
+    /* Other */
+    ENCOUNTER_CHESTLOOTED      = 6,
+    ENCOUNTER_RAND_VENDOR_1    = 7,
+    ENCOUNTER_RAND_VENDOR_2    = 8,
+    ENCOUNTER_AKILZON_GAUNTLET = 9, // TODO
+    ENCOUNTER_GONG             = 10,// TODO
+
+    ENCOUNTERS             = 11 // boundary
 };
 
-enum ZACreatureIds
+enum ZulAmanWorldState
 {
-    NPC_HARRISON_JONES                  = 24358,
-    NPC_NALORAKK                        = 23576,
-    NPC_AKILZON                         = 23574,
-    NPC_JANALAI                         = 23578,
-    NPC_HALAZZI                         = 23577,
-    NPC_HEXLORD                         = 24239,
-    NPC_ZULJIN                          = 23863
+    WORLD_STATE_QUEST_RUNNING = 3104, // whether to show the timer
+    WORLD_STATE_QUEST_TIMER   = 3106  // the number on the timer
 };
 
-enum ZAGameObjectIds
+enum ZulAmanEntries
 {
-    GO_LYNX_TEMPLE_EXIT                 = 186303,
-    GO_LYNX_TEMPLE_ENTRANCE             = 186304,
-    GO_HEXLORD_ENTRANCE                 = 186305,
-    GO_WOODEN_DOOR                      = 186306,
-    GO_MASSIVE_GATE                     = 186728,
-    GO_DOOR_AKILZON                     = 186858,
-    GO_DOOR_ZULJIN                      = 186859,
-    GO_HARKORS_SATCHEL                  = 187021,
-    GO_TANZARS_TRUNK                    = 186648,
-    GO_ASHLIS_BAG                       = 186672,
-    GO_KRAZS_PACKAGE                    = 186667,
-    GO_STRANGE_GONG                     = 187359
+    /* Doors */
+    ENTRY_MASSIVE_GATE          = 186728,
+
+    ENTRY_HALAZZI_EXIT_DOOR     = 186303,
+    ENTRY_HALAZZI_ENTRANCE_DOOR = 186304,
+
+    ENTRY_HEXLORD_ENTRANCE_DOOR = 186305,
+    ENTRY_HEXLORD_EXIT_DOOR     = 186306,
+
+    ENTRY_AKILZON_DOOR          = 186858,
+    ENTRY_ZULJIN_DOOR           = 186859,
+
+    /* Chests */
+    ENTRY_CHEST_HARKORS         = 187021,
+    ENTRY_CHEST_TANZARS         = 186648,
+    ENTRY_CHEST_ASHLIS          = 186672,
+    ENTRY_CHEST_KRAZS           = 186667
 };
 
-template <class AI, class T>
-inline AI* GetZulAmanAI(T* obj)
+enum ZulAmanMisc
 {
-    return GetInstanceAI<AI>(obj, ZulamanScriptName);
-}
+    ZA_MAGIC                    = 0x5A41, // "ZA"
+
+    ZA_TIMER_MINUTES            = 20,
+    // Only two bosses should grant extra time
+    ZA_TIMER_ADDITION_NALORAKK  = 15,
+    ZA_TIMER_ADDITION_AKILZON   = 10
+};
 
 #endif
+

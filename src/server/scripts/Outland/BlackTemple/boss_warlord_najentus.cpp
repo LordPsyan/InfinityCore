@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,220 +15,279 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+ /* ScriptData
+ SDName: Boss_Warlord_Najentus
+ SD%Complete: 95
+ SDComment:
+ SDCategory: Black Temple
+ EndScriptData */
+
 #include "ScriptMgr.h"
-#include "black_temple.h"
-#include "GameObjectAI.h"
-#include "GridNotifiers.h"
-#include "InstanceScript.h"
-#include "ObjectAccessor.h"
-#include "Player.h"
 #include "ScriptedCreature.h"
-#include "SpellInfo.h"
-#include "SpellScript.h"
+#include "black_temple.h"
 
-enum Texts
+enum eEnums
 {
-    SAY_AGGRO   = 0,
-    SAY_NEEDLE  = 1,
-    SAY_SLAY    = 2,
-    SAY_SPECIAL = 3,
-    SAY_ENRAGE  = 4,
-    SAY_DEATH   = 5
+    SAY_AGGRO = -1564000,
+    SAY_NEEDLE1 = -1564001,
+    SAY_NEEDLE2 = -1564002,
+    SAY_SLAY1 = -1564003,
+    SAY_SLAY2 = -1564004,
+    SAY_SPECIAL1 = -1564005,
+    SAY_SPECIAL2 = -1564006,
+    SAY_ENRAGE1 = -1564007,           //is this text actually in use?
+    SAY_ENRAGE2 = -1564008,
+    SAY_DEATH = -1564009,
+
+    //Spells
+    SPELL_NEEDLE_SPINE = 39992,
+    SPELL_TIDAL_BURST = 39878,
+    SPELL_TIDAL_SHIELD = 39872,
+    SPELL_IMPALING_SPINE = 39837,
+    SPELL_CREATE_NAJENTUS_SPINE = 39956,
+    SPELL_HURL_SPINE = 39948,
+    SPELL_BERSERK = 45078,
+    SPELL_NEEDLE_SPINE_DMG = 39835,
+    SPELL_NEEDLE_SPINE_AOE = 39968,
+
+    GOBJECT_SPINE = 185584
+
 };
 
-enum Spells
+class boss_najentus : public CreatureScript
 {
-    SPELL_NEEDLE_SPINE_TARGETING = 39992,
-    SPELL_NEEDLE_SPINE           = 39835,
-    SPELL_TIDAL_BURST            = 39878,
-    SPELL_TIDAL_SHIELD           = 39872,
-    SPELL_IMPALING_SPINE         = 39837,
-    SPELL_CREATE_NAJENTUS_SPINE  = 39956,
-    SPELL_HURL_SPINE             = 39948,
-    SPELL_BERSERK                = 26662
-};
+public:
+    boss_najentus() : CreatureScript("boss_najentus") { }
 
-enum Events
-{
-    EVENT_BERSERK = 1,
-    EVENT_YELL    = 2,
-    EVENT_NEEDLE  = 3,
-    EVENT_SPINE   = 4,
-    EVENT_SHIELD  = 5
-};
-
-enum Misc
-{
-    DATA_REMOVE_IMPALING_SPINE   = 1,
-    ACTION_RESET_IMPALING_TARGET = 2
-};
-
-struct boss_najentus : public BossAI
-{
-    boss_najentus(Creature* creature) : BossAI(creature, DATA_HIGH_WARLORD_NAJENTUS) { }
-
-    void Reset() override
+    struct boss_najentusAI : public ScriptedAI
     {
-        _Reset();
-        _spineTargetGUID.Clear();
-    }
-
-    void EnterEvadeMode(EvadeReason /*why*/) override
-    {
-        _EnterEvadeMode();
-        _DespawnAtEvade();
-    }
-
-    void KilledUnit(Unit* victim) override
-    {
-        if (victim->GetTypeId() == TYPEID_PLAYER)
-            Talk(SAY_SLAY);
-    }
-
-    void JustDied(Unit* /*killer*/) override
-    {
-        _JustDied();
-        Talk(SAY_DEATH);
-    }
-
-    void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
-    {
-        if (spellInfo->Id == SPELL_HURL_SPINE && me->HasAura(SPELL_TIDAL_SHIELD))
+        boss_najentusAI(Creature* c) : ScriptedAI(c)
         {
-            me->RemoveAurasDueToSpell(SPELL_TIDAL_SHIELD);
-            DoCastSelf(SPELL_TIDAL_BURST, true);
-            events.RescheduleEvent(EVENT_SPINE, Seconds(2));
+            pInstance = (ScriptedInstance*)c->GetInstanceData();
         }
-    }
 
-    void JustEngagedWith(Unit* who) override
-    {
-        BossAI::JustEngagedWith(who);
-        Talk(SAY_AGGRO);
-        events.ScheduleEvent(EVENT_NEEDLE, 2s);
-        events.ScheduleEvent(EVENT_SHIELD, 1min);
-        events.ScheduleEvent(EVENT_SPINE, 30s);
-        events.ScheduleEvent(EVENT_BERSERK, 480s);
-        events.ScheduleEvent(EVENT_YELL, 45s, 100s);
-    }
+        ScriptedInstance* pInstance;
 
-    uint32 GetData(uint32 data) const override
-    {
-        if (data == DATA_REMOVE_IMPALING_SPINE)
-            return RemoveImpalingSpine() ? 1 : 0;
-        return 0;
-    }
+        uint32 NeedleSpineTimer;
+        uint32 EnrageTimer;
+        uint32 SpecialYellTimer;
+        uint32 TidalShieldTimer;
+        uint32 ImpalingSpineTimer;
 
-    void DoAction(int32 actionId) override
-    {
-        if (actionId == ACTION_RESET_IMPALING_TARGET)
-            _spineTargetGUID.Clear();
-    }
+        uint64 SpineTargetGUID;
 
-    bool RemoveImpalingSpine() const
-    {
-        if (!_spineTargetGUID)
-            return false;
-
-        Unit* target = ObjectAccessor::GetUnit(*me, _spineTargetGUID);
-        if (target && target->HasAura(SPELL_IMPALING_SPINE))
-            target->RemoveAurasDueToSpell(SPELL_IMPALING_SPINE);
-        return true;
-    }
-
-    void ExecuteEvent(uint32 eventId) override
-    {
-        switch (eventId)
+        void Reset()
         {
-            case EVENT_SHIELD:
-                DoCastSelf(SPELL_TIDAL_SHIELD, true);
-                events.RescheduleEvent(EVENT_SPINE, Seconds(50));
-                events.Repeat(Seconds(55), Seconds(60));
-                break;
-            case EVENT_BERSERK:
-                Talk(SAY_ENRAGE);
-                DoCastSelf(SPELL_BERSERK, true);
-                break;
-            case EVENT_SPINE:
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 1, 200.0f, true))
-                {
-                    DoCast(target, SPELL_IMPALING_SPINE, true);
-                    _spineTargetGUID = target->GetGUID();
-                    //must let target summon, otherwise you cannot click the spine
-                    target->SummonGameObject(GO_NAJENTUS_SPINE, *target, QuaternionData(), 30);
-                    Talk(SAY_NEEDLE);
-                }
-                events.Repeat(Seconds(20), Seconds(25));
-                break;
-            case EVENT_NEEDLE:
-                DoCastSelf(SPELL_NEEDLE_SPINE_TARGETING, true);
-                events.Repeat(Seconds(2));
-                break;
-            case EVENT_YELL:
-                Talk(SAY_SPECIAL);
-                events.Repeat(Seconds(25), Seconds(100));
-                break;
-            default:
-                break;
+            EnrageTimer = 480000;
+            SpecialYellTimer = 45000 + (rand() % 76) * 1000;
+            TidalShieldTimer = 60000;
+
+            ResetTimer();
+
+            SpineTargetGUID = 0;
+
+            if (pInstance)
+                pInstance->SetData(DATA_HIGHWARLORDNAJENTUSEVENT, NOT_STARTED);
+
+            DeleteSpine();
         }
-    }
 
-private:
-    ObjectGuid _spineTargetGUID;
-};
+        void KilledUnit(Unit* /*victim*/)
+        {
+            DoScriptText(rand() % 2 ? SAY_SLAY1 : SAY_SLAY2, me);
+        }
 
-struct go_najentus_spine : public GameObjectAI
-{
-    go_najentus_spine(GameObject* go) : GameObjectAI(go), _instance(go->GetInstanceScript()) { }
+        void JustDied(Unit* /*victim*/)
+        {
+            if (pInstance)
+                pInstance->SetData(DATA_HIGHWARLORDNAJENTUSEVENT, DONE);
 
-    bool GossipHello(Player* player) override
-    {
-        if (!_instance)
-            return false;
+            DoScriptText(SAY_DEATH, me);
+            DeleteSpine();
+        }
 
-        if (Creature* najentus = _instance->GetCreature(DATA_HIGH_WARLORD_NAJENTUS))
-            if (najentus->AI()->GetData(DATA_REMOVE_IMPALING_SPINE))
+        bool TryDoCast(Unit* victim, uint32 spellId, bool triggered = false)
+        {
+            if (me->IsNonMeleeSpellCast(false)) return false;
+
+            DoCast(victim, spellId, triggered);
+            return true;
+        }
+
+        void SpellHit(Unit* /*caster*/, const SpellEntry* spell)
+        {
+            if (spell->Id == SPELL_HURL_SPINE && me->HasAura(SPELL_TIDAL_SHIELD, 0))
             {
-                najentus->AI()->DoAction(ACTION_RESET_IMPALING_TARGET);
-                me->CastSpell(player, SPELL_CREATE_NAJENTUS_SPINE, true);
-                me->Delete();
+                me->RemoveAurasDueToSpell(SPELL_TIDAL_SHIELD);
+                DoCast(me, SPELL_TIDAL_BURST, true);
+                ResetTimer();
             }
-        return true;
+        }
+
+        void SpellHitTarget(Unit* pTarget, const SpellEntry* spell)
+        {
+            switch (spell->Id)
+            {
+            case SPELL_NEEDLE_SPINE:
+                me->CastSpell(pTarget, SPELL_NEEDLE_SPINE_DMG, true);
+                break;
+            }
+        }
+
+        void EnterCombat(Unit* /*who*/)
+        {
+            if (pInstance)
+                pInstance->SetData(DATA_HIGHWARLORDNAJENTUSEVENT, IN_PROGRESS);
+
+            DoScriptText(SAY_AGGRO, me);
+            DoZoneInCombat();
+        }
+
+        bool RemoveImpalingSpine()
+        {
+            if (!SpineTargetGUID) return false;
+            Unit* pTarget = Unit::GetUnit(*me, SpineTargetGUID);
+            if (pTarget && pTarget->HasAura(SPELL_IMPALING_SPINE, 1))
+                pTarget->RemoveAurasDueToSpell(SPELL_IMPALING_SPINE);
+            SpineTargetGUID = 0;
+            return true;
+        }
+
+        void ResetTimer(uint32 inc = 0)
+        {
+            NeedleSpineTimer = 10000 + inc;
+            ImpalingSpineTimer = 20000 + inc;
+        }
+
+        void DeleteSpine()
+        {
+            //InstanceMap::PlayerList const &playerliste = ((InstanceMap*)me->GetMap())->GetPlayers();
+            InstanceMap::PlayerList::const_iterator it;
+
+            Map::PlayerList const& PlayerList = ((InstanceMap*)me->GetMap())->GetPlayers();
+            for (Map::PlayerList::const_iterator i = PlayerList.begin(); i != PlayerList.end(); ++i)
+            {
+                Player* i_pl = i->GetSource();
+                if (i_pl)
+                    i_pl->DestroyItemCount(32408, i_pl->GetItemCount(32408), true);
+            }
+        }
+
+        void UpdateAI(const uint32 diff)
+        {
+            if (!UpdateVictim())
+                return;
+
+            if (TidalShieldTimer <= diff)
+            {
+                if (TryDoCast(me, SPELL_TIDAL_SHIELD, true))
+                {
+                    ResetTimer(45000);
+                    TidalShieldTimer = 60000;
+                }
+            }
+            else TidalShieldTimer -= diff;
+
+            if (!me->HasAura(SPELL_BERSERK, 0))
+            {
+                if (EnrageTimer <= diff)
+                {
+                    DoScriptText(SAY_ENRAGE2, me);
+                    DoCast(me, SPELL_BERSERK, true);
+                }
+                else EnrageTimer -= diff;
+            }
+
+            if (SpecialYellTimer <= diff)
+            {
+                switch (rand() % 2)
+                {
+                case 0:
+                    DoScriptText(SAY_SPECIAL1, me);
+                    break;
+                case 1:
+                    DoScriptText(SAY_SPECIAL2, me);
+                    break;
+                }
+                SpecialYellTimer = 25000 + (rand() % 76) * 1000;
+            }
+            else SpecialYellTimer -= diff;
+
+            if (ImpalingSpineTimer <= diff)
+            {
+                if (!me->IsNonMeleeSpellCast(false))
+                {
+                    Unit* pTarget = SelectTarget(SELECT_TARGET_RANDOM, 1, 80, true);
+                    if (!pTarget) pTarget = me->GetVictim();
+                    if (pTarget)
+                    {
+                        DoCast(pTarget, SPELL_IMPALING_SPINE);
+                        SpineTargetGUID = pTarget->GetGUID();
+                        //must let target summon, otherwise you cannot click the spine
+                        pTarget->SummonGameObject(GOBJECT_SPINE, pTarget->GetPositionX(), pTarget->GetPositionY(), pTarget->GetPositionZ(), me->GetOrientation(), 0, 0, 0, 0, 0);
+
+                        switch (rand() % 2)
+                        {
+                        case 0:
+                            DoScriptText(SAY_NEEDLE1, me);
+                            break;
+                        case 1:
+                            DoScriptText(SAY_NEEDLE2, me);
+                            break;
+                        }
+                        ImpalingSpineTimer = 21000;
+                    }
+                }
+            }
+            else ImpalingSpineTimer -= diff;
+
+            if (NeedleSpineTimer <= diff)
+            {
+                if (TryDoCast(me, SPELL_NEEDLE_SPINE, true))
+                {
+                    //std::list<Unit*> target;
+                    //SelectUnitList(target, 3, SELECT_TARGET_RANDOM, 100, true);
+                    //for (std::list<Unit*>::iterator i = target.begin(); i != target.end(); ++i)
+                    //    me->CastSpell(*i, 39835, true);
+                    NeedleSpineTimer = 3000;
+                }
+            }
+            else NeedleSpineTimer -= diff;
+
+
+            DoMeleeAttackIfReady();
+        }
+    };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return GetInstanceAI<boss_najentusAI>(pCreature);
     }
-private:
-    InstanceScript* _instance;
+
 };
 
-// 39992 - Needle Spine Targeting
-class spell_najentus_needle_spine : public SpellScript
+class go_najentus_spine : public GameObjectScript
 {
-    PrepareSpellScript(spell_najentus_needle_spine);
+public:
+    go_najentus_spine() : GameObjectScript("go_najentus_spine") { }
 
-    bool Validate(SpellInfo const* /*spellInfo*/) override
+    bool OnGossipHello(Player* pPlayer, GameObject* pGo) override
     {
-        return ValidateSpellInfo({ SPELL_NEEDLE_SPINE });
+        if (ScriptedInstance* pInstance = (ScriptedInstance*)pGo->GetInstanceData())
+            if (Creature* Najentus = Unit::GetCreature(*pGo, pInstance->GetData64(DATA_HIGHWARLORDNAJENTUS)))
+                if (CAST_AI(boss_najentus::boss_najentusAI, Najentus->AI())->RemoveImpalingSpine())
+                {
+                    pPlayer->CastSpell(pPlayer, SPELL_CREATE_NAJENTUS_SPINE, true);
+                    pGo->AddObjectToRemoveList();
+                }
+        return true;
     }
 
-    void FilterTargets(std::list<WorldObject*>& targets)
-    {
-        targets.remove_if(Trinity::UnitAuraCheck(true, SPELL_IMPALING_SPINE));
-    }
-
-    void HandleScript(SpellEffIndex /*effIndex*/)
-    {
-        GetCaster()->CastSpell(GetHitUnit(), SPELL_NEEDLE_SPINE, true);
-    }
-
-    void Register() override
-    {
-        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_najentus_needle_spine::FilterTargets, EFFECT_0, TARGET_UNIT_SRC_AREA_ENEMY);
-        OnEffectHitTarget += SpellEffectFn(spell_najentus_needle_spine::HandleScript, EFFECT_0, SPELL_EFFECT_DUMMY);
-    }
 };
 
 void AddSC_boss_najentus()
 {
-    RegisterBlackTempleCreatureAI(boss_najentus);
-    RegisterGameObjectAI(go_najentus_spine);
-    RegisterSpellScript(spell_najentus_needle_spine);
+    new boss_najentus();
+    new go_najentus_spine();
 }
+

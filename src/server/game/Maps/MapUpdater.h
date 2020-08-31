@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,48 +18,40 @@
 #ifndef _MAP_UPDATER_H_INCLUDED
 #define _MAP_UPDATER_H_INCLUDED
 
-#include "Define.h"
-#include <mutex>
-#include <thread>
-#include <condition_variable>
-#include "ProducerConsumerQueue.h"
+#include <ace/Thread_Mutex.h>
+#include <ace/Condition_Thread_Mutex.h>
 
-class MapUpdateRequest;
+#include "DelayExecutor.h"
+
 class Map;
 
-class TC_GAME_API MapUpdater
+class MapUpdater
 {
     public:
 
-        MapUpdater() : _cancelationToken(false), pending_requests(0) {}
+        MapUpdater() : m_executor(), m_condition(m_mutex), m_mutex(), pending_requests(0) {}
         ~MapUpdater() { };
 
         friend class MapUpdateRequest;
 
-        void schedule_update(Map& map, uint32 diff);
+        int schedule_update(Map& map, ACE_UINT32 diff);
 
-        void wait();
+        int wait();
 
-        void activate(size_t num_threads);
+        int activate(size_t num_threads);
 
-        void deactivate();
+        int deactivate();
 
         bool activated();
 
     private:
 
-        ProducerConsumerQueue<MapUpdateRequest*> _queue;
-
-        std::vector<std::thread> _workerThreads;
-        std::atomic<bool> _cancelationToken;
-
-        std::mutex _lock;
-        std::condition_variable _condition;
+        DelayExecutor m_executor;
+        ACE_Condition_Thread_Mutex m_condition;
+        ACE_Thread_Mutex m_mutex;
         size_t pending_requests;
 
         void update_finished();
-
-        void WorkerThread();
 };
 
 #endif //_MAP_UPDATER_H_INCLUDED

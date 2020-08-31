@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,28 +18,19 @@
 #include <string>
 #include <iostream>
 
-#include "TileAssembler.h"
-#include "Banner.h"
+#include "Maps/TileAssembler.h"
 
 int main(int argc, char* argv[])
 {
-    Trinity::Banner::Show("VMAP assembler", [](char const* text) { std::cout << text << std::endl; }, nullptr);
-
-    std::string src = "Buildings";
-    std::string dest = "vmaps";
-
-    if (argc > 3)
+    if (argc != 3)
     {
+        //printf("\nusage: %s <raw data dir> <vmap dest dir> [config file name]\n", argv[0]);
         std::cout << "usage: " << argv[0] << " <raw data dir> <vmap dest dir>" << std::endl;
         return 1;
     }
-    else
-    {
-        if (argc > 1)
-            src = argv[1];
-        if (argc > 2)
-            dest = argv[2];
-    }
+
+    std::string src = argv[1];
+    std::string dest = argv[2];
 
     std::cout << "using " << src << " as source directory and writing output to " << dest << std::endl;
 

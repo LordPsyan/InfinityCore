@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,66 +15,62 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "SHA1.h"
-
-#include <cstring>
+#include "Sha1.h"
 
 #ifndef _WARDEN_KEY_GENERATION_H
 #define _WARDEN_KEY_GENERATION_H
 
 class SHA1Randx
 {
-public:
-    SHA1Randx(uint8* buff, uint32 size)
-    {
-        uint32 halfSize = size / 2;
-
-        sh.Initialize();
-        sh.UpdateData(buff, halfSize);
-        sh.Finalize();
-
-        memcpy(o1, sh.GetDigest(), 20);
-
-        sh.Initialize();
-        sh.UpdateData(buff + halfSize, size - halfSize);
-        sh.Finalize();
-
-        memcpy(o2, sh.GetDigest(), 20);
-
-        memset(o0, 0x00, 20);
-
-        FillUp();
-    }
-
-    void Generate(uint8* buf, uint32 sz)
-    {
-        for (uint32 i = 0; i < sz; ++i)
+    public:
+        SHA1Randx(uint8* buff, uint32 size)
         {
-            if (taken == 20)
-                FillUp();
+            uint32 taken = size / 2;
 
-            buf[i] = o0[taken];
-            taken++;
+            sh.Initialize();
+            sh.UpdateData(buff, taken);
+            sh.Finalize();
+
+            memcpy(o1, sh.GetDigest(), 20);
+
+            sh.Initialize();
+            sh.UpdateData(buff + taken, size - taken);
+            sh.Finalize();
+
+            memcpy(o2, sh.GetDigest(), 20);
+
+            memset(o0, 0x00, 20);
+
+            fillUp();
         }
-    }
 
-private:
-    void FillUp()
-    {
-        sh.Initialize();
-        sh.UpdateData(o1, 20);
-        sh.UpdateData(o0, 20);
-        sh.UpdateData(o2, 20);
-        sh.Finalize();
+        void generate(uint8* buf, uint32 sz)
+        {
+            for (uint32 i = 0; i < sz; i++)
+            {
+                if (taken == 20)
+                    fillUp();
 
-        memcpy(o0, sh.GetDigest(), 20);
+                buf[i] = o0[taken];
+                taken++;
+            }
+        }
+    private:
+        void fillUp()
+        {
+            sh.Initialize();
+            sh.UpdateData(o1, 20);
+            sh.UpdateData(o0, 20);
+            sh.UpdateData(o2, 20);
+            sh.Finalize();
 
-        taken = 0;
-    }
+            memcpy(o0, sh.GetDigest(), 20);
 
-    SHA1Hash sh;
-    uint32 taken;
-    uint8 o0[20], o1[20], o2[20];
+            taken = 0;
+        }
+        Sha1Hash sh;
+        uint32 taken;
+        uint8 o0[20], o1[20], o2[20];
 };
 
 #endif

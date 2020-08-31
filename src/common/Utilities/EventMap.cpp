@@ -1,22 +1,21 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the
- * Free Software Foundation; either version 2 of the License, or (at your
- * option) any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
- * more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program. If not, see <http://www.gnu.org/licenses/>.
- */
+* Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+*
+* This program is free software; you can redistribute it and/or modify it
+* under the terms of the GNU General Public License as published by the
+* Free Software Foundation; either version 2 of the License, or (at your
+* option) any later version.
+*
+* This program is distributed in the hope that it will be useful, but WITHOUT
+* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+* FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+* more details.
+*
+* You should have received a copy of the GNU General Public License along
+* with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 #include "EventMap.h"
-#include "Random.h"
 
 void EventMap::Reset()
 {
@@ -33,7 +32,7 @@ void EventMap::SetPhase(uint8 phase)
         _phase = uint8(1 << (phase - 1));
 }
 
-void EventMap::ScheduleEvent(uint32 eventId, Milliseconds time, uint32 group /*= 0*/, uint8 phase /*= 0*/)
+void EventMap::ScheduleEvent(uint32 eventId, uint32 time, uint32 group /*= 0*/, uint8 phase /*= 0*/)
 {
     if (group && group <= 8)
         eventId |= (1 << (group + 15));
@@ -41,33 +40,7 @@ void EventMap::ScheduleEvent(uint32 eventId, Milliseconds time, uint32 group /*=
     if (phase && phase <= 8)
         eventId |= (1 << (phase + 23));
 
-    _eventMap.insert(EventStore::value_type(_time + time.count(), eventId));
-}
-
-void EventMap::ScheduleEvent(uint32 eventId, Milliseconds minTime, Milliseconds maxTime, uint32 group /*= 0*/, uint32 phase /*= 0*/)
-{
-    ScheduleEvent(eventId, randtime(minTime, maxTime), group, phase);
-}
-
-void EventMap::RescheduleEvent(uint32 eventId, Milliseconds time, uint32 group /*= 0*/, uint8 phase /*= 0*/)
-{
-    CancelEvent(eventId);
-    ScheduleEvent(eventId, time, group, phase);
-}
-
-void EventMap::RescheduleEvent(uint32 eventId, Milliseconds minTime, Milliseconds maxTime, uint32 group /*= 0*/, uint32 phase /*= 0*/)
-{
-    RescheduleEvent(eventId, randtime(minTime, maxTime), group, phase);
-}
-
-void EventMap::Repeat(Milliseconds time)
-{
-    _eventMap.insert(EventStore::value_type(_time + time.count(), _lastEvent));
-}
-
-void EventMap::Repeat(Milliseconds minTime, Milliseconds maxTime)
-{
-    Repeat(randtime(minTime, maxTime));
+    _eventMap.insert(EventStore::value_type(_time + time, eventId));
 }
 
 uint32 EventMap::ExecuteEvent()
@@ -92,12 +65,7 @@ uint32 EventMap::ExecuteEvent()
     return 0;
 }
 
-void EventMap::DelayEvents(Milliseconds delay)
-{
-    _time = delay.count() < _time ? _time - delay.count() : 0;
-}
-
-void EventMap::DelayEvents(Milliseconds delay, uint32 group)
+void EventMap::DelayEvents(uint32 delay, uint32 group)
 {
     if (!group || group > 8 || Empty())
         return;
@@ -108,7 +76,7 @@ void EventMap::DelayEvents(Milliseconds delay, uint32 group)
     {
         if (itr->second & (1 << (group + 15)))
         {
-            delayed.insert(EventStore::value_type(itr->first + delay.count(), itr->second));
+            delayed.insert(EventStore::value_type(itr->first + delay, itr->second));
             _eventMap.erase(itr++);
         }
         else
@@ -151,18 +119,18 @@ uint32 EventMap::GetNextEventTime(uint32 eventId) const
     if (Empty())
         return 0;
 
-    for (std::pair<uint32 const, uint32> const& itr : _eventMap)
-        if (eventId == (itr.second & 0x0000FFFF))
-            return itr.first;
+    for (EventStore::const_iterator itr = _eventMap.begin(); itr != _eventMap.end(); ++itr)
+        if (eventId == (itr->second & 0x0000FFFF))
+            return itr->first;
 
     return 0;
 }
 
 uint32 EventMap::GetTimeUntilEvent(uint32 eventId) const
 {
-    for (std::pair<uint32 const, uint32> const& itr : _eventMap)
-        if (eventId == (itr.second & 0x0000FFFF))
-            return itr.first - _time;
+    for (EventStore::const_iterator itr = _eventMap.begin(); itr != _eventMap.end(); ++itr)
+        if (eventId == (itr->second & 0x0000FFFF))
+            return itr->first - _time;
 
     return std::numeric_limits<uint32>::max();
 }

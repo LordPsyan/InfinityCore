@@ -1,4 +1,4 @@
-# This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+# This file is part of the OregonCore Project. See AUTHORS file for Copyright information
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without
@@ -8,87 +8,101 @@
 # WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-########### authserver ###############
+file(GLOB sources_localdir *.cpp *.h)
 
-CollectSourceFiles(
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  PRIVATE_SOURCES
-  # Exclude
-  ${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeaders)
-
-if(WIN32)
-  list(APPEND PRIVATE_SOURCES ${sources_windows})
-  if(MSVC)
-    list(APPEND PRIVATE_SOURCES authserver.rc)
-  endif()
-endif()
-
-if(USE_COREPCH)
-  set(PRIVATE_PCH_HEADER PrecompiledHeaders/authPCH.h)
-endif()
-
-GroupSources(${CMAKE_CURRENT_SOURCE_DIR})
-
-add_executable(authserver
-  ${PRIVATE_SOURCES}
+set(oregon-realm_SRCS
+  ${oregon-realm_SRCS}
+  ${sources_localdir}
+  ${sources_Debugging}
 )
 
-if(NOT WIN32)
-  set_target_properties(authserver PROPERTIES
-    COMPILE_DEFINITIONS _TRINITY_REALM_CONFIG="${CONF_DIR}/authserver.conf"
+if( WIN32 )
+  set(oregon-realm_SRCS
+    ${oregon-realm_SRCS}
+    OregonRealm.rc
   )
 endif()
 
-target_link_libraries(authserver
-  PRIVATE
-    trinity-core-interface
-  PUBLIC
-    shared)
+include_directories(
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/src/server/shared
+  ${CMAKE_SOURCE_DIR}/src/server/shared/Database
+  
+  ${CMAKE_SOURCE_DIR}/src/common
+  ${CMAKE_SOURCE_DIR}/src/common/Configuration
+  ${CMAKE_SOURCE_DIR}/src/common/Cryptography
+  ${CMAKE_SOURCE_DIR}/src/common/Cryptography/Authentication
+  ${CMAKE_SOURCE_DIR}/src/common/DataStores
+  ${CMAKE_SOURCE_DIR}/src/common/Logging
+  ${CMAKE_SOURCE_DIR}/src/common/Platform
+  ${CMAKE_SOURCE_DIR}/src/common/Threading
+  ${CMAKE_SOURCE_DIR}/src/common/Utilities
+  ${CMAKE_SOURCE_DIR}/src/server/shared
+  ${CMAKE_SOURCE_DIR}/src/server/shared/DataStores
+  ${CMAKE_SOURCE_DIR}/src/server/shared/Packets
+  ${CMAKE_SOURCE_DIR}/src/server/database
+  ${CMAKE_SOURCE_DIR}/src/server/database/Database
+  
+  ${CMAKE_SOURCE_DIR}/src/framework
+  ${ACE_INCLUDE_DIR}
+  ${MYSQL_INCLUDE_DIR}
+  ${OPENSSL_INCLUDE_DIR}
+)
 
-CollectIncludeDirectories(
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  PUBLIC_INCLUDES
-  # Exclude
-  ${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeaders)
+set(oregon-realm_LINK_FLAGS "-rdynamic")
 
-target_include_directories(authserver
-  PUBLIC
-    ${PUBLIC_INCLUDES}
-  PRIVATE
-    ${CMAKE_CURRENT_BINARY_DIR})
+GroupSources(${CMAKE_CURRENT_SOURCE_DIR})
 
-set_target_properties(authserver
-    PROPERTIES
-      FOLDER
-        "server")
+add_executable(oregon-realm
+  ${oregon-realm_SRCS}
+)
 
-if(COPY_CONF AND WIN32)
-  if("${CMAKE_MAKE_PROGRAM}" MATCHES "MSBuild")
-    add_custom_command(TARGET authserver
-      POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/authserver.conf.dist ${CMAKE_BINARY_DIR}/bin/$(ConfigurationName)/
-    )
-  elseif(MINGW)
-    add_custom_command(TARGET authserver
-      POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/authserver.conf.dist ${CMAKE_BINARY_DIR}/bin/
-    )
-  endif()
+add_dependencies(oregon-realm revision.h)
+
+if( NOT WIN32 )
+  add_definitions(-D_OREGON_REALM_CONFIG="${CONF_DIR}/oregonrealm.conf")
 endif()
 
-if(UNIX)
-  install(TARGETS authserver DESTINATION bin)
-  if(COPY_CONF)
-    install(FILES  authserver.conf.dist DESTINATION ${CONF_DIR})
-  endif()
-elseif(WIN32)
-  install(TARGETS authserver DESTINATION "${CMAKE_INSTALL_PREFIX}")
-  if(COPY_CONF)
-    install(FILES authserver.conf.dist DESTINATION "${CMAKE_INSTALL_PREFIX}")
-  endif()
+if( UNIX )
+  set(oregon-realm_LINK_FLAGS "-pthread ${oregon-realm_LINK_FLAGS}")
 endif()
 
-# Generate precompiled header
-if(USE_COREPCH)
-  add_cxx_pch(authserver ${PRIVATE_PCH_HEADER})
+if( CMAKE_SYSTEM_NAME MATCHES "Darwin" )
+  set(oregon-realm_LINK_FLAGS "-framework Carbon ${oregon-realm_LINK_FLAGS}")
+endif()
+
+set_target_properties(oregon-realm PROPERTIES LINK_FLAGS "${oregon-realm_LINK_FLAGS}")
+
+target_link_libraries(oregon-realm
+  shared
+  oregonframework
+  ${MYSQL_LIBRARY}
+  ${OPENSSL_LIBRARIES}
+  ${OPENSSL_EXTRA_LIBRARIES}
+  ${OSX_LIBS}
+)
+
+if( UNIX )
+  target_link_libraries(oregon-realm
+    ${BFD_LIBRARY}
+    dl
+    ${IBERTY_LIBRARY}
+    rt
+    ${ZLIB_LIBRARIES}
+  )
+endif()
+
+if( WIN32 )
+  add_custom_command(TARGET oregon-realm
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/oregonrealm.conf.dist ${CMAKE_BINARY_DIR}/bin/$(ConfigurationName)/
+  )
+endif()
+
+if( UNIX )
+  install(TARGETS oregon-realm DESTINATION bin)
+  install(FILES oregonrealm.conf.dist DESTINATION ${CONF_DIR})
+elseif( WIN32 )
+  install(TARGETS oregon-realm DESTINATION "${CMAKE_INSTALL_PREFIX}")
+  install(FILES oregonrealm.conf.dist DESTINATION "${CMAKE_INSTALL_PREFIX}")
 endif()

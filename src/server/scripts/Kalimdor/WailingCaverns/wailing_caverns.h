@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,12 +18,7 @@
 #ifndef DEF_WAILING_CAVERNS_H
 #define DEF_WAILING_CAVERNS_H
 
-#include "CreatureAIImpl.h"
-
-#define WCScriptName "instance_wailing_caverns"
-#define DataHeader "WC"
-
-enum WCDataTypes
+enum eTypes
 {
     TYPE_LORD_COBRAHN         = 1,
     TYPE_LORD_PYTHAS          = 2,
@@ -38,11 +33,5 @@ enum WCDataTypes
 
     DATA_NARALEX              = 3679,
 };
-
-template <class AI, class T>
-inline AI* GetWailingCavernsAI(T* obj)
-{
-    return GetInstanceAI<AI>(obj, WCScriptName);
-}
 
 #endif

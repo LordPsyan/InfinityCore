@@ -1,149 +1,125 @@
+# Copyright (C) 2008-2018 OregonCore <https://oregon-core.net/>
+# Copyright (C) 2008-2012 TrinityCore <https://www.trinitycore.org/>
+#
+# This file is free software; as a special exception the author gives
+# unlimited permission to copy and/or distribute it, with or without
+# modifications, as long as this notice is preserved.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+# Add Colors
+if (NOT WIN32)
+    string(ASCII 27 Esc)
+    function(ShowOption opt val)
+        string(SUBSTRING ${val} 0 2 ye_no)
+
+        if (${ye_no} STREQUAL "Ye")
+                string(SUBSTRING ${val} 3 -1 suffix)
+            set(val "${Esc}[1;32mYes${Esc}[m${suffix}") # bold green
+        elseif(${ye_no} STREQUAL "No")
+                string(SUBSTRING ${val} 2 -1 suffix)
+            set(val "${Esc}[1;31mNo${Esc}[m${suffix}") # bold red
+        else()
+            set(val "${Esc}[1m${val}${Esc}[m") # bold default
+        endif()
+
+        set(star "${Esc}[1;34m* ${Esc}[m") # bold blue
+        set(opt  "${Esc}[1;33m${opt}${Esc}[m") # bold yellow
+        message("${star}${opt} ${val}")
+    endfunction()
+else()
+    function(ShowOption opt val)
+        message("* ${opt} ${val}")
+    endfunction()
+endif()
+
 # output generic information about the core and buildtype chosen
 message("")
-message("* TrinityCore revision   : ${rev_hash} ${rev_date} (${rev_branch} branch)")
-if(UNIX)
-  message("* TrinityCore buildtype  : ${CMAKE_BUILD_TYPE}")
+ShowOption("OregonCore revision    :" "${rev_id_str} (${rev_hash_str})")
+if( UNIX )
+  ShowOption("Build binaries in      :" "${CMAKE_BUILD_TYPE} mode")
 endif()
 message("")
 
 # output information about installation-directories and locations
 
-message("* Install core to        : ${CMAKE_INSTALL_PREFIX}")
-if(COPY_CONF)
-  if(UNIX)
-    message("* Install configs to     : ${CONF_DIR}")
-  else()
-    message("* Install configs to     : ${CMAKE_INSTALL_PREFIX}")
-  endif()
+ShowOption("Install core to        :" "${CMAKE_INSTALL_PREFIX}/bin")
+if( UNIX )
+  ShowOption("Install libraries to   :" "${LIBSDIR}")
+  ShowOption("Install configs to     :" "${CONF_DIR}")
 endif()
-
 message("")
 
 # Show infomation about the options selected during configuration
 
-if(SERVERS)
-  message("* Build world/auth       : Yes (default)")
+if( SERVERS )
+  ShowOption("Build world/auth       :" "Yes (default)")
 else()
-  message("* Build world/authserver : No")
+  ShowOption("Build world/authserver :" "No")
 endif()
 
-if(SCRIPTS AND (NOT SCRIPTS STREQUAL "none"))
-  message("* Build with scripts     : Yes (${SCRIPTS})")
+if( SCRIPTS )
+  ShowOption("Build with scripts     :" "Yes (default)")
+  add_definitions(-DSCRIPTS)
 else()
-  message("* Build with scripts     : No")
+  ShowOption("Build with scripts     :" "No")
+  set(USE_SCRIPTPCH 0)
 endif()
 
-if(TOOLS)
-  message("* Build map/vmap tools   : Yes (default)")
-  add_definitions(-DNO_CORE_FUNCS)
+if( TOOLS )
+  ShowOption("Build map extractiors  :" "Yes")
+  add_definitions(-DMMAP_GENERATOR)
 else()
-  message("* Build map/vmap tools   : No")
+  ShowOption("Build map extractors   :" "No  (default)")
 endif()
 
-if(USE_COREPCH)
-  message("* Build core w/PCH       : Yes (default)")
+message("")
+
+if( ELUNA )
+  ShowOption("Build w/ Eluna         :" "Yes")
+  add_definitions(-DELUNA)
 else()
-  message("* Build core w/PCH       : No")
+  ShowOption("Build w/ Eluna         :" "No (default)")
 endif()
 
-if(USE_SCRIPTPCH)
-  message("* Build scripts w/PCH    : Yes (default)")
+if( USE_COREPCH )
+  ShowOption("Build core w/PCH       :" "Yes (default)")
 else()
-  message("* Build scripts w/PCH    : No")
+  ShowOption("Build core w/PCH       :" "No")
 endif()
 
-if(WITH_WARNINGS)
-  message("* Show all warnings      : Yes")
+if( USE_SCRIPTPCH )
+  ShowOption("Build scripts w/PCH    :" "Yes (default)")
 else()
-  message("* Show compile-warnings  : No  (default)")
+  ShowOption("Build scripts w/PCH    :" "No")
 endif()
 
-if(WITH_COREDEBUG)
-  message("")
-  message(" *** WITH_COREDEBUG - WARNING!")
-  message(" *** additional core debug logs have been enabled!")
-  message(" *** this setting doesn't help to get better crash logs!")
-  message(" *** in case you are searching for better crash logs use")
-  message(" *** -DCMAKE_BUILD_TYPE=RelWithDebInfo")
-  message(" *** DO NOT ENABLE IT UNLESS YOU KNOW WHAT YOU'RE DOING!")
-  message("* Use coreside debug     : Yes")
-  add_definitions(-DTRINITY_DEBUG)
+if( WITH_WARNINGS )
+  ShowOption("Show all warnings      :" "Yes")
+  add_definitions(-D__SHOW_STUPID_WARNINGS__)
 else()
-  message("* Use coreside debug     : No  (default)")
+  ShowOption("Show compile-warnings  :" "No  (default)")
 endif()
 
-if(NOT WITH_SOURCE_TREE STREQUAL "no")
-  message("* Show source tree       : Yes (${WITH_SOURCE_TREE})")
+if( WITH_COREDEBUG )
+  ShowOption("Use coreside debug     :" "Yes")
+  add_definitions(-DOREGON_DEBUG)
+else()
+  ShowOption("Use coreside debug     :" "No  (default)")
+endif()
+
+if( NOT WITH_SOURCE_TREE STREQUAL "no" )
+  message("* Show source tree       : Yes - \"${WITH_SOURCE_TREE}\"")
 else()
   message("* Show source tree       : No")
 endif()
 
-if(WITHOUT_GIT)
-  message("* Use GIT revision hash  : No")
-  message("")
-  message(" *** WITHOUT_GIT - WARNING!")
-  message(" *** By choosing the WITHOUT_GIT option you have waived all rights for support,")
-  message(" *** and accept that or all requests for support or assistance sent to the core")
-  message(" *** developers will be rejected. This due to that we will be unable to detect")
-  message(" *** what revision of the codebase you are using in a proper way.")
-  message(" *** We remind you that you need to use the repository codebase and a supported")
-  message(" *** version of git for the revision-hash to work, and be allowede to ask for")
-  message(" *** support if needed.")
+if( WITH_DOCS )
+    ShowOption("Build w/ documentation :" "Yes")
 else()
-  message("* Use GIT revision hash  : Yes (default)")
-endif()
-
-if(NOJEM)
-  message("")
-  message(" *** NOJEM - WARNING!")
-  message(" *** jemalloc linking has been disabled!")
-  message(" *** Please note that this is for DEBUGGING WITH VALGRIND only!")
-  message(" *** DO NOT DISABLE IT UNLESS YOU KNOW WHAT YOU'RE DOING!")
-endif()
-
-if(HELGRIND)
-  message("")
-  message(" *** HELGRIND - WARNING!")
-  message(" *** Please specify the valgrind include directory in VALGRIND_INCLUDE_DIR option if you get build errors")
-  message(" *** Please note that this is for DEBUGGING WITH HELGRIND only!")
-  add_definitions(-DHELGRIND)
-endif()
-
-if(ASAN)
-  message("")
-  message(" *** ASAN - WARNING!")
-  message(" *** Please note that this is for DEBUGGING WITH ADDRESS SANITIZER only!")
-  add_definitions(-DASAN)
-endif()
-
-if(PERFORMANCE_PROFILING)
-  message("")
-  message(" *** PERFORMANCE_PROFILING - WARNING!")
-  message(" *** Please note that this is for PERFORMANCE PROFILING only! Do NOT report any issue when enabling this configuration!")
-  add_definitions(-DPERFORMANCE_PROFILING)
-endif()
-
-if(WITH_STRICT_DATABASE_TYPE_CHECKS)
-  message("")
-  message(" *** WITH_STRICT_DATABASE_TYPE_CHECKS - WARNING!")
-  message(" *** Validates uses of database Get***() functions from Field class")
-  message(" *** invalid calls will result in returning value 0")
-  message(" *** NOT COMPATIBLE WITH MARIADB!")
-  add_definitions(-DTRINITY_STRICT_DATABASE_TYPE_CHECKS)
-endif()
-
-if(BUILD_SHARED_LIBS)
-  message("")
-  message(" *** WITH_DYNAMIC_LINKING - INFO!")
-  message(" *** Will link against shared libraries!")
-  message(" *** Please note that this is an experimental feature!")
-  if(WITH_DYNAMIC_LINKING_FORCED)
-    message("")
-    message(" *** Dynamic linking was enforced through a dynamic script module!")
-  endif()
-  add_definitions(-DTRINITY_API_USE_DYNAMIC_LINKING)
-
-  WarnAboutSpacesInBuildPath()
+    ShowOption("Build w/ documentation :" "No  (default)")
 endif()
 
 message("")

@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,18 +15,15 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-//add here most rarely modified headers to speed up debug build compilation
+#include "WorldSocket.h"        // must be first to make ACE happy with ACE includes in it
 
-#include "Creature.h"
-#include "DBCStores.h"
-#include "DatabaseEnv.h"
-#include "Errors.h"
-#include "GameObject.h"
+#include "Common.h"
+
+#include "MapManager.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
+#include "ObjectGuid.h"
+#include "SQLStorage.h"
+#include "Opcodes.h"
+#include "SharedDefines.h"
 #include "ObjectMgr.h"
-#include "PacketUtilities.h"
-#include "Player.h"
-#include "World.h"
-#include "WorldPacket.h"
-#include "WorldSession.h"

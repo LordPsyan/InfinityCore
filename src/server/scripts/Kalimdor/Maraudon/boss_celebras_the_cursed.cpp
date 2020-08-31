@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,101 +15,315 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: Boss_Celebras_the_Cursed
-SD%Complete: 100
-SDComment:
-SDCategory: Maraudon
-EndScriptData */
+ /* ScriptData
+ SDName: Boss_Celebras_the_Cursed
+ SD%Complete: 100
+ SDComment:
+ SDCategory: Maraudon
+ EndScriptData */
 
 #include "ScriptMgr.h"
-#include "maraudon.h"
 #include "ScriptedCreature.h"
+#include "ScriptedEscortAI.h"
+#include "instance_maraudon.h"
 
-enum Spells
+#define SPELL_WRATH                 21807
+#define SPELL_ENTANGLINGROOTS       12747
+#define SPELL_CORRUPT_FORCES        21968
+#define SPELL_TRANQUILITY			21793
+
+#define NPC_CELEBRAS				13716
+#define SAY_SUMMONED			 -1910034
+
+ /////////////////////////////////
+ /// NPC_CELEBRAS_THE_REDEMEED ///
+ /////////////////////////////////
+
+enum QuestScepter
 {
-    SPELL_WRATH                 = 21807,
-    SPELL_ENTANGLINGROOTS       = 12747,
-    SPELL_CORRUPT_FORCES        = 21968
+    QUEST_THE_SCEPTER_OF_CELEBERAS = 7046,
+    SPELL_NARALEXS_AWAKENING = 6271,
 };
 
-class celebras_the_cursed : public CreatureScript
+enum text
+{
+    SAY_START = -1910035,
+    SAY_INSTRUCT = -1910080,
+    SAY_READTOME = -1910081,
+    SAY_TOGETHER = -1910082,
+    SAY_CELEBRAS = -1910083,
+    SAY_END = -1910084
+};
+
+class npc_celebras_the_cursed : public CreatureScript
 {
 public:
-    celebras_the_cursed() : CreatureScript("celebras_the_cursed") { }
+    npc_celebras_the_cursed() : CreatureScript("npc_celebras_the_cursed") { }
 
-    CreatureAI* GetAI(Creature* creature) const override
+    struct npc_celebras_the_cursedAI : public ScriptedAI
     {
-        return GetMaraudonAI<celebras_the_cursedAI>(creature);
-    }
+        npc_celebras_the_cursedAI(Creature* c) : ScriptedAI(c) {}
 
-    struct celebras_the_cursedAI : public ScriptedAI
-    {
-        celebras_the_cursedAI(Creature* creature) : ScriptedAI(creature)
+        uint32 Wrath_Timer;
+        uint32 EntanglingRoots_Timer;
+        uint32 CorruptForces_Timer;
+        uint32 tranquil_timer;
+
+        uint64 celebrasGUID;
+
+        void Reset()
         {
-            Initialize();
+            Wrath_Timer = 8000;
+            EntanglingRoots_Timer = 2000;
+            CorruptForces_Timer = 30000;
+            tranquil_timer = urand(20000, 30000);
+
+            celebrasGUID = 0;
         }
 
-        void Initialize()
+        void EnterCombat(Unit* /*who*/) { }
+
+        void SetData(uint32 type, uint32 data) override
         {
-            WrathTimer = 8000;
-            EntanglingRootsTimer = 2000;
-            CorruptForcesTimer = 30000;
+            if (Creature* celebras = me->FindNearestCreature(NPC_CELEBRAS, 100.0f, true))
+                celebrasGUID = celebras->GetGUID();
         }
 
-        uint32 WrathTimer;
-        uint32 EntanglingRootsTimer;
-        uint32 CorruptForcesTimer;
-
-        void Reset() override
+        void JustDied(Unit* /*Killer*/)
         {
-            Initialize();
+            me->SummonCreature(NPC_CELEBRAS, 651.491f, 84.702f, -86.831f, 6.05f, TEMPSUMMON_TIMED_DESPAWN, 600000);
+
+            if (Creature* celebras = me->FindNearestCreature(NPC_CELEBRAS, 100.0f, true))
+                celebras->Yell(SAY_SUMMONED, LANG_UNIVERSAL, celebrasGUID);
         }
 
-        void JustEngagedWith(Unit* /*who*/) override { }
-
-        void JustDied(Unit* /*killer*/) override
-        {
-            me->SummonCreature(13716, me->GetPositionX(), me->GetPositionY(), me->GetPositionZ(), 0, TEMPSUMMON_TIMED_DESPAWN, 600000);
-        }
-
-        void UpdateAI(uint32 diff) override
+        void UpdateAI(const uint32 diff)
         {
             if (!UpdateVictim())
                 return;
 
             //Wrath
-            if (WrathTimer <= diff)
+            if (Wrath_Timer <= diff)
             {
-                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-                    DoCast(target, SPELL_WRATH);
-                WrathTimer = 8000;
+                Unit* pTarget = NULL;
+                pTarget = SelectUnit(SELECT_TARGET_RANDOM, 0);
+                if (pTarget)
+                    DoCast(pTarget, SPELL_WRATH);
+                Wrath_Timer = 11000;
             }
-            else WrathTimer -= diff;
+            else Wrath_Timer -= diff;
 
             //EntanglingRoots
-            if (EntanglingRootsTimer <= diff)
+            if (EntanglingRoots_Timer <= diff)
             {
-                DoCastVictim(SPELL_ENTANGLINGROOTS);
-                EntanglingRootsTimer = 20000;
+                Unit* pTarget = NULL;
+                pTarget = SelectUnit(SELECT_TARGET_RANDOM, 0);
+                DoCast(pTarget, SPELL_ENTANGLINGROOTS);
+                EntanglingRoots_Timer = 13000;
             }
-            else EntanglingRootsTimer -= diff;
+            else EntanglingRoots_Timer -= diff;
 
             //CorruptForces
-            if (CorruptForcesTimer <= diff)
+            if (CorruptForces_Timer <= diff)
             {
                 me->InterruptNonMeleeSpells(false);
                 DoCast(me, SPELL_CORRUPT_FORCES);
-                CorruptForcesTimer = 20000;
+                CorruptForces_Timer = 20000;
             }
-            else CorruptForcesTimer -= diff;
+            else CorruptForces_Timer -= diff;
+
+            if (tranquil_timer <= diff)
+            {
+                DoCastAOE(SPELL_TRANQUILITY);
+                tranquil_timer = urand(20000, 30000);
+            }
+            else tranquil_timer -= diff;
 
             DoMeleeAttackIfReady();
         }
     };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return new npc_celebras_the_cursedAI(pCreature);
+    }
+};
+
+class npc_celebras : public CreatureScript
+{
+public:
+    npc_celebras() : CreatureScript("npc_celebras") { }
+
+    struct npc_celebrasAI : public npc_escortAI
+    {
+        npc_celebrasAI(Creature* pCreature) : npc_escortAI(pCreature) {}
+
+        void Reset()
+        {
+            GoBook = 0;
+            GoStone = 0;
+            GoLight = 0;
+            awaken_timer = 30000;
+        }
+
+        ScriptedInstance* instance;
+
+        uint64 GoBook;
+        uint64 GoStone;
+        uint64 GoLight;
+
+        uint32 awaken_timer;
+
+        void OnGameObjectCreate(GameObject* pGo, bool /*add*/)
+        {
+            switch (pGo->GetEntry())
+            {
+            case GO_BOOK:
+                GoBook = pGo->GetGUID();
+                break;
+            case GO_STAFF_STONE:
+                GoStone = pGo->GetGUID();
+                break;
+            case GO_LIGHT:
+                GoLight = pGo->GetGUID();
+                break;
+            }
+        }
+
+        void EscortContinue()
+        {
+            SetEscortPaused(false);
+        }
+
+        void BookUsed()
+        {
+            if (instance->GetData(DATA_BOOK))
+            {
+                if (GameObject* book = instance->GetGameObject(GoBook))
+                    EscortContinue();
+            }
+        }
+
+        void WaypointReached(uint32 uiPointId)
+        {
+            switch (uiPointId)
+            {
+            case 1:
+                DoScriptText(SAY_INSTRUCT, me);
+                break;
+            case 3:
+                DoScriptText(SAY_READTOME, me);
+                break;
+            case 4:
+                DoScriptText(SAY_TOGETHER, me);
+                me->SummonGameObject(GO_BOOK, 652.272f, 74.053f, -85.335f, 6.08f, 0, 0, 0, 0, 0);
+                DoCast(me, SPELL_NARALEXS_AWAKENING, true);
+                //SetEscortPaused(true);
+                break;
+            case 5:
+                me->SummonGameObject(GO_LIGHT, 650.746f, 74.470f, -82.271f, 6.21f, 0, 0, 0, 0, 0);
+                break;
+            case 6:
+                DoScriptText(SAY_CELEBRAS, me);
+                break;
+            case 7:
+                DoScriptText(SAY_END, me);
+                break;
+            case 8:
+                if (GameObject* stone = me->FindNearestGameObject(GO_STAFF_STONE, 20.0f))
+                    stone->SetGoState(GO_STATE_ACTIVE);
+                break;
+            case 11:
+                //check
+                me->RemoveGameObject(GO_LIGHT, GoLight);
+                me->RemoveGameObject(GO_BOOK, GoBook);
+                break;
+            case 13:
+                if (Player* pPlayer = GetPlayerForEscort())
+                    pPlayer->GroupEventHappens(QUEST_THE_SCEPTER_OF_CELEBERAS, me);
+                me->SummonCreature(NPC_CELEBRAS, 651.491f, 84.702f, -86.831f, 6.05f, TEMPSUMMON_TIMED_DESPAWN, 600000);
+                break;
+            }
+        }
+
+        void UpdateAI(const uint32 uiDiff)
+        {
+            npc_escortAI::UpdateAI(uiDiff);
+
+            if (!UpdateVictim())
+            {
+                if (awaken_timer <= uiDiff)
+                {
+                    if (me->HasAura(SPELL_NARALEXS_AWAKENING, 0))
+                        me->RemoveAurasDueToSpell(SPELL_NARALEXS_AWAKENING);
+                    awaken_timer = 10000;
+                }
+                else awaken_timer -= uiDiff;
+            }
+        }
+    };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        npc_celebrasAI* celebrasAI = new npc_celebrasAI(pCreature);
+
+        celebrasAI->AddWaypoint(0, 651.491f, 84.702f, -86.831f, 2000);
+        celebrasAI->AddWaypoint(1, 657.493f, 79.669f, -86.830f, 0);
+        celebrasAI->AddWaypoint(2, 656.661f, 73.410f, -86.830f, 0);
+        celebrasAI->AddWaypoint(3, 655.510f, 73.600f, -86.830f, 3000);
+        celebrasAI->AddWaypoint(4, 655.510f, 73.600f, -86.830f, 0); // pause -> start cast etc.
+        celebrasAI->AddWaypoint(5, 655.510f, 73.600f, -86.830f, 3000);
+        celebrasAI->AddWaypoint(6, 653.309f, 73.900f, -85.858f, 3000);
+        celebrasAI->AddWaypoint(7, 656.779f, 73.386f, -86.828f, 0);
+        celebrasAI->AddWaypoint(8, 655.616f, 66.945f, -86.828f, 0);
+        celebrasAI->AddWaypoint(9, 647.230f, 66.300f, -86.710f, 0);
+        celebrasAI->AddWaypoint(10, 647.974f, 66.642f, -86.709f, 5000);
+        celebrasAI->AddWaypoint(11, 655.518f, 66.717f, -86.828f, 0);
+        celebrasAI->AddWaypoint(12, 657.083f, 80.657f, -86.830f, 0);
+        celebrasAI->AddWaypoint(13, 651.491f, 84.702f, -86.831f, 0);
+
+        return celebrasAI;
+    }
+
+    bool OnQuestAccept(Player* pPlayer, Creature* pCreature, Quest const* pQuest) override
+    {
+        if (pQuest->GetQuestId() == QUEST_THE_SCEPTER_OF_CELEBERAS)
+        {
+            pCreature->SetHealth(pCreature->GetMaxHealth());
+            pCreature->SetUInt32Value(UNIT_FIELD_BYTES_1, 0);
+            pCreature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NON_ATTACKABLE);
+            DoScriptText(SAY_START, pCreature);
+
+            if (npc_escortAI* pEscortAI = CAST_AI(npc_celebrasAI, pCreature->AI()))
+                pEscortAI->Start(false, false, pPlayer->GetGUID());
+        }
+        return true;
+    }
+};
+
+class go_incantbook : public GameObjectScript
+{
+public:
+    go_incantbook() : GameObjectScript("go_incantbook") { }
+
+    bool OnGossipHello(Player* /*pPlayer*/, GameObject* pGO) override
+    {
+        ScriptedInstance* instance = (ScriptedInstance*)pGO->GetInstanceData();
+
+        if (instance)
+        {
+            instance->SetData(DATA_BOOK, instance->GetData(DATA_BOOK));
+            return true;
+        }
+
+        return false;
+    }
 };
 
 void AddSC_boss_celebras_the_cursed()
 {
-    new celebras_the_cursed();
+    new npc_celebras_the_cursed();
+    new npc_celebras();
+    new go_incantbook();
 }
+

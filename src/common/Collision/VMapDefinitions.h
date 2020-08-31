@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,30 +17,38 @@
 
 #ifndef _VMAPDEFINITIONS_H
 #define _VMAPDEFINITIONS_H
+
 #include <cstring>
-#include <cstdio>
 
 #define LIQUID_TILE_SIZE (533.333f / 128.f)
 
 namespace VMAP
 {
-    const char VMAP_MAGIC[] = "VMAP_4.7";
-    const char RAW_VMAP_MAGIC[] = "VMAP047";                // used in extracted vmap files with raw data
+    const char VMAP_MAGIC[] = "VMAP_4.1";
+    const char RAW_VMAP_MAGIC[] = "VMAP041";                // used in extracted vmap files with raw data
     const char GAMEOBJECT_MODELS[] = "GameObjectModels.dtree";
 
-    // defined in TileAssembler.cpp currently...
-    bool readChunk(FILE* rf, char *dest, const char *compare, uint32 len);
+// defined in TileAssembler.cpp currently...
+bool readChunk(FILE* rf, char* dest, const char* compare, uint32 len);
 }
 
-// Set of helper macros for extractors (VMAP and MMAP)
-#ifndef NO_CORE_FUNCS
-#define VMAP_ERROR_LOG(FILTER, ...) TC_LOG_ERROR(FILTER, __VA_ARGS__)
-#define VMAP_DEBUG_LOG(FILTER, ...) TC_LOG_DEBUG(FILTER, __VA_ARGS__)
-#define VMAP_INFO_LOG(FILTER, ...) TC_LOG_INFO(FILTER, __VA_ARGS__)
+#ifdef MMAP_GENERATOR
+#include <assert.h>
+#define ASSERT(x) assert(x)
+#define DEBUG_LOG(...) (void)(0)
+#define DETAIL_LOG(...) (void)(0)
+#define ERROR_LOG(...) do{ printf("ERROR:"); printf(__VA_ARGS__); printf("\n"); } while(0)
+#elif !defined NO_CORE_FUNCS
+#include "Errors.h"
+#include "Log.h"
+#define ERROR_LOG(...) sLog.outError(__VA_ARGS__)
+#define DETAIL_LOG(...) sLog.outDetail(__VA_ARGS__)
 #else
-#define VMAP_ERROR_LOG(FILTER, ...) (void)sizeof(FILTER)
-#define VMAP_DEBUG_LOG(FILTER, ...) (void)sizeof(FILTER)
-#define VMAP_INFO_LOG(FILTER, ...)  (void)sizeof(FILTER)
+#include <assert.h>
+#define ASSERT(x) assert(x)
+#define DEBUG_LOG(x, ...) printf(x,"\n", ##__VA_ARGS__)
+#define DETAIL_LOG(x, ...) printf(x "\n", ##__VA_ARGS__)
+#define ERROR_LOG(x, ...) printf("ERROR:" x, ##__VA_ARGS__)
 #endif
 
 #endif

@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,15 +16,11 @@
  */
 
 #include "UnitAI.h"
-#include "Creature.h"
-#include "CreatureAIImpl.h"
-#include "MotionMaster.h"
 #include "Player.h"
-#include "Spell.h"
-#include "SpellAuraEffects.h"
+#include "Creature.h"
 #include "SpellAuras.h"
-#include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "CreatureAIImpl.h"
 
 void UnitAI::AttackStart(Unit* victim)
 {
@@ -40,18 +36,6 @@ void UnitAI::AttackStart(Unit* victim)
     }
 }
 
-void UnitAI::InitializeAI()
-{
-    if (!me->isDead())
-        Reset();
-}
-
-void UnitAI::OnCharmed(bool isNew)
-{
-    if (!isNew)
-        me->ScheduleAIChange();
-}
-
 void UnitAI::AttackStartCaster(Unit* victim, float dist)
 {
     if (victim && me->Attack(victim, false))
@@ -63,143 +47,252 @@ void UnitAI::DoMeleeAttackIfReady()
     if (me->HasUnitState(UNIT_STATE_CASTING))
         return;
 
-    Unit* victim = me->GetVictim();
-
-    if (!me->IsWithinMeleeRange(victim))
-        return;
-
     //Make sure our attack is ready and we aren't currently casting before checking distance
     if (me->isAttackReady())
     {
-        me->AttackerStateUpdate(victim);
-        me->resetAttackTimer();
-    }
+        //Prevent base and off attack at the same time
+        if (me->haveOffhandWeapon())
+            if (me->getAttackTimer(OFF_ATTACK) < ATTACK_DISPLAY_DELAY)
+                me->setAttackTimer(OFF_ATTACK, ATTACK_DISPLAY_DELAY);
 
+        //If we are within range melee the target
+        if (me->IsWithinMeleeRange(me->GetVictim()))
+        {
+            me->AttackerStateUpdate(me->GetVictim());
+            me->resetAttackTimer();
+        }
+    }
     if (me->haveOffhandWeapon() && me->isAttackReady(OFF_ATTACK))
     {
-        me->AttackerStateUpdate(victim, OFF_ATTACK);
-        me->resetAttackTimer(OFF_ATTACK);
+        if (me->getAttackTimer(BASE_ATTACK) < ATTACK_DISPLAY_DELAY)
+            me->setAttackTimer(BASE_ATTACK, ATTACK_DISPLAY_DELAY);
+
+        //If we are within range melee the target
+        if (me->IsWithinMeleeRange(me->GetVictim()))
+        {
+            me->AttackerStateUpdate(me->GetVictim(), OFF_ATTACK);
+            me->resetAttackTimer(OFF_ATTACK);
+        }
     }
 }
 
 bool UnitAI::DoSpellAttackIfReady(uint32 spell)
 {
-    if (me->HasUnitState(UNIT_STATE_CASTING) || !me->isAttackReady())
+    if (me->HasUnitState(UNIT_STATE_CASTING))
         return true;
 
-    if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spell))
+    if (me->isAttackReady())
     {
-        if (me->IsWithinCombatRange(me->GetVictim(), spellInfo->GetMaxRange(false)))
+        const SpellEntry* spellInfo = GetSpellStore()->LookupEntry(spell);
+        if (me->IsWithinCombatRange(me->GetVictim(), GetSpellMaxRange(spellInfo)))
         {
             me->CastSpell(me->GetVictim(), spell, false);
             me->resetAttackTimer();
-            return true;
+        }
+        else
+            return false;
+    }
+    return true;
+}
+
+inline bool SelectTargetHelper(const Unit* me, const Unit* target, const bool& playerOnly, const float& dist, const int32& aura)
+{
+    if (playerOnly && (!target || target->GetTypeId() != TYPEID_PLAYER))
+        return false;
+
+    if (dist && (!me || !target || !me->IsWithinCombatRange(target, dist)))
+        return false;
+
+    if (aura)
+    {
+        if (aura > 0)
+        {
+            if (!target->HasAura(aura, 0))
+                return false;
+        }
+        else
+        {
+            if (target->HasAura(aura, 0))
+                return false;
         }
     }
 
-    return false;
+    return true;
 }
 
-Unit* UnitAI::SelectTarget(SelectTargetMethod targetType, uint32 position, float dist, bool playerOnly, bool withTank, int32 aura)
+struct TargetDistanceOrder : public std::binary_function<const Unit*, const Unit*, bool>
 {
-    return SelectTarget(targetType, position, DefaultTargetSelector(me, dist, playerOnly, withTank, aura));
+    const Unit* me;
+    TargetDistanceOrder(const Unit* Target) : me(Target) {};
+    // functor for operator ">"
+    bool operator()(const Unit* _Left, const Unit* _Right) const
+    {
+        return (me->GetExactDistSq(_Left) < me->GetExactDistSq(_Right));
+    }
+};
+
+Unit* UnitAI::SelectTarget(SelectAggroTarget targetType, uint32 position, float dist, bool playerOnly, int32 aura)
+{
+    const std::list<HostileReference*>& threatlist = me->getThreatManager().getThreatList();
+    std::list<Unit*> targetList;
+
+    for (std::list<HostileReference*>::const_iterator itr = threatlist.begin(); itr != threatlist.end(); ++itr)
+        if (SelectTargetHelper(me, (*itr)->getTarget(), playerOnly, dist, aura))
+            targetList.push_back((*itr)->getTarget());
+
+    if (position >= targetList.size())
+        return NULL;
+
+    if (targetType == SELECT_TARGET_NEAREST || targetType == SELECT_TARGET_FARTHEST)
+        targetList.sort(TargetDistanceOrder(me));
+
+    switch (targetType)
+    {
+    case SELECT_TARGET_NEAREST:
+    case SELECT_TARGET_TOPAGGRO:
+        {
+            std::list<Unit*>::iterator itr = targetList.begin();
+            advance(itr, position);
+            return *itr;
+        }
+        break;
+
+    case SELECT_TARGET_FARTHEST:
+    case SELECT_TARGET_BOTTOMAGGRO:
+        {
+            std::list<Unit*>::reverse_iterator ritr = targetList.rbegin();
+            advance(ritr, position);
+            return *ritr;
+        }
+        break;
+
+    case SELECT_TARGET_RANDOM:
+        return SelectRandomContainerElement(targetList);
+        break;
+    }
+
+    return NULL;
 }
 
-void UnitAI::SelectTargetList(std::list<Unit*>& targetList, uint32 num, SelectTargetMethod targetType, uint32 offset, float dist, bool playerOnly, bool withTank, int32 aura)
+void UnitAI::SelectTargetList(std::list<Unit*>& targetList, uint32 num, SelectAggroTarget targetType, float dist, bool playerOnly, int32 aura)
 {
-    SelectTargetList(targetList, num, targetType, offset, DefaultTargetSelector(me, dist, playerOnly, withTank, aura));
+    const std::list<HostileReference*>& threatlist = me->getThreatManager().getThreatList();
+    if (threatlist.empty())
+        return;
+
+    for (std::list<HostileReference*>::const_iterator itr = threatlist.begin(); itr != threatlist.end(); ++itr)
+        if (SelectTargetHelper(me, (*itr)->getTarget(), playerOnly, dist, aura))
+            targetList.push_back((*itr)->getTarget());
+
+    if (targetType == SELECT_TARGET_NEAREST || targetType == SELECT_TARGET_FARTHEST)
+        targetList.sort(TargetDistanceOrder(me));
+
+    if (targetType == SELECT_TARGET_FARTHEST || targetType == SELECT_TARGET_BOTTOMAGGRO)
+        targetList.reverse();
+
+    if (targetType == SELECT_TARGET_RANDOM)
+    {
+        while (num < targetList.size())
+        {
+            std::list<Unit*>::iterator itr = targetList.begin();
+            advance(itr, urand(0, targetList.size() - 1));
+            targetList.erase(itr);
+        }
+    }
+    else
+        targetList.resize(num);
 }
 
-SpellCastResult UnitAI::DoCast(uint32 spellId)
+float UnitAI::DoGetSpellMaxRange(uint32 spellId, bool /*positive*/)
 {
-    Unit* target = nullptr;
+    return GetSpellMaxRange(spellId);
+}
 
+void UnitAI::DoCast(uint32 spellId)
+{
+    Unit* target = NULL;
+    //sLog.outError("aggre %u %u", spellId, (uint32)AISpellInfo[spellId].target);
     switch (AISpellInfo[spellId].target)
     {
-        default:
-        case AITARGET_SELF:
-            target = me;
-            break;
-        case AITARGET_VICTIM:
-            target = me->GetVictim();
-            break;
-        case AITARGET_ENEMY:
+    default:
+    case AITARGET_SELF:
+        target = me;
+        break;
+    case AITARGET_VICTIM:
+        target = me->GetVictim();
+        break;
+    case AITARGET_ENEMY:
         {
-            if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId))
-            {
-                bool playerOnly = spellInfo->HasAttribute(SPELL_ATTR3_ONLY_TARGET_PLAYERS);
-                target = SelectTarget(SelectTargetMethod::Random, 0, spellInfo->GetMaxRange(false), playerOnly);
-            }
+            const SpellEntry* spellInfo = GetSpellStore()->LookupEntry(spellId);
+            bool playerOnly = spellInfo->AttributesEx3 & SPELL_ATTR3_PLAYERS_ONLY;
+            target = SelectTarget(SELECT_TARGET_RANDOM, 0, GetSpellMaxRange(spellInfo), playerOnly);
             break;
         }
-        case AITARGET_ALLY:
-            target = me;
-            break;
-        case AITARGET_BUFF:
-            target = me;
-            break;
-        case AITARGET_DEBUFF:
+    case AITARGET_ALLY:
+        target = me;
+        break;
+    case AITARGET_BUFF:
+        target = me;
+        break;
+    case AITARGET_DEBUFF:
         {
-            if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId))
-            {
-                bool playerOnly = spellInfo->HasAttribute(SPELL_ATTR3_ONLY_TARGET_PLAYERS);
-                float range = spellInfo->GetMaxRange(false);
-
-                DefaultTargetSelector targetSelector(me, range, playerOnly, true, -(int32)spellId);
-                if (!(spellInfo->AuraInterruptFlags & AURA_INTERRUPT_FLAG_NOT_VICTIM)
-                    && targetSelector(me->GetVictim()))
-                    target = me->GetVictim();
-                else
-                    target = SelectTarget(SelectTargetMethod::Random, 0, targetSelector);
-            }
+            const SpellEntry* spellInfo = GetSpellStore()->LookupEntry(spellId);
+            bool playerOnly = spellInfo->AttributesEx3 & SPELL_ATTR3_PLAYERS_ONLY;
+            float range = GetSpellMaxRange(spellInfo);
+            if (!(spellInfo->Attributes & SPELL_ATTR0_HEARTBEAT_RESIST_CHECK)
+                && !(spellInfo->AuraInterruptFlags & AURA_INTERRUPT_FLAG_NOT_VICTIM)
+                && SelectTargetHelper(me, me->GetVictim(), playerOnly, range, -(int32)spellId))
+                target = me->GetVictim();
+            else
+                target = SelectTarget(SELECT_TARGET_RANDOM, 0, range, playerOnly, -(int32)spellId);
             break;
         }
     }
 
     if (target)
-        return me->CastSpell(target, spellId, false);
-
-    return SPELL_FAILED_BAD_TARGETS;
+        me->CastSpell(target, spellId, false);
 }
 
-SpellCastResult UnitAI::DoCast(Unit* victim, uint32 spellId, CastSpellExtraArgs const& args)
+void UnitAI::DoCast(Unit* victim, uint32 spellId, bool triggered)
 {
-    if (me->HasUnitState(UNIT_STATE_CASTING) && !(args.TriggerFlags & TRIGGERED_IGNORE_CAST_IN_PROGRESS))
-        return SPELL_FAILED_SPELL_IN_PROGRESS;
+    if (!victim || (me->HasUnitState(UNIT_STATE_CASTING) && !triggered))
+        return;
 
-    return me->CastSpell(victim, spellId, args);
+    me->CastSpell(victim, spellId, triggered);
 }
 
-SpellCastResult UnitAI::DoCastVictim(uint32 spellId, CastSpellExtraArgs const& args)
+void UnitAI::DoCastVictim(uint32 spellId, bool triggered)
 {
-    if (Unit* victim = me->GetVictim())
-        return DoCast(victim, spellId, args);
-
-    return SPELL_FAILED_BAD_TARGETS;
+    // Why don't we check for casting unit_state and existing target as we do in DoCast(.. ?
+    DoCast(me->GetVictim(), spellId, triggered);
 }
 
-float UnitAI::DoGetSpellMaxRange(uint32 spellId, bool positive)
+void UnitAI::DoCastAOE(uint32 spellId, bool triggered)
 {
-    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
-    return spellInfo ? spellInfo->GetMaxRange(positive) : 0;
+    if (!triggered && me->HasUnitState(UNIT_STATE_CASTING))
+        return;
+
+    me->CastSpell((Unit*)NULL, spellId, triggered);
 }
 
 #define UPDATE_TARGET(a) {if (AIInfo->target<a) AIInfo->target=a;}
 
 void UnitAI::FillAISpellInfo()
 {
-    AISpellInfo = new AISpellInfoType[sSpellMgr->GetSpellInfoStoreSize()];
+    AISpellInfo = new AISpellInfoType[GetSpellStore()->GetNumRows()];
 
     AISpellInfoType* AIInfo = AISpellInfo;
-    for (uint32 i = 0; i < sSpellMgr->GetSpellInfoStoreSize(); ++i, ++AIInfo)
+    const SpellEntry* spellInfo;
+
+    for (uint32 i = 0; i < GetSpellStore()->GetNumRows(); ++i, ++AIInfo)
     {
-        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(i);
+        spellInfo = GetSpellStore()->LookupEntry(i);
         if (!spellInfo)
             continue;
 
-        if (spellInfo->HasAttribute(SPELL_ATTR0_CASTABLE_WHILE_DEAD))
+        if (spellInfo->Attributes & SPELL_ATTR0_CASTABLE_WHILE_DEAD)
             AIInfo->condition = AICOND_DIE;
-        else if (spellInfo->IsPassive() || spellInfo->GetDuration() == -1)
+        else if (IsPassiveSpell(i) || GetSpellDuration(spellInfo) == -1)
             AIInfo->condition = AICOND_AGGRO;
         else
             AIInfo->condition = AICOND_COMBAT;
@@ -207,208 +300,69 @@ void UnitAI::FillAISpellInfo()
         if (AIInfo->cooldown < spellInfo->RecoveryTime)
             AIInfo->cooldown = spellInfo->RecoveryTime;
 
-        if (!spellInfo->GetMaxRange(false))
+        if (!GetSpellMaxRange(spellInfo))
             UPDATE_TARGET(AITARGET_SELF)
-        else
-        {
-            for (SpellEffectInfo const& Effect : spellInfo->Effects)
+            else
             {
-                uint32 targetType = Effect.TargetA.GetTarget();
-
-                if (targetType == TARGET_UNIT_TARGET_ENEMY
-                    || targetType == TARGET_DEST_TARGET_ENEMY)
-                    UPDATE_TARGET(AITARGET_VICTIM)
-                else if (targetType == TARGET_UNIT_DEST_AREA_ENEMY)
-                    UPDATE_TARGET(AITARGET_ENEMY)
-
-                if (Effect.Effect == SPELL_EFFECT_APPLY_AURA)
+                for (uint32 j = 0; j < 3; ++j)
                 {
-                    if (targetType == TARGET_UNIT_TARGET_ENEMY)
-                        UPDATE_TARGET(AITARGET_DEBUFF)
-                    else if (spellInfo->IsPositive())
-                        UPDATE_TARGET(AITARGET_BUFF)
+                    uint32 targetType = spellInfo->EffectImplicitTargetA[j];
+
+                    if (targetType == TARGET_UNIT_TARGET_ENEMY
+                        || targetType == TARGET_DST_TARGET_ENEMY)
+                        UPDATE_TARGET(AITARGET_VICTIM)
+                        else if (targetType == TARGET_UNIT_AREA_ENEMY_DST)
+                            UPDATE_TARGET(AITARGET_ENEMY)
+
+                            if (spellInfo->Effect[j] == SPELL_EFFECT_APPLY_AURA)
+                            {
+                                if (targetType == TARGET_UNIT_TARGET_ENEMY)
+                                    UPDATE_TARGET(AITARGET_DEBUFF)
+                                    else if (IsPositiveSpell(i))
+                                        UPDATE_TARGET(AITARGET_BUFF)
+                                    }
                 }
             }
-        }
         AIInfo->realCooldown = spellInfo->RecoveryTime + spellInfo->StartRecoveryTime;
-        AIInfo->maxRange = spellInfo->GetMaxRange(false) * 3 / 4;
+        SpellRangeEntry const* srange = sSpellRangeStore.LookupEntry(spellInfo->rangeIndex);
+        if (srange)
+            AIInfo->maxRange = srange->maxRange * 3 / 4;
     }
 }
 
-ThreatManager& UnitAI::GetThreatManager()
+void UnitAI::ClearAISpellInfo()
 {
-    return me->GetThreatManager();
+    delete[] AISpellInfo;
+    AISpellInfo = NULL;
 }
 
-void UnitAI::SortByDistance(std::list<Unit*> list, bool ascending)
+//Enable PlayerAI when charmed
+void PlayerAI::OnCharmed(bool apply)
 {
-    list.sort(Trinity::ObjectDistanceOrderPred(me, ascending));
+    me->IsAIEnabled = apply;
 }
 
-std::string UnitAI::GetDebugInfo() const
+void SimpleCharmedAI::UpdateAI(const uint32 /*diff*/)
 {
-    std::stringstream sstr;
-    sstr << std::boolalpha
-         << "Me: " << (me ? me->GetDebugInfo() : "NULL");
-    return sstr.str();
-}
+    Creature* charmer = me->GetCharmer()->ToCreature();
 
-DefaultTargetSelector::DefaultTargetSelector(Unit const* unit, float dist, bool playerOnly, bool withTank, int32 aura)
-    : _me(unit), _dist(dist), _playerOnly(playerOnly), _exception(!withTank ? unit->GetThreatManager().GetLastVictim() : nullptr), _aura(aura)
-{
-}
-
-bool DefaultTargetSelector::operator()(Unit const* target) const
-{
-    if (!_me)
-        return false;
-
-    if (!target)
-        return false;
-
-    if (_exception && target == _exception)
-        return false;
-
-    if (_playerOnly && (target->GetTypeId() != TYPEID_PLAYER))
-        return false;
-
-    if (_dist > 0.0f && !_me->IsWithinCombatRange(target, _dist))
-        return false;
-
-    if (_dist < 0.0f && _me->IsWithinCombatRange(target, -_dist))
-        return false;
-
-    if (_aura)
+    //kill self if charm aura has infinite duration
+    if (charmer->IsInEvadeMode())
     {
-        if (_aura > 0)
-        {
-            if (!target->HasAura(_aura))
-                return false;
-        }
-        else
-        {
-            if (target->HasAura(-_aura))
-                return false;
-        }
-    }
-
-    return true;
-}
-
-SpellTargetSelector::SpellTargetSelector(Unit* caster, uint32 spellId) :
-    _caster(caster), _spellInfo(sSpellMgr->GetSpellForDifficultyFromSpell(sSpellMgr->GetSpellInfo(spellId), caster))
-{
-    ASSERT(_spellInfo);
-}
-
-bool SpellTargetSelector::operator()(Unit const* target) const
-{
-    if (!target || _spellInfo->CheckTarget(_caster, target) != SPELL_CAST_OK)
-        return false;
-
-    // copypasta from Spell::CheckRange
-    float minRange = 0.0f;
-    float maxRange = 0.0f;
-    float rangeMod = 0.0f;
-    if (_spellInfo->RangeEntry)
-    {
-        if (_spellInfo->RangeEntry->Flags & SPELL_RANGE_MELEE)
-        {
-            rangeMod = _caster->GetCombatReach() + 4.0f / 3.0f;
-            rangeMod += target->GetCombatReach();
-
-            rangeMod = std::max(rangeMod, NOMINAL_MELEE_RANGE);
-        }
-        else
-        {
-            float meleeRange = 0.0f;
-            if (_spellInfo->RangeEntry->Flags & SPELL_RANGE_RANGED)
+        Unit::AuraList const& auras = me->GetAurasByType(SPELL_AURA_MOD_CHARM);
+        for (Unit::AuraList::const_iterator iter = auras.begin(); iter != auras.end(); ++iter)
+            if ((*iter)->GetCasterGUID() == charmer->GetGUID() && (*iter)->IsPermanent())
             {
-                meleeRange = _caster->GetCombatReach() + 4.0f / 3.0f;
-                meleeRange += target->GetCombatReach();
-
-                meleeRange = std::max(meleeRange, NOMINAL_MELEE_RANGE);
+                charmer->Kill(me);
+                return;
             }
-
-            minRange = _caster->GetSpellMinRangeForTarget(target, _spellInfo) + meleeRange;
-            maxRange = _caster->GetSpellMaxRangeForTarget(target, _spellInfo);
-
-            rangeMod = _caster->GetCombatReach();
-            rangeMod += target->GetCombatReach();
-
-            if (minRange > 0.0f && !(_spellInfo->RangeEntry->Flags & SPELL_RANGE_RANGED))
-                minRange += rangeMod;
-        }
-
-        if (_caster->isMoving() && target->isMoving() && !_caster->IsWalking() && !target->IsWalking() &&
-            (_spellInfo->RangeEntry->Flags & SPELL_RANGE_MELEE || target->GetTypeId() == TYPEID_PLAYER))
-            rangeMod += 8.0f / 3.0f;
     }
 
-    maxRange += rangeMod;
+    if (!charmer->IsInCombat())
+        me->GetMotionMaster()->MoveFollow(charmer, PET_FOLLOW_DIST, me->GetFollowAngle());
 
-    minRange *= minRange;
-    maxRange *= maxRange;
-
-    if (target != _caster)
-    {
-        if (_caster->GetExactDistSq(target) > maxRange)
-            return false;
-
-        if (minRange > 0.0f && _caster->GetExactDistSq(target) < minRange)
-            return false;
-    }
-
-    return true;
+    Unit* target = me->GetVictim();
+    if (!target || !charmer->IsValidAttackTarget(target))
+        AttackStart(charmer->SelectNearestTargetInAttackDistance());
 }
 
-bool NonTankTargetSelector::operator()(Unit const* target) const
-{
-    if (!target)
-        return false;
-
-    if (_playerOnly && target->GetTypeId() != TYPEID_PLAYER)
-        return false;
-
-    if (Unit* currentVictim = _source->GetThreatManager().GetCurrentVictim())
-        return target != currentVictim;
-
-    return target != _source->GetVictim();
-}
-
-bool PowerUsersSelector::operator()(Unit const* target) const
-{
-    if (!_me || !target)
-        return false;
-
-    if (target->GetPowerType() != _power)
-        return false;
-
-    if (_playerOnly && target->GetTypeId() != TYPEID_PLAYER)
-        return false;
-
-    if (_dist > 0.0f && !_me->IsWithinCombatRange(target, _dist))
-        return false;
-
-    if (_dist < 0.0f && _me->IsWithinCombatRange(target, -_dist))
-        return false;
-
-    return true;
-}
-
-bool FarthestTargetSelector::operator()(Unit const* target) const
-{
-    if (!_me || !target)
-        return false;
-
-    if (_playerOnly && target->GetTypeId() != TYPEID_PLAYER)
-        return false;
-
-    if (_dist > 0.0f && !_me->IsWithinCombatRange(target, _dist))
-        return false;
-
-    if (_inLos && !_me->IsWithinLOSInMap(target))
-        return false;
-
-    return true;
-}

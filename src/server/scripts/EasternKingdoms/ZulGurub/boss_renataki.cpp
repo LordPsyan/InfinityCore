@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,145 +15,155 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "zulgurub.h"
-#include "ScriptedCreature.h"
+ /* ScriptData
+ SDName: Boss_Renataki
+ SD%Complete: 100
+ SDComment:
+ SDCategory: Zul'Gurub
+ EndScriptData */
+
 #include "ScriptMgr.h"
+#include "ScriptedCreature.h"
+#include "zulgurub.h"
 
-enum Spells
-{
-    SPELL_AMBUSH = 34794,
-    SPELL_THOUSANDBLADES = 34799
-};
+#define SPELL_AMBUSH            24337
+#define SPELL_THOUSANDBLADES    24649
 
-enum Misc
-{
-    EQUIP_ID_MAIN_HAND = 0 // was item display id 31818, but this id does not exist
-};
 
 class boss_renataki : public CreatureScript
 {
-    public:
-        boss_renataki() : CreatureScript("boss_renataki") { }
+public:
+    boss_renataki() : CreatureScript("boss_renataki") { }
 
-        struct boss_renatakiAI : public BossAI
+    struct boss_renatakiAI : public ScriptedAI
+    {
+        boss_renatakiAI(Creature* c) : ScriptedAI(c) {}
+
+        uint32 Invisible_Timer;
+        uint32 Ambush_Timer;
+        uint32 Visible_Timer;
+        uint32 Aggro_Timer;
+        uint32 ThousandBlades_Timer;
+
+        bool Invisible;
+        bool Ambushed;
+
+        void Reset()
         {
-            boss_renatakiAI(Creature* creature) : BossAI(creature, DATA_EDGE_OF_MADNESS)
+            Invisible_Timer = 8000 + rand() % 10000;
+            Ambush_Timer = 3000;
+            Visible_Timer = 4000;
+            Aggro_Timer = 15000 + rand() % 10000;
+            ThousandBlades_Timer = 4000 + rand() % 4000;
+
+            Invisible = false;
+            Ambushed = false;
+        }
+
+        void EnterCombat(Unit* /*who*/)
+        {
+        }
+
+        void UpdateAI(const uint32 diff)
+        {
+            if (!UpdateVictim())
+                return;
+
+            //Invisible_Timer
+            if (Invisible_Timer <= diff)
             {
-                Initialize();
+                me->InterruptSpell(CURRENT_GENERIC_SPELL);
+
+                me->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_DISPLAY, 0);
+                me->SetUInt32Value(UNIT_VIRTUAL_ITEM_INFO, 218171138);
+                me->SetUInt32Value(UNIT_VIRTUAL_ITEM_INFO + 1, 3);
+                me->SetDisplayId(11686);
+
+                me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                Invisible = true;
+
+                Invisible_Timer = 15000 + rand() % 15000;
+            }
+            else Invisible_Timer -= diff;
+
+            if (Invisible)
+            {
+                if (Ambush_Timer <= diff)
+                {
+                    Unit* pTarget = NULL;
+                    pTarget = SelectUnit(SELECT_TARGET_RANDOM, 0);
+                    if (pTarget)
+                    {
+                        DoTeleportTo(pTarget->GetPositionX(), pTarget->GetPositionY(), pTarget->GetPositionZ());
+                        DoCast(pTarget, SPELL_AMBUSH);
+                    }
+
+                    Ambushed = true;
+                    Ambush_Timer = 3000;
+                }
+                else Ambush_Timer -= diff;
             }
 
-            void Initialize()
+            if (Ambushed)
             {
-                _invisibleTimer = urand(8000, 18000);
-                _ambushTimer = 3000;
-                _visibleTimer = 4000;
-                _aggroTimer = urand(15000, 25000);
-                _thousandBladesTimer = urand(4000, 8000);
-                _invisible = false;
-                _ambushed = false;
-            }
-
-            void Reset() override
-            {
-                _Reset();
-                Initialize();
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                if (_invisibleTimer <= diff)
+                if (Visible_Timer <= diff)
                 {
                     me->InterruptSpell(CURRENT_GENERIC_SPELL);
-                    SetEquipmentSlots(false, EQUIP_UNEQUIP, EQUIP_NO_CHANGE, EQUIP_NO_CHANGE);
-                    me->SetDisplayId(11686);
-                    me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-                    _invisible = true;
-                    _invisibleTimer = urand(15000, 30000);
+
+                    me->SetDisplayId(15268);
+                    me->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_DISPLAY, 31818);
+                    me->SetUInt32Value(UNIT_VIRTUAL_ITEM_INFO, 218171138);
+                    me->SetUInt32Value(UNIT_VIRTUAL_ITEM_INFO + 1, 3);
+
+                    me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
+                    Invisible = false;
+
+                    Visible_Timer = 4000;
                 }
-                else
-                    _invisibleTimer -= diff;
-
-                if (_invisible)
-                {
-                    if (_ambushTimer <= diff)
-                    {
-                        if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100.0f, true))
-                        {
-                            DoTeleportTo(target->GetPositionX(), target->GetPositionY(), target->GetPositionZ());
-                            DoCast(target, SPELL_AMBUSH);
-                        }
-
-                        _ambushed = true;
-                        _ambushTimer = 3000;
-                    }
-                    else
-                        _ambushTimer -= diff;
-                }
-
-                if (_ambushed)
-                {
-                    if (_visibleTimer <= diff)
-                    {
-                        me->InterruptSpell(CURRENT_GENERIC_SPELL);
-                        me->SetDisplayId(15268);
-                        SetEquipmentSlots(false, EQUIP_ID_MAIN_HAND, EQUIP_NO_CHANGE, EQUIP_NO_CHANGE);
-                        me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-                        _invisible = false;
-                        _visibleTimer = 4000;
-                    }
-                    else
-                        _visibleTimer -= diff;
-                }
-
-                // Resetting some aggro so he attacks other gamers
-                if (!_invisible)
-                {
-                    if (_aggroTimer <= diff)
-                    {
-                        if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100.0f, true))
-                        {
-                            if (GetThreat(me->GetVictim()))
-                                ModifyThreatByPercent(me->GetVictim(), -50);
-                            AttackStart(target);
-                        }
-
-                        _aggroTimer = urand(7000, 20000);
-                    }
-                    else
-                        _aggroTimer -= diff;
-
-                    if (_thousandBladesTimer <= diff)
-                    {
-                        DoCastVictim(SPELL_THOUSANDBLADES);
-                        _thousandBladesTimer = urand(7000, 12000);
-                    }
-                    else
-                        _thousandBladesTimer -= diff;
-                }
-
-                DoMeleeAttackIfReady();
+                else Visible_Timer -= diff;
             }
 
-        private:
-            uint32 _invisibleTimer;
-            uint32 _ambushTimer;
-            uint32 _visibleTimer;
-            uint32 _aggroTimer;
-            uint32 _thousandBladesTimer;
-            bool _invisible;
-            bool _ambushed;
-        };
+            //Resetting some aggro so he attacks other gamers
+            if (!Invisible)
+            {
+                if (Aggro_Timer <= diff)
+                {
+                    Unit* pTarget = NULL;
+                    pTarget = SelectUnit(SELECT_TARGET_RANDOM, 1);
 
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetZulGurubAI<boss_renatakiAI>(creature);
+                    if (DoGetThreat(me->GetVictim()))
+                        DoModifyThreatPercent(me->GetVictim(), -50);
+
+                    if (pTarget)
+                        AttackStart(pTarget);
+
+                    Aggro_Timer = 7000 + rand() % 13000;
+                }
+                else Aggro_Timer -= diff;
+            }
+
+            if (!Invisible)
+            {
+                if (ThousandBlades_Timer <= diff)
+                {
+                    DoCastVictim(SPELL_THOUSANDBLADES);
+                    ThousandBlades_Timer = 7000 + rand() % 5000;
+                }
+                else ThousandBlades_Timer -= diff;
+            }
+
+            DoMeleeAttackIfReady();
         }
+    };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return new boss_renatakiAI(pCreature);
+    }
 };
 
 void AddSC_boss_renataki()
 {
     new boss_renataki();
 }
+

@@ -1,25 +1,40 @@
 
+# build directories
 build*/
-.directory
-.mailmap
+
+# backups
 *.orig
-*.rej
-*~
-.hg/
-*.kdev*
-.DS_Store
-CMakeLists.txt.user
 *.bak
+*~
+*.back
+*.old
+
+# patch rejects
+*.rej
+
+# K-Develop files
+*.kdev*
+
+# patches
 *.patch
 *.diff
-*.REMOTE.*
-*.BACKUP.*
-*.BASE.*
-*.LOCAL.*
-nbproject/*
-.idea/*
-.browse.VC*
-.vscode
-cmake-build-*/
-.vs
-*.user
+
+# vim files
+*.vim
+*.ycm*
+
+# Mercurial files (foreign dev)
+.hg/
+.hgignore
+.hgtags
+
+# database documentation - generated files
+doc/doxygen/Database/*.dox
+
+# IDEs and Tools
+.idea/
+.nbproject/
+.project
+
+# Modules
+modules/*

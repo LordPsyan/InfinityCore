@@ -14,7 +14,7 @@
 #include <string>
 #include "G3D/platform.h"
 
-#ifndef G3D_WINDOWS
+#ifndef G3D_WIN32
     #include <stdarg.h>
 #endif
 
@@ -58,8 +58,6 @@ private:
     static Log*             commonLog;
 
 public:
-    int                     stripFromStackBottom;
-
 
     /**
      @param stripFromStackBottom Number of call stacks to strip from the
@@ -68,8 +66,7 @@ public:
      be opened for some reason, tries to open "c:/tmp/log.txt" or
      "c:/temp/log.txt" instead.
      */
-    Log(const std::string& filename = "log.txt",
-        int stripFromStackBottom    = 0);
+    Log(const std::string& filename = "log.txt");
 
     virtual ~Log();
 

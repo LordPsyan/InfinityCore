@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,69 +15,70 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "WorldSession.h"
-#include "CombatPackets.h"
 #include "Common.h"
-#include "CreatureAI.h"
-#include "DBCStructure.h"
 #include "Log.h"
-#include "ObjectAccessor.h"
-#include "Player.h"
-#include "Vehicle.h"
 #include "WorldPacket.h"
+#include "WorldSession.h"
+#include "ObjectAccessor.h"
+#include "CreatureAI.h"
+#include "ObjectGuid.h"
 
-void WorldSession::HandleAttackSwingOpcode(WorldPackets::Combat::AttackSwing& packet)
+void WorldSession::HandleAttackSwingOpcode(WorldPacket& recv_data)
 {
-    Unit* enemy = ObjectAccessor::GetUnit(*_player, packet.Victim);
+    ObjectGuid guid;
+    recv_data >> guid;
 
-    if (!enemy)
+    DEBUG_LOG("WORLD: Recvd CMSG_ATTACKSWING Message %s", guid.GetString().c_str());
+
+    Unit* pEnemy = ObjectAccessor::GetUnit(*_player, guid.GetRawValue());
+
+    if (!pEnemy)
     {
+        if (!guid.IsUnit())
+            sLog.outError("WORLD: %s isn't player, pet or creature", guid.GetString().c_str());
+        else
+            sLog.outError("WORLD: Enemy %s not found", guid.GetString().c_str());
+
         // stop attack state at client
-        SendAttackStop(nullptr);
+        SendAttackStop(NULL);
         return;
     }
 
-    if (!_player->IsValidAttackTarget(enemy))
+    if (!_player->IsValidAttackTarget(pEnemy))
     {
         // stop attack state at client
-        SendAttackStop(enemy);
+        SendAttackStop(pEnemy);
         return;
     }
 
-    //! Client explicitly checks the following before sending CMSG_ATTACK_SWING packet,
-    //! so we'll place the same check here. Note that it might be possible to reuse this snippet
-    //! in other places as well.
-    if (Vehicle* vehicle = _player->GetVehicle())
-    {
-        VehicleSeatEntry const* seat = vehicle->GetSeatForPassenger(_player);
-        ASSERT(seat);
-        if (!(seat->Flags & VEHICLE_SEAT_FLAG_CAN_ATTACK))
-        {
-            SendAttackStop(enemy);
-            return;
-        }
-    }
-
-    _player->Attack(enemy, true);
+    _player->Attack(pEnemy, true);
 }
 
-void WorldSession::HandleAttackStopOpcode(WorldPackets::Combat::AttackStop& /*packet*/)
+void WorldSession::HandleAttackStopOpcode(WorldPacket& /*recv_data*/)
 {
     GetPlayer()->AttackStop();
 }
 
-void WorldSession::HandleSetSheathedOpcode(WorldPackets::Combat::SetSheathed& packet)
+void WorldSession::HandleSetSheathedOpcode(WorldPacket& recv_data)
 {
-    if (packet.CurrentSheathState >= MAX_SHEATH_STATE)
+    uint32 sheathed;
+    recv_data >> sheathed;
+
+    if (sheathed >= MAX_SHEATH_STATE)
     {
-        TC_LOG_ERROR("network", "Unknown sheath state %u ??", packet.CurrentSheathState);
+        sLog.outError("Unknown sheath state %u ??", sheathed);
         return;
     }
 
-    _player->SetSheath(SheathState(packet.CurrentSheathState));
+    GetPlayer()->SetSheath(SheathState(sheathed));
 }
 
 void WorldSession::SendAttackStop(Unit const* enemy)
 {
-    SendPacket(WorldPackets::Combat::SAttackStop(GetPlayer(), enemy).Write());
+    WorldPacket data(SMSG_ATTACKSTOP, (4 + 20));            // we guess size
+    data << GetPlayer()->GetPackGUID();
+    data << (enemy ? enemy->GetPackGUID() : PackedGuid());  // must be packed guid
+    data << uint32(0);                                      // unk, can be 1 also
+    SendPacket(&data);
 }
+

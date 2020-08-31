@@ -1,4 +1,4 @@
-# This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+# This file is part of the OregonCore Project. See AUTHORS file for Copyright information
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without
@@ -9,28 +9,21 @@
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 set(Detour_STAT_SRCS
-    Source/DetourAlloc.cpp 
-    Source/DetourAssert.cpp 
-    Source/DetourCommon.cpp 
-    Source/DetourNavMesh.cpp 
-    Source/DetourNavMeshBuilder.cpp 
-    Source/DetourNavMeshQuery.cpp 
-    Source/DetourNode.cpp 
+    DetourAlloc.cpp
+	DetourAssert.cpp
+    DetourCommon.cpp
+    DetourNavMesh.cpp
+    DetourNavMeshBuilder.cpp
+    DetourNavMeshQuery.cpp
+    DetourNode.cpp
 )
+
+if(WIN32)
+  include_directories(
+    ${CMAKE_SOURCE_DIR}/dep/zlib
+  )
+endif()
 
 add_library(Detour STATIC ${Detour_STAT_SRCS})
 
-target_include_directories(Detour
-  PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/Include)
-
-target_link_libraries(Detour
-  PRIVATE
-    trinity-dependency-interface
-  PUBLIC
-    zlib)
-
-set_target_properties(Detour
-    PROPERTIES
-      FOLDER
-        "dep")
+target_link_libraries(Detour ${ZLIB_LIBRARIES})

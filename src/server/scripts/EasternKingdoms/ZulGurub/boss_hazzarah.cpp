@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,103 +15,98 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "zulgurub.h"
-#include "ScriptedCreature.h"
+ /* ScriptData
+ SDName: Boss_Hazzarah
+ SD%Complete: 100
+ SDComment:
+ SDCategory: Zul'Gurub
+ EndScriptData */
+
 #include "ScriptMgr.h"
-#include "TemporarySummon.h"
+#include "ScriptedCreature.h"
+#include "zulgurub.h"
 
-enum Spells
-{
-    SPELL_MANABURN = 26046,
-    SPELL_SLEEP = 24664
-};
-
-enum Events
-{
-    EVENT_MANABURN = 1,
-    EVENT_SLEEP = 2,
-    EVENT_ILLUSIONS = 3
-};
+#define SPELL_MANABURN         26046
+#define SPELL_SLEEP            24664
 
 class boss_hazzarah : public CreatureScript
 {
-    public:
-        boss_hazzarah() : CreatureScript("boss_hazzarah") { }
+public:
+    boss_hazzarah() : CreatureScript("boss_hazzarah") { }
 
-        struct boss_hazzarahAI : public BossAI
+    struct boss_hazzarahAI : public ScriptedAI
+    {
+        boss_hazzarahAI(Creature* c) : ScriptedAI(c) {}
+
+        uint32 ManaBurn_Timer;
+        uint32 Sleep_Timer;
+        uint32 Illusions_Timer;
+
+        void Reset()
         {
-            boss_hazzarahAI(Creature* creature) : BossAI(creature, DATA_EDGE_OF_MADNESS) { }
+            ManaBurn_Timer = 4000 + rand() % 6000;
+            Sleep_Timer = 10000 + rand() % 8000;
+            Illusions_Timer = 10000 + rand() % 8000;
+        }
 
-            void Reset() override
+        void EnterCombat(Unit* /*who*/)
+        {
+        }
+
+        void UpdateAI(const uint32 diff)
+        {
+            if (!UpdateVictim())
+                return;
+
+            //ManaBurn_Timer
+            if (ManaBurn_Timer <= diff)
             {
-                _Reset();
+                DoCastVictim(SPELL_MANABURN);
+                ManaBurn_Timer = 8000 + rand() % 8000;
             }
+            else ManaBurn_Timer -= diff;
 
-            void JustDied(Unit* /*killer*/) override
+            //Sleep_Timer
+            if (Sleep_Timer <= diff)
             {
-                _JustDied();
+                DoCastVictim(SPELL_SLEEP);
+                Sleep_Timer = 12000 + rand() % 8000;
             }
+            else Sleep_Timer -= diff;
 
-            void JustEngagedWith(Unit* who) override
+            //Illusions_Timer
+            if (Illusions_Timer <= diff)
             {
-                BossAI::JustEngagedWith(who);
-                events.ScheduleEvent(EVENT_MANABURN, 4s, 10s);
-                events.ScheduleEvent(EVENT_SLEEP, 10s, 18s);
-                events.ScheduleEvent(EVENT_ILLUSIONS, 10s, 18s);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
+                //We will summon 3 illusions that will spawn on a random gamer and attack this gamer
+                //We will just use one model for the beginning
+                Unit* pTarget = NULL;
+                for (uint8 i = 0; i < 3; ++i)
                 {
-                    switch (eventId)
-                    {
-                        case EVENT_MANABURN:
-                            DoCastVictim(SPELL_MANABURN, true);
-                            events.ScheduleEvent(EVENT_MANABURN, 8s, 16s);
-                            break;
-                        case EVENT_SLEEP:
-                            DoCastVictim(SPELL_SLEEP, true);
-                            events.ScheduleEvent(EVENT_SLEEP, 12s, 20s);
-                            break;
-                        case EVENT_ILLUSIONS:
-                            // We will summon 3 illusions that will spawn on a random gamer and attack this gamer
-                            // We will just use one model for the beginning
-                            for (uint8 i = 0; i < 3; ++i)
-                            {
-                                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 0.f, true))
-                                    if (TempSummon* illusion = me->SummonCreature(NPC_NIGHTMARE_ILLUSION, target->GetPosition(), TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, 30000))
-                                        illusion->AI()->AttackStart(target);
-                            }
-                            events.ScheduleEvent(EVENT_ILLUSIONS, 15s, 25s);
-                            break;
-                        default:
-                            break;
-                    }
-
-                    if (me->HasUnitState(UNIT_STATE_CASTING))
+                    pTarget = SelectUnit(SELECT_TARGET_RANDOM, 0);
+                    if (!pTarget)
                         return;
+
+                    Creature* Illusion = me->SummonCreature(15163, pTarget->GetPositionX(), pTarget->GetPositionY(), pTarget->GetPositionZ(), 0, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, 30000);
+                    if (Illusion)
+                        Illusion->AI()->AttackStart(pTarget);
                 }
 
-                DoMeleeAttackIfReady();
+                Illusions_Timer = 15000 + rand() % 10000;
             }
-        };
+            else Illusions_Timer -= diff;
 
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetZulGurubAI<boss_hazzarahAI>(creature);
+            DoMeleeAttackIfReady();
         }
+    };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return new boss_hazzarahAI(pCreature);
+    }
 };
 
 void AddSC_boss_hazzarah()
 {
     new boss_hazzarah();
 }
+

@@ -143,8 +143,8 @@ namespace internal
         if (!utf8::internal::is_trail(*it))
             return INCOMPLETE_SEQUENCE;
         
-        return UTF8_OK;
-    }
+            return UTF8_OK;
+        }
 
     #define UTF8_CPP_INCREASE_AND_RETURN_ON_ERROR(IT, END) {utf_error ret = increase_safely(IT, END); if (ret != UTF8_OK) return ret;}    
 
@@ -153,7 +153,7 @@ namespace internal
     utf_error get_sequence_1(octet_iterator& it, octet_iterator end, uint32_t& code_point)
     {
         if (it == end)
-            return NOT_ENOUGH_ROOM;
+        return NOT_ENOUGH_ROOM;
 
         code_point = utf8::internal::mask8(*it);
 
@@ -165,7 +165,7 @@ namespace internal
     {
         if (it == end) 
             return NOT_ENOUGH_ROOM;
-        
+
         code_point = utf8::internal::mask8(*it);
 
         UTF8_CPP_INCREASE_AND_RETURN_ON_ERROR(it, end)
@@ -180,7 +180,7 @@ namespace internal
     {
         if (it == end)
             return NOT_ENOUGH_ROOM;
-            
+
         code_point = utf8::internal::mask8(*it);
 
         UTF8_CPP_INCREASE_AND_RETURN_ON_ERROR(it, end)
@@ -215,7 +215,7 @@ namespace internal
         code_point += (*it) & 0x3f;
 
         return UTF8_OK;
-    }
+        }
 
     #undef UTF8_CPP_INCREASE_AND_RETURN_ON_ERROR
 
@@ -312,7 +312,7 @@ namespace internal
            );
     }
 	
-    //Deprecated in release 2.3 
+	//Deprecated in release 2.3 
     template <typename octet_iterator>
     inline bool is_bom (octet_iterator it)
     {

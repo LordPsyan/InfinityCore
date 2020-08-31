@@ -1,4 +1,4 @@
-# This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+# This file is part of the OregonCore Project. See AUTHORS file for Copyright information
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without
@@ -8,32 +8,35 @@
 # WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-set(PRIVATE_SOURCES VMapAssembler.cpp)
+include_directories(
+  ${CMAKE_SOURCE_DIR}/dep/g3dlite/include
+  ${CMAKE_SOURCE_DIR}/src/server/shared
+  ${CMAKE_SOURCE_DIR}/src/server/shared/Debugging
+  ${CMAKE_SOURCE_DIR}/src/common/Collision
+  ${CMAKE_SOURCE_DIR}/src/framework
+  ${ACE_INCLUDE_DIR}
+  ${ZLIB_INCLUDE_DIR}
+)
 
-if(WIN32)
-  list(APPEND PRIVATE_SOURCES ${sources_windows})
-endif()
-
-add_executable(vmap4assembler ${PRIVATE_SOURCES})
+add_definitions(-DNO_CORE_FUNCS)
+add_executable(vmap_assembler VMapAssembler.cpp)
+add_dependencies(vmap_assembler mpq)
+add_dependencies(vmap_assembler collision)
+add_dependencies(vmap_assembler g3dlib)
 
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-  set_target_properties(vmap4assembler PROPERTIES LINK_FLAGS "-framework Carbon")
+  set_target_properties(vmap_assembler PROPERTIES LINK_FLAGS "-framework Carbon")
 endif()
 
-target_link_libraries(vmap4assembler
-  PRIVATE
-    trinity-core-interface
-  PUBLIC
-    common
-    zlib)
+target_link_libraries(vmap_assembler
+  ${JEMALLOC_LIBRARY}
+  collision
+  g3dlib
+  ${ZLIB_LIBRARIES}
+)
 
-set_target_properties(vmap4assembler
-    PROPERTIES
-      FOLDER
-        "tools")
-
-if(UNIX)
-  install(TARGETS vmap4assembler DESTINATION bin)
-elseif(WIN32)
-  install(TARGETS vmap4assembler DESTINATION "${CMAKE_INSTALL_PREFIX}")
+if( UNIX )
+  install(TARGETS vmap_assembler DESTINATION bin)
+elseif( WIN32 )
+  install(TARGETS vmap_assembler DESTINATION "${CMAKE_INSTALL_PREFIX}")
 endif()

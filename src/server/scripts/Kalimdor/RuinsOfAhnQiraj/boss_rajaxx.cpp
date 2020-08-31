@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,136 +15,33 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ObjectMgr.h"
-#include "ruins_of_ahnqiraj.h"
-#include "ScriptedCreature.h"
+/* ScriptData
+SDName: Boss_Rajaxx
+SD%Complete: 0
+SDComment: Place Holder
+SDCategory: Ruins of Ahn'Qiraj
+EndScriptData */
+
 #include "ScriptMgr.h"
-#include "SpellScript.h"
+#include "ScriptedCreature.h"
 
-enum Yells
-{
-    // The time of our retribution is at hand! Let darkness reign in the hearts of our enemies! Sound: 8645 Emote: 35
-    SAY_ANDOROV_INTRO         = 0,   // Before for the first wave
-    SAY_ANDOROV_ATTACK        = 1,   // Beginning the event
+#define SAY_ANDOROV_INTRO   -1509003
+#define SAY_ANDOROV_ATTACK  -1509004
 
-    SAY_WAVE3                 = 0,
-    SAY_WAVE4                 = 1,
-    SAY_WAVE5                 = 2,
-    SAY_WAVE6                 = 3,
-    SAY_WAVE7                 = 4,
-    SAY_INTRO                 = 5,
-    SAY_UNK1                  = 6,
-    SAY_UNK2                  = 7,
-    SAY_UNK3                  = 8,
-    SAY_DEATH                 = 9,
-    SAY_CHANGEAGGRO           = 10,
-    SAY_KILLS_ANDOROV         = 11,
-    SAY_COMPLETE_QUEST        = 12    // Yell when realm complete quest 8743 for world event
-    // Warriors, Captains, continue the fight! Sound: 8640
-};
+#define SAY_WAVE3           -1509005
+#define SAY_WAVE4           -1509006
+#define SAY_WAVE5           -1509007
+#define SAY_WAVE6           -1509008
+#define SAY_WAVE7           -1509009
+#define SAY_INTRO           -1509010
 
-enum Spells
-{
-    SPELL_DISARM            = 6713,
-    SPELL_FRENZY            = 8269,
-    SPELL_THUNDERCRASH      = 25599
-};
+#define SAY_UNK1            -1509011
+#define SAY_UNK2            -1509012
+#define SAY_UNK3            -1509013
+#define SAY_UNK4            -1509014
 
-enum Events
-{
-    EVENT_DISARM            = 1,        // 03:58:27, 03:58:49
-    EVENT_THUNDERCRASH      = 2,        // 03:58:29, 03:58:50
-    EVENT_CHANGE_AGGRO      = 3,
-};
+#define SAY_DEAGGRO         -1509015
+#define SAY_KILLS_ANDOROV   -1509016
 
-class boss_rajaxx : public CreatureScript
-{
-    public:
-        boss_rajaxx() : CreatureScript("boss_rajaxx") { }
+#define SAY_COMPLETE_QUEST  -1509017                        //Yell when realm complete quest 8743 for world event
 
-        struct boss_rajaxxAI : public BossAI
-        {
-            boss_rajaxxAI(Creature* creature) : BossAI(creature, DATA_RAJAXX)
-            {
-                Initialize();
-            }
-
-            void Initialize()
-            {
-                enraged = false;
-            }
-
-            void Reset() override
-            {
-                _Reset();
-                Initialize();
-                events.ScheduleEvent(EVENT_DISARM, 10s);
-                events.ScheduleEvent(EVENT_THUNDERCRASH, 12s);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_DISARM:
-                            DoCastVictim(SPELL_DISARM);
-                            events.ScheduleEvent(EVENT_DISARM, 22s);
-                            break;
-                        case EVENT_THUNDERCRASH:
-                            DoCast(me, SPELL_THUNDERCRASH);
-                            events.ScheduleEvent(EVENT_THUNDERCRASH, 21s);
-                            break;
-                        default:
-                            break;
-                    }
-
-                    if (me->HasUnitState(UNIT_STATE_CASTING))
-                        return;
-                }
-
-                DoMeleeAttackIfReady();
-            }
-            private:
-                bool enraged;
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetAQ20AI<boss_rajaxxAI>(creature);
-        }
-};
-
-class spell_rajaxx_thundercrash : public SpellScript
-{
-    PrepareSpellScript(spell_rajaxx_thundercrash);
-
-    void HandleDamageCalc(SpellEffIndex /*effIndex*/)
-    {
-        int32 damage = GetHitUnit()->GetHealth() / 2;
-        if (damage < 200)
-            damage = 200;
-
-        SetEffectValue(damage);
-    }
-
-    void Register() override
-    {
-        OnEffectLaunchTarget += SpellEffectFn(spell_rajaxx_thundercrash::HandleDamageCalc, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
-    }
-};
-
-void AddSC_boss_rajaxx()
-{
-    new boss_rajaxx();
-    RegisterSpellScript(spell_rajaxx_thundercrash);
-}

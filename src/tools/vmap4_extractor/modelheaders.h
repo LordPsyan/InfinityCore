@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -40,6 +40,8 @@ struct ModelHeader
     uint32 ofsAnimations;
     uint32 nAnimationLookup;
     uint32 ofsAnimationLookup;
+    uint32 nD;
+    uint32 ofsD;
     uint32 nBones;
     uint32 ofsBones;
     uint32 nKeyBoneLookup;
@@ -47,12 +49,15 @@ struct ModelHeader
     uint32 nVertices;
     uint32 ofsVertices;
     uint32 nViews;
+    uint32 ofsViews;
     uint32 nColors;
     uint32 ofsColors;
     uint32 nTextures;
     uint32 ofsTextures;
     uint32 nTransparency;
     uint32 ofsTransparency;
+    uint32 nI;
+    uint32 ofsI;
     uint32 nTextureanimations;
     uint32 ofsTextureanimations;
     uint32 nTexReplace;
@@ -92,6 +97,12 @@ struct ModelHeader
     uint32 ofsRibbonEmitters;
     uint32 nParticleEmitters;
     uint32 ofsParticleEmitters;
+
+};
+
+struct ModelBoundingVertex
+{
+    Vec3D pos;
 };
 
 #pragma pack(pop)

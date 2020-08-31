@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,56 +15,61 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_DISABLEMGR_H
-#define TRINITY_DISABLEMGR_H
+#include <ace/Singleton.h>
+#include "Unit.h"
 
-#include "Define.h"
-
-class WorldObject;
+#ifndef _DISABLEMGR_H
+#define _DISABLEMGR_H
 
 enum DisableType
 {
     DISABLE_TYPE_SPELL                  = 0,
     DISABLE_TYPE_QUEST                  = 1,
     DISABLE_TYPE_MAP                    = 2,
-    DISABLE_TYPE_BATTLEGROUND           = 3,
-    DISABLE_TYPE_ACHIEVEMENT_CRITERIA   = 4,
-    DISABLE_TYPE_OUTDOORPVP             = 5,
-    DISABLE_TYPE_VMAP                   = 6,
-    DISABLE_TYPE_MMAP                   = 7,
-    DISABLE_TYPE_LFG_MAP                = 8
+    DISABLE_TYPE_BATTLEGROUND           = 3
 };
 
 enum SpellDisableTypes
 {
-    SPELL_DISABLE_PLAYER            = 0x01,
-    SPELL_DISABLE_CREATURE          = 0x02,
-    SPELL_DISABLE_PET               = 0x04,
-    SPELL_DISABLE_DEPRECATED_SPELL  = 0x08,
+    SPELL_DISABLE_PLAYER            = 0x1,
+    SPELL_DISABLE_CREATURE          = 0x2,
+    SPELL_DISABLE_PET               = 0x4,
+    SPELL_DISABLE_DEPRECATED_SPELL  = 0x8,
     SPELL_DISABLE_MAP               = 0x10,
     SPELL_DISABLE_AREA              = 0x20,
     SPELL_DISABLE_LOS               = 0x40,
-    SPELL_DISABLE_GAMEOBJECT        = 0x80,
-    SPELL_DISABLE_ARENAS            = 0x100,
-    SPELL_DISABLE_BATTLEGROUNDS     = 0x200,
     MAX_SPELL_DISABLE_TYPE = (  SPELL_DISABLE_PLAYER | SPELL_DISABLE_CREATURE | SPELL_DISABLE_PET |
                                 SPELL_DISABLE_DEPRECATED_SPELL | SPELL_DISABLE_MAP | SPELL_DISABLE_AREA |
-                                SPELL_DISABLE_LOS | SPELL_DISABLE_GAMEOBJECT | SPELL_DISABLE_ARENAS |
-                                SPELL_DISABLE_BATTLEGROUNDS),
+                                SPELL_DISABLE_LOS),
 };
 
-enum MMapDisableTypes
+#define MAX_DISABLE_TYPES 4
+
+struct DisableData
 {
-    MMAP_DISABLE_PATHFINDING    = 0x0
+    uint8 flags;
+    std::set<uint32> params[2];                             // params0, params1
 };
 
-namespace DisableMgr
-{
-    TC_GAME_API void LoadDisables();
-    TC_GAME_API bool IsDisabledFor(DisableType type, uint32 entry, WorldObject const* ref, uint8 flags = 0);
-    TC_GAME_API void CheckQuestDisables();
-    TC_GAME_API bool IsVMAPDisabledFor(uint32 entry, uint8 flags);
-    TC_GAME_API bool IsPathfindingEnabled(uint32 mapId);
-}
+typedef std::map<uint32, DisableData> DisableTypeMap;       // single disables here with optional data
+typedef std::map<DisableType, DisableTypeMap> DisableMap;   // global disable map by source
 
-#endif //TRINITY_DISABLEMGR_H
+class DisableMgr
+{
+        friend class ACE_Singleton<DisableMgr, ACE_Null_Mutex>;
+        DisableMgr();
+
+    public:
+        ~DisableMgr();
+
+        void LoadDisables();
+        bool IsDisabledFor(DisableType type, uint32 entry, Unit* pUnit, uint8 flags = 0);
+        void CheckQuestDisables();
+
+    protected:
+        DisableMap m_DisableMap;
+};
+
+#define sDisableMgr (*ACE_Singleton<DisableMgr, ACE_Null_Mutex>::instance())
+
+#endif //_DISABLEMGR_H

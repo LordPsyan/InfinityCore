@@ -1,221 +1,168 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the
- * Free Software Foundation; either version 2 of the License, or (at your
- * option) any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
- * more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program. If not, see <http://www.gnu.org/licenses/>.
- */
+* This file is part of the OregonCore Project. See AUTHORS file for Copyright information
+*
+* This program is free software; you can redistribute it and/or modify it
+* under the terms of the GNU General Public License as published by the
+* Free Software Foundation; either version 2 of the License, or (at your
+* option) any later version.
+*
+* This program is distributed in the hope that it will be useful, but WITHOUT
+* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+* FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+* more details.
+*
+* You should have received a copy of the GNU General Public License along
+* with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /* ScriptData
 SDName: Boss_High_Botanist_Freywinn
-SD%Complete: 90
-SDComment: some strange visual related to tree form(if aura lost before normal duration end). possible make summon&transform -process smoother(transform after delay)
+SD%Complete: 95
+SDComment: some strange visual related to tree form(if aura lost before normal duration end).
 SDCategory: Tempest Keep, The Botanica
 EndScriptData */
 
 #include "ScriptMgr.h"
-#include "MotionMaster.h"
-#include "ObjectAccessor.h"
 #include "ScriptedCreature.h"
-#include "the_botanica.h"
 
-enum Says
-{
-    SAY_AGGRO                  = 0,
-    SAY_KILL                   = 1,
-    SAY_TREE                   = 2,
-    SAY_SUMMON                 = 3,
-    SAY_DEATH                  = 4,
-    SAY_OOC_RANDOM             = 5
-};
+#define SAY_AGGRO                   -1553000
+#define SAY_KILL_1                  -1553001
+#define SAY_KILL_2                  -1553002
+#define SAY_TREE_1                  -1553003
+#define SAY_TREE_2                  -1553004
+#define SAY_DEATH                   -1553005
 
-enum Spells
-{
-    SPELL_TRANQUILITY          = 34550,
-    SPELL_TREE_FORM            = 34551,
-    SPELL_SUMMON_FRAYER        = 34557,
-    SPELL_PLANT_WHITE          = 34759,
-    SPELL_PLANT_GREEN          = 34761,
-    SPELL_PLANT_BLUE           = 34762,
-    SPELL_PLANT_RED            = 34763
-};
+#define SPELL_TRANQUILITY           34550
+#define SPELL_TREE_FORM             34551
 
-enum Creatures
+#define SPELL_SUMMON_FRAYER         34557
+#define ENTRY_FRAYER                19953
+
+#define SPELL_PLANT_WHITE           34759
+#define SPELL_PLANT_GREEN           34761
+#define SPELL_PLANT_BLUE            34762
+#define SPELL_PLANT_RED             34763
+
+enum Misc
 {
-    NPC_FRAYER                 = 19953
+    NPC_FRAYER = 19953,
+
+    EVENT_SUMMON_SEEDLING = 1,
+    EVENT_TREE_FORM = 2,
+    EVENT_CHECK_FRAYERS = 3,
+    EVENT_RESTORE_COMBAT = 4
 };
 
 class boss_high_botanist_freywinn : public CreatureScript
 {
-    public:
+public:
+    boss_high_botanist_freywinn() : CreatureScript("boss_high_botanist_freywinn") { }
 
-        boss_high_botanist_freywinn()
-            : CreatureScript("boss_high_botanist_freywinn")
+    struct boss_high_botanist_freywinnAI : public ScriptedAI
+    {
+        boss_high_botanist_freywinnAI(Creature* c) : ScriptedAI(c), summons(me) {}
+
+        SummonList summons;
+        EventMap events;
+
+        void Reset() {}
+
+        void EnterCombat(Unit* /*who*/)
         {
+            DoScriptText(SAY_AGGRO, me);
+            events.ScheduleEvent(EVENT_SUMMON_SEEDLING, 6000);
+            events.ScheduleEvent(EVENT_TREE_FORM, 30000);
         }
 
-        struct boss_high_botanist_freywinnAI : public BossAI
+        void JustSummoned(Creature* summoned)
         {
-            boss_high_botanist_freywinnAI(Creature* creature) : BossAI(creature, DATA_HIGH_BOTANIST_FREYWINN)
+            //  Forced Summon Frayers to Attack players
+            if (me->GetVictim())
+                summoned->AI()->AttackStart(me->GetVictim());
+
+            summons.Summon(summoned);
+        }
+
+        void KilledUnit(Unit* victim)
+        {
+            if (victim->GetTypeId() == TYPEID_PLAYER)
+                DoScriptText(RAND(SAY_KILL_1, SAY_KILL_2), me);
+        }
+
+        void JustDied(Unit* /*Killer*/)
+        {
+            DoScriptText(SAY_DEATH, me);
+        }
+
+        void SummonedCreatureDies(Creature* summon, Unit*)
+        {
+            summons.Despawn(summon);
+        }
+
+        void UpdateAI(const uint32 diff)
+        {
+            if (!UpdateVictim())
+                return;
+
+            events.Update(diff);
+
+            switch (events.ExecuteEvent())
             {
-                Initialize();
-            }
+            case EVENT_SUMMON_SEEDLING:
+                me->CastSpell(me, RAND(SPELL_PLANT_WHITE, SPELL_PLANT_GREEN, SPELL_PLANT_BLUE, SPELL_PLANT_RED), false);
+                events.ScheduleEvent(EVENT_SUMMON_SEEDLING, 6000);
+                break;
+            case EVENT_TREE_FORM:
+                events.Reset();
+                events.SetPhase(1);
+                events.ScheduleEvent(EVENT_CHECK_FRAYERS, 1000);
+                events.ScheduleEvent(EVENT_TREE_FORM, 75000);
+                events.ScheduleEvent(EVENT_RESTORE_COMBAT, 46000);
 
-            void Initialize()
-            {
-                SummonSeedling_Timer = 6000;
-                TreeForm_Timer = 30000;
-                MoveCheck_Timer = 1000;
-                DeadAddsCount = 0;
-                MoveFree = true;
-            }
+                DoScriptText(RAND(SAY_TREE_1, SAY_TREE_2), me);
+                me->RemoveAllAuras();
+                me->GetMotionMaster()->MoveIdle();
+                me->GetMotionMaster()->Clear(false);
 
-            uint32 SummonSeedling_Timer;
-            uint32 TreeForm_Timer;
-            uint32 MoveCheck_Timer;
-            uint32 DeadAddsCount;
-            bool MoveFree;
+                for (int i = 0; i < 3; ++i)
+                    me->SummonCreature(ENTRY_FRAYER, me->GetPosition(), TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, 60000) + i;
 
-            void Reset() override
-            {
-                summons.DespawnAll();
+                me->CastSpell(me, SPELL_TRANQUILITY, true);
+                me->CastSpell(me, SPELL_TREE_FORM, true);
+                break;
+            case EVENT_RESTORE_COMBAT:
+                events.SetPhase(0);
+                events.ScheduleEvent(EVENT_SUMMON_SEEDLING, 6000);
+                me->GetMotionMaster()->MoveChase(me->GetVictim());
+                break;
 
-                Initialize();
-            }
-
-            void JustEngagedWith(Unit* /*who*/) override
-            {
-                Talk(SAY_AGGRO);
-            }
-
-            void JustSummoned(Creature* summoned) override
-            {
-                if (summoned->GetEntry() == NPC_FRAYER)
-                    summons.Summon(summoned);
-            }
-
-            void SummonedCreatureDespawn(Creature* summon) override
-            {
-                summons.Despawn(summon);
-            }
-
-            void DoSummonSeedling()
-            {
-                switch (rand32() % 4)
+            case EVENT_CHECK_FRAYERS:
+                if (!summons.HasEntry(NPC_FRAYER))
                 {
-                    case 0: DoCast(me, SPELL_PLANT_WHITE); break;
-                    case 1: DoCast(me, SPELL_PLANT_GREEN); break;
-                    case 2: DoCast(me, SPELL_PLANT_BLUE); break;
-                    case 3: DoCast(me, SPELL_PLANT_RED); break;
-                }
-            }
-
-            void KilledUnit(Unit* /*victim*/) override
-            {
-                Talk(SAY_KILL);
-            }
-
-            void JustDied(Unit* /*killer*/) override
-            {
-                Talk(SAY_DEATH);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                if (TreeForm_Timer <= diff)
-                {
-                    Talk(SAY_TREE);
-
-                    if (me->IsNonMeleeSpellCast(false))
-                        me->InterruptNonMeleeSpells(true);
-
+                    me->InterruptNonMeleeSpells(true);
                     me->RemoveAllAuras();
-
-                    DoCast(me, SPELL_SUMMON_FRAYER, true);
-                    DoCast(me, SPELL_TRANQUILITY, true);
-                    DoCast(me, SPELL_TREE_FORM, true);
-
-                    me->GetMotionMaster()->MoveIdle();
-                    MoveFree = false;
-
-                    TreeForm_Timer = 75000;
+                    events.RescheduleEvent(EVENT_RESTORE_COMBAT, 0);
+                    events.RescheduleEvent(EVENT_TREE_FORM, 30000);
+                    break;
                 }
-                else
-                    TreeForm_Timer -= diff;
-
-                if (!MoveFree)
-                {
-                    if (MoveCheck_Timer <= diff)
-                    {
-                        for (SummonList::iterator itr = summons.begin(); itr != summons.end(); ++itr)
-                        {
-                            if (Unit* temp = ObjectAccessor::GetUnit(*me, *itr))
-                            {
-                                if (!temp->IsAlive())
-                                {
-                                    summons.erase(itr);
-                                    ++DeadAddsCount;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (DeadAddsCount < 3 && TreeForm_Timer-30000 <= diff)
-                            DeadAddsCount = 3;
-
-                        if (DeadAddsCount >= 3)
-                        {
-                            summons.DespawnAll();
-                            DeadAddsCount = 0;
-
-                            me->InterruptNonMeleeSpells(true);
-                            me->RemoveAllAuras();
-                            me->GetMotionMaster()->MoveChase(me->GetVictim());
-                            MoveFree = true;
-                        }
-                        MoveCheck_Timer = 500;
-                    }
-                    else
-                        MoveCheck_Timer -= diff;
-
-                    return;
-                }
-
-                /*if (me->HasAura(SPELL_TREE_FORM, 0) || me->HasAura(SPELL_TRANQUILITY, 0))
-                    return;*/
-
-                //one random seedling every 5 secs, but not in tree form
-                if (SummonSeedling_Timer <= diff)
-                {
-                    DoSummonSeedling();
-                    SummonSeedling_Timer = 6000;
-                }
-                else
-                    SummonSeedling_Timer -= diff;
-
-                DoMeleeAttackIfReady();
+                events.ScheduleEvent(EVENT_CHECK_FRAYERS, 500);
+                break;
             }
-        };
 
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetBotanicaAI<boss_high_botanist_freywinnAI>(creature);
+            if (!events.IsInPhase(1))
+                DoMeleeAttackIfReady();
         }
+    };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return new boss_high_botanist_freywinnAI(pCreature);
+    }
+
 };
 
 void AddSC_boss_high_botanist_freywinn()
 {
     new boss_high_botanist_freywinn();
 }
+

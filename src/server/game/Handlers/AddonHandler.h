@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,19 +19,20 @@
 #define __ADDONHANDLER_H
 
 #include "Common.h"
-#include "Config.h"
+#include "Configuration/Config.h"
+#include "Policies/Singleton.h"
+
 #include "WorldPacket.h"
 
 class AddonHandler
 {
     public:
-        static AddonHandler* instance();
-
+        /* Construction */
+        AddonHandler();
+        ~AddonHandler();
+        //built addon packet
         bool BuildAddonPacket(WorldPacket* Source, WorldPacket* Target);
-
-    private:
-        AddonHandler() { }
-        ~AddonHandler() { }
 };
-#define sAddOnHandler AddonHandler::instance()
+#define sAddOnHandler Oregon::Singleton<AddonHandler>::Instance()
 #endif
+

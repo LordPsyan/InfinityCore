@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -14,11 +14,13 @@
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-
+#include "ByteBuffer.h"
 #include "ReactorAI.h"
-#include "Creature.h"
 
-int32 ReactorAI::Permissible(Creature const* creature)
+#define REACTOR_VISIBLE_RANGE (26.46f)
+
+int
+ReactorAI::Permissible(const Creature* creature)
 {
     if (creature->IsCivilian() || creature->IsNeutralToAll())
         return PERMIT_BASE_REACTIVE;
@@ -26,10 +28,25 @@ int32 ReactorAI::Permissible(Creature const* creature)
     return PERMIT_BASE_NO;
 }
 
-void ReactorAI::UpdateAI(uint32 /*diff*/)
+void
+ReactorAI::MoveInLineOfSight(Unit*)
 {
+}
+
+void
+ReactorAI::UpdateAI(const uint32 /*time_diff*/)
+{
+    // update i_victimGuid if me->GetVictim() != 0 and changed
     if (!UpdateVictim())
         return;
 
-    DoMeleeAttackIfReady();
+    if (me->isAttackReady())
+    {
+        if (me->IsWithinMeleeRange(me->GetVictim()))
+        {
+            me->AttackerStateUpdate(me->GetVictim());
+            me->resetAttackTimer();
+        }
+    }
 }
+

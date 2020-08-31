@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -23,76 +23,48 @@
 #include <G3D/AABox.h>
 #include <G3D/Ray.h>
 
-#include "Define.h"
-#include <memory>
+#include "Platform/Define.h"
 
 namespace VMAP
 {
     class WorldModel;
-    struct AreaInfo;
-    struct LocationInfo;
-    enum class ModelIgnoreFlags : uint32;
 }
 
 class GameObject;
 struct GameObjectDisplayInfoEntry;
 
-class TC_COMMON_API GameObjectModelOwnerBase
+class GameObjectModel /*, public Intersectable*/
 {
-public:
-    virtual ~GameObjectModelOwnerBase() = default;
-
-    virtual bool IsSpawned() const = 0;
-    virtual uint32 GetDisplayId() const = 0;
-    virtual uint32 GetPhaseMask() const = 0;
-    virtual G3D::Vector3 GetPosition() const = 0;
-    virtual float GetOrientation() const = 0;
-    virtual float GetScale() const = 0;
-    virtual void DebugVisualizeCorner(G3D::Vector3 const& /*corner*/) const = 0;
-};
-
-class TC_COMMON_API GameObjectModel /*, public Intersectable*/
-{
-    GameObjectModel() : phasemask(0), iInvScale(0), iScale(0), iModel(nullptr), isWmo(false) { }
-public:
-    std::string name;
-
-    const G3D::AABox& getBounds() const { return iBound; }
-
-    ~GameObjectModel();
-
-    const G3D::Vector3& getPosition() const { return iPos;}
-
-    /**    Enables\disables collision. */
-    void disable() { phasemask = 0;}
-    void enable(uint32 ph_mask) { phasemask = ph_mask;}
-
-    bool isEnabled() const {return phasemask != 0;}
-    bool isMapObject() const { return isWmo; }
-
-    bool intersectRay(const G3D::Ray& Ray, float& MaxDist, bool StopAtFirstHit, uint32 ph_mask, VMAP::ModelIgnoreFlags ignoreFlags) const;
-    void intersectPoint(G3D::Vector3 const& point, VMAP::AreaInfo& info, uint32 ph_mask) const;
-    bool GetLocationInfo(G3D::Vector3 const& point, VMAP::LocationInfo& info, uint32 ph_mask) const;
-    bool GetLiquidLevel(G3D::Vector3 const& point, VMAP::LocationInfo& info, float& liqHeight) const;
-
-    static GameObjectModel* Create(std::unique_ptr<GameObjectModelOwnerBase> modelOwner, std::string const& dataPath);
-
-    bool UpdatePosition();
-
-private:
-    bool initialize(std::unique_ptr<GameObjectModelOwnerBase> modelOwner, std::string const& dataPath);
-
-    uint32 phasemask;
+    bool collision_enabled;
     G3D::AABox iBound;
     G3D::Matrix3 iInvRot;
     G3D::Vector3 iPos;
+    //G3D::Vector3 iRot;
     float iInvScale;
     float iScale;
     VMAP::WorldModel* iModel;
-    std::unique_ptr<GameObjectModelOwnerBase> owner;
-    bool isWmo;
-};
 
-TC_COMMON_API void LoadGameObjectModelList(std::string const& dataPath);
+    GameObjectModel() : collision_enabled(false), iModel(nullptr) {}
+    bool initialize(const GameObject& go, const GameObjectDisplayInfoEntry& info);
+
+    public:
+        std::string name;
+
+        const G3D::AABox& getBounds() const { return iBound; }
+
+        ~GameObjectModel();
+
+        const G3D::Vector3& getPosition() const { return iPos;}
+
+        /**    Enables\disables collision. */
+        void disable() { collision_enabled = false;}
+        void enable(bool enable) { collision_enabled = enable;}
+
+        bool intersectRay(const G3D::Ray& Ray, float& MaxDist, bool StopAtFirstHit) const;
+
+        static GameObjectModel* Create(const GameObject& go);
+
+        bool Relocate(GameObject const& go); 
+};
 
 #endif // _GAMEOBJECT_MODEL_H

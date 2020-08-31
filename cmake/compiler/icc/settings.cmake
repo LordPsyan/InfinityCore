@@ -1,28 +1,21 @@
-target_compile_definitions(trinity-compile-option-interface
-  INTERFACE
-    -D_BUILD_DIRECTIVE="$<CONFIG>")
+# Set build-directive (used in core to tell which buildtype we used)
+add_definitions(-D_BUILD_DIRECTIVE=${CMAKE_BUILD_TYPE})
 
 if(PLATFORM EQUAL 32)
-  target_compile_options(trinity-compile-option-interface
-    INTERFACE
-      -axSSE2)
+  add_definitions(-axSSE2)
 else()
-  target_compile_options(trinity-compile-option-interface
-    INTERFACE
-      -xSSE2)
+  add_definitions(-xSSE2)
 endif()
 
-if(WITH_WARNINGS)
-  target_compile_options(trinity-warning-interface
-    INTERFACE
-      -w1)
-
-  message(STATUS "ICC: All warnings enabled")
+if( WITH_WARNINGS )
+  add_definitions(-w1)
+  message(STATUS "ICC All warnings enabled")
+else()
+  add_definitions(-w)
+  message(STATUS "ICC: All warnings disabled")
 endif()
 
-if(WITH_COREDEBUG)
-  target_compile_options(trinity-compile-option-interface
-    INTERFACE
-      -g)
+if( WITH_COREDEBUG )
+  add_definitions(-g)
   message(STATUS "ICC: Debug-flag set (-g)")
 endif()

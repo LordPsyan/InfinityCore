@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,78 +21,78 @@
 
 enum Spells
 {
-    SPELL_POISON_CLOUD     = 3815,
-    SPELL_FRENZIED_RAGE    = 3490
+    SPELL_POISON_CLOUD = 3815,
+    SPELL_FRENZIED_RAGE = 3490
 };
 
-enum Events
-{
-    EVENT_POISON_CLOUD     = 1,
-    EVENT_FRENZIED_RAGE
-};
 
 class boss_aku_mai : public CreatureScript
 {
 public:
     boss_aku_mai() : CreatureScript("boss_aku_mai") { }
-
-    struct boss_aku_maiAI : public BossAI
+    struct boss_aku_maiAI : public ScriptedAI
     {
-        boss_aku_maiAI(Creature* creature) : BossAI(creature, DATA_AKU_MAI)
+        boss_aku_maiAI(Creature* c) : ScriptedAI(c)
         {
-            Initialize();
+            pInstance = (ScriptedInstance*)c->GetInstanceData();
         }
 
-        void Initialize()
+        uint32 uiPoisonCloudTimer;
+        bool bIsEnraged;
+
+        ScriptedInstance* pInstance;
+
+        void Reset()
         {
-            IsEnraged = false;
+            uiPoisonCloudTimer = urand(5000, 9000);
+            bIsEnraged = false;
+            if (pInstance)
+                pInstance->SetData(TYPE_AKU_MAI, NOT_STARTED);
         }
 
-        void Reset() override
+        void EnterCombat(Unit* /*who*/)
         {
-            Initialize();
-            _Reset();
+            if (pInstance)
+                pInstance->SetData(TYPE_AKU_MAI, IN_PROGRESS);
         }
 
-        void JustEngagedWith(Unit* who) override
+        void JustDied(Unit* /*killer*/)
         {
-            BossAI::JustEngagedWith(who);
-            events.ScheduleEvent(EVENT_POISON_CLOUD, 5s, 9s);
+            if (pInstance)
+                pInstance->SetData(TYPE_AKU_MAI, DONE);
         }
 
-        void DamageTaken(Unit* /*atacker*/, uint32 &damage) override
+        void UpdateAI(const uint32 diff)
         {
-            if (!IsEnraged && me->HealthBelowPctDamaged(30, damage))
+            if (!UpdateVictim())
+                return;
+
+            if (uiPoisonCloudTimer < diff)
+            {
+                DoCastVictim(SPELL_POISON_CLOUD);
+                uiPoisonCloudTimer = urand(25000, 50000);
+            }
+            else uiPoisonCloudTimer -= diff;
+
+            if (!bIsEnraged && HealthBelowPct(30))
             {
                 DoCast(me, SPELL_FRENZIED_RAGE);
-                IsEnraged = true;
+                bIsEnraged = true;
             }
-        }
 
-        void ExecuteEvent(uint32 eventId) override
-        {
-            switch (eventId)
-            {
-                case EVENT_POISON_CLOUD:
-                    DoCastVictim(SPELL_POISON_CLOUD);
-                    events.ScheduleEvent(EVENT_POISON_CLOUD, 25s, 50s);
-                    break;
-                default:
-                    break;
-            }
+            DoMeleeAttackIfReady();
         }
-
-        private:
-            bool IsEnraged;
     };
 
-    CreatureAI* GetAI(Creature* creature) const override
+    CreatureAI* GetAI(Creature* pCreature) const
     {
-        return GetBlackfathomDeepsAI<boss_aku_maiAI>(creature);
+        return new boss_aku_maiAI(pCreature);
     }
+
 };
 
 void AddSC_boss_aku_mai()
 {
     new boss_aku_mai();
 }
+

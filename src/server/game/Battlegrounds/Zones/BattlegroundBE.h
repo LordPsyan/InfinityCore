@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,8 +18,7 @@
 #ifndef __BATTLEGROUNDBE_H
 #define __BATTLEGROUNDBE_H
 
-#include "Arena.h"
-#include "EventMap.h"
+class Battleground;
 
 enum BattlegroundBEObjectTypes
 {
@@ -32,7 +31,7 @@ enum BattlegroundBEObjectTypes
     BG_BE_OBJECT_MAX            = 6
 };
 
-enum BattlegroundBEGameObjects
+enum BattlegroundBEObjects
 {
     BG_BE_OBJECT_TYPE_DOOR_1    = 183971,
     BG_BE_OBJECT_TYPE_DOOR_2    = 183973,
@@ -42,29 +41,36 @@ enum BattlegroundBEGameObjects
     BG_BE_OBJECT_TYPE_BUFF_2    = 184664
 };
 
-constexpr Seconds BG_BE_REMOVE_DOORS_TIMER = 5s;
-
-enum BattlegroundBEEvents
-{
-    BG_BE_EVENT_REMOVE_DOORS    = 1
-};
-
-class BattlegroundBE : public Arena
+class BattlegroundBEScore : public BattlegroundScore
 {
     public:
+        BattlegroundBEScore() {};
+        virtual ~BattlegroundBEScore() {};
+};
+
+class BattlegroundBE : public Battleground
+{
+        friend class BattlegroundMgr;
+
+    public:
         BattlegroundBE();
+        ~BattlegroundBE();
+        void Update(uint32 diff);
 
         /* inherited from BattlegroundClass */
-        void StartingEventCloseDoors() override;
-        void StartingEventOpenDoors() override;
+        virtual void AddPlayer(Player* plr);
+        virtual void StartingEventCloseDoors();
+        virtual void StartingEventOpenDoors();
 
-        void HandleAreaTrigger(Player* Source, uint32 Trigger) override;
-        bool SetupBattleground() override;
-        void FillInitialWorldStates(WorldPackets::WorldState::InitWorldStates& packet) override;
+        void RemovePlayer(Player* plr, uint64 guid);
+        void HandleAreaTrigger(Player* Source, uint32 Trigger);
+        bool SetupBattleground();
+        void ResetBGSubclass();
+        virtual void FillInitialWorldStates(WorldPacket& d);
+        void HandleKillPlayer(Player* player, Player* killer);
 
-    private:
-        void PostUpdateImpl(uint32 diff) override;
-
-        EventMap _events;
+        /* Scorekeeping */
+        void UpdatePlayerScore(Player* Source, uint32 type, uint32 value);
 };
 #endif
+

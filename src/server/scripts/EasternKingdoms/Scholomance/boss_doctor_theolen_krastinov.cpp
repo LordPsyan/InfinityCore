@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,99 +15,108 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*
-Name: Boss_Doctor_Theolen_Krastinov
-%Complete: 100
-Comment:
-Category: Scholomance
-*/
+ /* ScriptData
+ SDName: Boss_Doctor_Theolen_Krastinov
+ SD%Complete: 100
+ SDComment:
+ SDCategory: Scholomance
+ EndScriptData */
 
 #include "ScriptMgr.h"
-#include "scholomance.h"
 #include "ScriptedCreature.h"
+#include "scholomance.h"
 
-enum Say
+enum eEnums
 {
-    EMOTE_FRENZY_KILL           = 0,
+    EMOTE_GENERIC_FRENZY_KILL = -1000001,
+
+    SPELL_REND = 16509,
+    SPELL_BACKHAND = 18103,
+    SPELL_FRENZY = 8269
 };
 
-enum Spells
-{
-    SPELL_REND                  = 16509,
-    SPELL_BACKHAND              = 18103,
-    SPELL_FRENZY                = 8269
-};
-
-enum Events
-{
-    EVENT_REND                  = 1,
-    EVENT_BACKHAND              = 2,
-    EVENT_FRENZY                = 3
-};
 
 class boss_doctor_theolen_krastinov : public CreatureScript
 {
-    public: boss_doctor_theolen_krastinov() : CreatureScript("boss_doctor_theolen_krastinov") { }
+public:
+    boss_doctor_theolen_krastinov() : CreatureScript("boss_doctor_theolen_krastinov") { }
 
-        struct boss_theolenkrastinovAI : public BossAI
+    struct boss_doctor_theolen_krastinovAI : public ScriptedAI
+    {
+        boss_doctor_theolen_krastinovAI(Creature* c) : ScriptedAI(c) {}
+
+        uint32 m_uiRend_Timer;
+        uint32 m_uiBackhand_Timer;
+        uint32 m_uiFrenzy_Timer;
+
+        void Reset()
         {
-            boss_theolenkrastinovAI(Creature* creature) : BossAI(creature, DATA_DOCTORTHEOLENKRASTINOV) { }
-
-            void JustEngagedWith(Unit* who) override
-            {
-                BossAI::JustEngagedWith(who);
-                events.ScheduleEvent(EVENT_REND, 8s);
-                events.ScheduleEvent(EVENT_BACKHAND, 9s);
-                events.ScheduleEvent(EVENT_FRENZY, 1s);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_REND:
-                            DoCastVictim(SPELL_REND, true);
-                            events.ScheduleEvent(EVENT_REND, 10s);
-                            break;
-                        case EVENT_BACKHAND:
-                            DoCastVictim(SPELL_BACKHAND, true);
-                            events.ScheduleEvent(EVENT_BACKHAND, 10s);
-                            break;
-                        case EVENT_FRENZY:
-                            DoCast(me, SPELL_FRENZY, true);
-                            Talk(EMOTE_FRENZY_KILL);
-                            events.ScheduleEvent(EVENT_FRENZY, 120s);
-                            break;
-                        default:
-                            break;
-                    }
-
-                    if (me->HasUnitState(UNIT_STATE_CASTING))
-                        return;
-                }
-
-                DoMeleeAttackIfReady();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetScholomanceAI<boss_theolenkrastinovAI>(creature);
+            m_uiRend_Timer = 8000;
+            m_uiBackhand_Timer = 9000;
+            m_uiFrenzy_Timer = 1000;
         }
 
+        void JustDied(Unit* /*pKiller*/)
+        {
+            ScriptedInstance* pInstance = (ScriptedInstance*)me->GetInstanceData();
+            if (pInstance)
+            {
+                pInstance->SetData(DATA_DOCTORTHEOLENKRASTINOV_DEATH, 0);
+
+                if (pInstance->GetData(TYPE_GANDLING) == IN_PROGRESS)
+                    me->SummonCreature(1853, 180.73f, -9.43856f, 75.507f, 1.61399f, TEMPSUMMON_DEAD_DESPAWN, 0);
+            }
+        }
+
+        void UpdateAI(const uint32 uiDiff)
+        {
+            if (!UpdateVictim())
+                return;
+
+            //Rend_Timer
+            if (m_uiRend_Timer <= uiDiff)
+            {
+                DoCastVictim(SPELL_REND);
+                m_uiRend_Timer = 10000;
+            }
+            else
+                m_uiRend_Timer -= uiDiff;
+
+            //Backhand_Timer
+            if (m_uiBackhand_Timer <= uiDiff)
+            {
+                DoCastVictim(SPELL_BACKHAND);
+                m_uiBackhand_Timer = 10000;
+            }
+            else
+                m_uiBackhand_Timer -= uiDiff;
+
+            //Frenzy_Timer
+            if (HealthBelowPct(25))
+            {
+                if (m_uiFrenzy_Timer <= uiDiff)
+                {
+                    DoCast(me, SPELL_FRENZY);
+                    DoScriptText(EMOTE_GENERIC_FRENZY_KILL, me);
+
+                    m_uiFrenzy_Timer = 120000;
+                }
+                else
+                    m_uiFrenzy_Timer -= uiDiff;
+            }
+
+            DoMeleeAttackIfReady();
+        }
+    };
+
+    CreatureAI* GetAI(Creature* pCreature) const
+    {
+        return new boss_doctor_theolen_krastinovAI(pCreature);
+    }
 };
 
 void AddSC_boss_theolenkrastinov()
 {
     new boss_doctor_theolen_krastinov();
 }
+

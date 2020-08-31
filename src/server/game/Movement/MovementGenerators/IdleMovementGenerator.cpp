@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * This file is part of the OregonCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,227 +16,107 @@
  */
 
 #include "IdleMovementGenerator.h"
-#include "Creature.h"
 #include "CreatureAI.h"
-#include "G3DPosition.hpp"
-#include "MovementDefines.h"
-#include "MoveSpline.h"
-#include "MoveSplineInit.h"
-#include "Unit.h"
+#include "Creature.h"
 
-IdleMovementGenerator::IdleMovementGenerator()
+IdleMovementGenerator si_idleMovement;
+
+// StopMoving is needed to make unit stop if its last movement generator expires
+// But it should not be sent otherwise there are many redundent packets
+void IdleMovementGenerator::Initialize(Unit& owner)
 {
-    Mode = MOTION_MODE_DEFAULT;
-    Priority = MOTION_PRIORITY_NORMAL;
-    Flags = MOVEMENTGENERATOR_FLAG_INITIALIZED;
-    BaseUnitState = 0;
+    if (owner.HasUnitState(UNIT_STATE_MOVE))
+        owner.StopMoving();
 }
 
-/*
- *  TODO: "if (!owner->IsStopped())" is useless, each generator cleans their own STATE_MOVE, the result is that StopMoving is almost never called
- *  Old comment: "StopMoving is needed to make unit stop if its last movement generator expires but it should not be sent otherwise there are many redundent packets"
- */
-void IdleMovementGenerator::Initialize(Unit* owner)
+void
+IdleMovementGenerator::Reset(Unit& owner)
 {
-    owner->StopMoving();
+    if (owner.HasUnitState(UNIT_STATE_MOVE))
+        owner.StopMoving();
 }
 
-void IdleMovementGenerator::Reset(Unit* owner)
+void RotateMovementGenerator::Initialize(Unit& owner)
 {
-    owner->StopMoving();
+    if (owner.HasUnitState(UNIT_STATE_MOVE))
+        owner.StopMoving();
+
+    if (owner.GetVictim())
+        owner.SetInFront(owner.GetVictim());
+
+    owner.AddUnitState(UNIT_STATE_ROTATING);
+
+    owner.AttackStop();
 }
 
-void IdleMovementGenerator::Deactivate(Unit* /*owner*/)
+bool RotateMovementGenerator::Update(Unit& owner, const uint32& diff)
 {
-}
-
-void IdleMovementGenerator::Finalize(Unit* /*owner*/, bool/* active*/, bool/* movementInform*/)
-{
-    AddFlag(MOVEMENTGENERATOR_FLAG_FINALIZED);
-}
-
-MovementGeneratorType IdleMovementGenerator::GetMovementGeneratorType() const
-{
-    return IDLE_MOTION_TYPE;
-}
-
-//----------------------------------------------------//
-
-RotateMovementGenerator::RotateMovementGenerator(uint32 id, uint32 time, RotateDirection direction) : _id(id), _duration(time), _maxDuration(time), _direction(direction)
-{
-    Mode = MOTION_MODE_DEFAULT;
-    Priority = MOTION_PRIORITY_NORMAL;
-    Flags = MOVEMENTGENERATOR_FLAG_INITIALIZATION_PENDING;
-    BaseUnitState = UNIT_STATE_ROTATING;
-}
-
-void RotateMovementGenerator::Initialize(Unit* owner)
-{
-    RemoveFlag(MOVEMENTGENERATOR_FLAG_INITIALIZATION_PENDING | MOVEMENTGENERATOR_FLAG_DEACTIVATED);
-    AddFlag(MOVEMENTGENERATOR_FLAG_INITIALIZED);
-
-    owner->StopMoving();
-
-    /*
-     *  TODO: This code should be handled somewhere else, like MovementInform
-     *
-     *  if (owner->GetVictim())
-     *      owner->SetInFront(owner->GetVictim());
-     *
-     *  owner->AttackStop();
-     */
-}
-
-void RotateMovementGenerator::Reset(Unit* owner)
-{
-    RemoveFlag(MOVEMENTGENERATOR_FLAG_DEACTIVATED);
-
-    Initialize(owner);
-}
-
-bool RotateMovementGenerator::Update(Unit* owner, uint32 diff)
-{
-    if (!owner)
-        return false;
-
-    float angle = owner->GetOrientation();
-    if (_direction == ROTATE_DIRECTION_LEFT)
+    float angle = owner.GetOrientation();
+    if (m_direction == ROTATE_DIRECTION_LEFT)
     {
-        angle += float(diff) * float(M_PI) * 2.f / float(_maxDuration);
-        while (angle >= float(M_PI) * 2.f)
-            angle -= float(M_PI) * 2.f;
+        angle += (float)diff * static_cast<float>(M_PI * 2) / m_maxDuration;
+        while (angle >= static_cast<float>(M_PI * 2)) angle -= static_cast<float>(M_PI * 2);
     }
     else
     {
-        angle -= float(diff) * float(M_PI) * 2.f / float(_maxDuration);
-        while (angle < 0.f)
-            angle += float(M_PI) * 2.f;
+        angle -= (float)diff * static_cast<float>(M_PI * 2) / m_maxDuration;
+        while (angle < 0) angle += static_cast<float>(M_PI * 2);
     }
 
-    Movement::MoveSplineInit init(owner);
-    init.MoveTo(PositionToVector3(*owner), false);
-    if (owner->HasUnitMovementFlag(MOVEMENTFLAG_ONTRANSPORT) && owner->GetTransGUID())
-        init.DisableTransportPathTransformations();
-    init.SetFacing(angle);
-    init.Launch();
+    owner.SetFacingTo(angle);
 
-    if (_duration > diff)
-        _duration -= diff;
+    if (m_duration > diff)
+        m_duration -= diff;
     else
-    {
-        AddFlag(MOVEMENTGENERATOR_FLAG_INFORM_ENABLED);
         return false;
-    }
 
     return true;
 }
 
-void RotateMovementGenerator::Deactivate(Unit*)
+void RotateMovementGenerator::Finalize(Unit& unit)
 {
-    AddFlag(MOVEMENTGENERATOR_FLAG_DEACTIVATED);
+    unit.ClearUnitState(UNIT_STATE_ROTATING);
+    if (unit.GetTypeId() == TYPEID_UNIT)
+        unit.ToCreature()->AI()->MovementInform(ROTATE_MOTION_TYPE, 0);
 }
 
-void RotateMovementGenerator::Finalize(Unit* owner, bool/* active*/, bool movementInform)
+void
+DistractMovementGenerator::Initialize(Unit& owner)
 {
-    AddFlag(MOVEMENTGENERATOR_FLAG_FINALIZED);
-
-    if (movementInform && owner->GetTypeId() == TYPEID_UNIT)
-        owner->ToCreature()->AI()->MovementInform(ROTATE_MOTION_TYPE, _id);
-}
-
-MovementGeneratorType RotateMovementGenerator::GetMovementGeneratorType() const
-{
-    return ROTATE_MOTION_TYPE;
-}
-
-//----------------------------------------------------//
-
-DistractMovementGenerator::DistractMovementGenerator(uint32 timer, float orientation) : _timer(timer), _orientation(orientation)
-{
-    Mode = MOTION_MODE_DEFAULT;
-    Priority = MOTION_PRIORITY_HIGHEST;
-    Flags = MOVEMENTGENERATOR_FLAG_INITIALIZATION_PENDING;
-    BaseUnitState = UNIT_STATE_DISTRACTED;
-}
-
-void DistractMovementGenerator::Initialize(Unit* owner)
-{
-    RemoveFlag(MOVEMENTGENERATOR_FLAG_INITIALIZATION_PENDING | MOVEMENTGENERATOR_FLAG_DEACTIVATED);
-    AddFlag(MOVEMENTGENERATOR_FLAG_INITIALIZED);
-
     // Distracted creatures stand up if not standing
-    if (!owner->IsStandState())
-        owner->SetStandState(UNIT_STAND_STATE_STAND);
+    if (!owner.IsStandState())
+        owner.SetStandState(UNIT_STAND_STATE_STAND);
 
-    Movement::MoveSplineInit init(owner);
-    init.MoveTo(PositionToVector3(*owner), false);
-    if (owner->HasUnitMovementFlag(MOVEMENTFLAG_ONTRANSPORT) && owner->GetTransGUID())
-        init.DisableTransportPathTransformations();
-    init.SetFacing(_orientation);
-    init.Launch();
+    owner.AddUnitState(UNIT_STATE_DISTRACTED);
 }
 
-void DistractMovementGenerator::Reset(Unit* owner)
+void
+DistractMovementGenerator::Finalize(Unit& owner)
 {
-    RemoveFlag(MOVEMENTGENERATOR_FLAG_DEACTIVATED);
+    owner.ClearUnitState(UNIT_STATE_DISTRACTED);
 
-    Initialize(owner);
-}
-
-bool DistractMovementGenerator::Update(Unit* owner, uint32 diff)
-{
-    if (!owner)
-        return false;
-
-    if (diff > _timer)
+    // If this is a creature, then return orientation to original position (for idle movement creatures)
+    if (owner.GetTypeId() == TYPEID_UNIT && owner.ToCreature())
     {
-        AddFlag(MOVEMENTGENERATOR_FLAG_INFORM_ENABLED);
-        return false;
+        float angle = owner.ToCreature()->GetHomePosition().GetOrientation();
+        owner.SetFacingTo(angle);
     }
+}
 
-    _timer -= diff;
+bool
+DistractMovementGenerator::Update(Unit& /*owner*/, const uint32& time_diff)
+{
+    if (time_diff > m_timer)
+        return false;
+
+    m_timer -= time_diff;
     return true;
 }
 
-void DistractMovementGenerator::Deactivate(Unit*)
+void
+AssistanceDistractMovementGenerator::Finalize(Unit& unit)
 {
-    AddFlag(MOVEMENTGENERATOR_FLAG_DEACTIVATED);
+    unit.ClearUnitState(UNIT_STATE_DISTRACTED);
+    unit.ToCreature()->SetReactState(REACT_AGGRESSIVE);
 }
 
-void DistractMovementGenerator::Finalize(Unit* owner, bool/* active*/, bool movementInform)
-{
-    AddFlag(MOVEMENTGENERATOR_FLAG_FINALIZED);
-
-    // TODO: This code should be handled somewhere else
-    // If this is a creature, then return orientation to original position (for idle movement creatures)
-    if (movementInform && HasFlag(MOVEMENTGENERATOR_FLAG_INFORM_ENABLED) && owner->GetTypeId() == TYPEID_UNIT)
-    {
-        float angle = owner->ToCreature()->GetHomePosition().GetOrientation();
-        owner->SetFacingTo(angle);
-    }
-}
-
-MovementGeneratorType DistractMovementGenerator::GetMovementGeneratorType() const
-{
-    return DISTRACT_MOTION_TYPE;
-}
-
-//----------------------------------------------------//
-
-AssistanceDistractMovementGenerator::AssistanceDistractMovementGenerator(uint32 timer, float orientation) : DistractMovementGenerator(timer, orientation)
-{
-    Priority = MOTION_PRIORITY_NORMAL;
-}
-
-void AssistanceDistractMovementGenerator::Finalize(Unit* owner, bool/* active*/, bool movementInform)
-{
-    AddFlag(MOVEMENTGENERATOR_FLAG_FINALIZED);
-
-    if (movementInform && HasFlag(MOVEMENTGENERATOR_FLAG_INFORM_ENABLED) && owner->GetTypeId() == TYPEID_UNIT)
-        owner->ToCreature()->SetReactState(REACT_AGGRESSIVE);
-}
-
-MovementGeneratorType AssistanceDistractMovementGenerator::GetMovementGeneratorType() const
-{
-    return ASSISTANCE_DISTRACT_MOTION_TYPE;
-}

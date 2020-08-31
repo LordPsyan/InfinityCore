@@ -1,4 +1,4 @@
-# This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+# This file is part of the OregonCore Project. See AUTHORS file for Copyright information
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without
@@ -8,30 +8,44 @@
 # WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-add_subdirectory(threads)
-
-if(SERVERS OR TOOLS)
-  add_subdirectory(boost)
-  add_subdirectory(zlib)
-  add_subdirectory(g3dlite)
-  add_subdirectory(recastnavigation)
-  add_subdirectory(fmt)
-  add_subdirectory(SFMT)
-  add_subdirectory(utf8cpp)
-  add_subdirectory(valgrind)
-  add_subdirectory(openssl)
-  add_subdirectory(jemalloc)
-  add_subdirectory(argon2)
+if( CMAKE_COMPILER_IS_GNUCXX )
+  add_definitions(--no-warnings)
+elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+  add_definitions(--no-warnings)
+elseif( MSVC )
+  add_definitions(/W0)
 endif()
 
+if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+  if(SERVERS OR TOOLS)
+    add_subdirectory(jemalloc)
+  endif()
+endif()
+
+if(CMAKE_SYSTEM_NAME MATCHES "Windows")
+  if(SERVERS OR TOOLS)
+    add_subdirectory(acelite)
+  endif()
+  if(SERVERS)
+    add_subdirectory(pdcurses)
+  endif()
+  if(TOOLS)
+    add_subdirectory(bzip2)
+  endif()
+  add_subdirectory(zlib)
+endif()
+
+add_subdirectory(recastnavigation)
+add_subdirectory(g3dlite)
+
 if(SERVERS)
-  add_subdirectory(mysql)
-  add_subdirectory(readline)
   add_subdirectory(gsoap)
-  add_subdirectory(efsw)
 endif()
 
 if(TOOLS)
-  add_subdirectory(bzip2)
   add_subdirectory(libmpq)
+endif()
+
+if(ELUNA)
+  add_subdirectory(lualib)
 endif()
